@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>cdp fixture</title>
+    <style>
+      body { font-family: system-ui; margin: 24px; }
+      #late { display: none; }
+      .tall { height: 1400px; }
+    </style>
+  </head>
+  <body>
+    <h1>Fixture page</h1>
+    <p id="intro">Hello from the fixture.</p>
+
+    <button id="go" data-testid="go-button">Run it</button>
+    <button id="disabled-btn" disabled>Cannot press</button>
+    <a href="#anchor" id="link">A link</a>
+
+    <label for="name">Your name</label>
+    <input id="name" name="name" placeholder="type here" />
+
+    <select id="pick">
+      <option value="a">Alpha</option>
+      <option value="b">Beta</option>
+    </select>
+
+    <input id="check" type="checkbox" aria-label="Agree to terms" />
+
+    <div id="late">Appeared after the click</div>
+    <div id="spinner">Loading…</div>
+    <div class="tall"></div>
+    <div id="bottom">Bottom marker</div>
+
+    <script>
+      document.getElementById('go').addEventListener('click', function () {
+        console.log('go clicked');
+        setTimeout(function () {
+          document.getElementById('late').style.display = 'block';
+          var s = document.getElementById('spinner');
+          if (s) s.remove();
+        }, 300);
+      });
+      document.getElementById('name').addEventListener('input', function (e) {
+        window.__lastInput = e.target.value;
+      });
+      document.getElementById('pick').addEventListener('change', function (e) {
+        window.__lastSelect = e.target.value;
+      });
+      document.getElementById('name').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') window.__enterPressed = true;
+      });
+      window.addEventListener('load', function () {
+        console.warn('fixture loaded');
+      });
+    </script>
+  </body>
+</html>

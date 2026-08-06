@@ -1,0 +1,20 @@
+{
+  "name": "chrome-cdp",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-browser CDP control for coding agents: CLI + MCP server over one core.",
+  "bin": {
+    "cdp": "bin/cdp.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "mcp": "node mcp/server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
