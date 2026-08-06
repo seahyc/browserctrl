@@ -9,7 +9,8 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "mcp": "node mcp/server.mjs"
+    "mcp": "node mcp/server.mjs",
+    "sync-extension": "cp lib/overlay/annotate.js extension/annotate.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0"

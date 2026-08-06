@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Hand tabs to the agent</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font: 14px ui-sans-serif, system-ui, -apple-system, sans-serif; margin: 0; padding: 24px; max-width: 900px; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      p.sub { color: #57606a; margin: 0 0 20px; }
+      .row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid #d0d7de; border-radius: 8px; margin-bottom: 8px; }
+      .row.marked { border-color: #2f6feb; background: rgba(47, 111, 235, 0.06); }
+      .row.focused { box-shadow: inset 3px 0 0 #1a7f37; }
+      .meta { flex: 1; min-width: 0; }
+      .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .url { color: #57606a; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .tags { font-size: 11px; color: #57606a; margin-top: 3px; }
+      input[type="text"] { width: 100%; box-sizing: border-box; margin-top: 6px; padding: 5px 8px; border: 1px solid #d0d7de; border-radius: 6px; font: inherit; font-size: 13px; }
+      .empty { color: #57606a; padding: 40px 0; text-align: center; }
+      .bar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+      button { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid #d0d7de; background: transparent; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Hand tabs to the agent</h1>
+    <p class="sub">Tick any tab, including ones you are not on. The agent resolves them with <code>--tab marked</code>, and the note travels with the tab.</p>
+    <div class="bar">
+      <button id="refresh">Refresh</button>
+      <button id="clear">Clear all marks</button>
+      <span id="status" style="color:#57606a"></span>
+    </div>
+    <div id="list"></div>
+
+    <script>
+      const $ = s => document.querySelector(s);
+      let tabs = [];
+
+      async function load() {
+        const res = await fetch('/api/tabs?focus=1');
+        tabs = await res.json();
+        render();
+      }
+
+      function render() {
+        const list = $('#list');
+        if (!tabs.length) {
+          list.innerHTML = '<div class="empty">No debuggable browser. Run <code>cdp browsers</code> to see how to enable one.</div>';
+          return;
+        }
+        list.innerHTML = '';
+        for (const t of tabs) {
+          const row = document.createElement('div');
+          row.className = 'row' + (t.marked ? ' marked' : '') + (t.focused ? ' focused' : '');
+          const tags = [t.browser, t.focused ? 'you are here' : null, t.suspended ? 'suspended' : null, t.alias ? 'alias: ' + t.alias : null, t.claimedBy]
+            .filter(Boolean)
+            .join(' · ');
+          row.innerHTML =
+            '<input type="checkbox" ' + (t.marked ? 'checked' : '') + ' style="margin-top:3px">' +
+            '<div class="meta">' +
+              '<div class="title"></div><div class="url"></div>' +
+              '<div class="tags"></div>' +
+              '<input type="text" placeholder="Note for the agent (optional)">' +
+            '</div>';
+          row.querySelector('.title').textContent = t.title || '(untitled)';
+          row.querySelector('.url').textContent = t.url;
+          row.querySelector('.tags').textContent = tags;
+          const note = row.querySelector('input[type=text]');
+          note.value = t.marked?.note || '';
+          const box = row.querySelector('input[type=checkbox]');
+
+          const apply = async checked => {
+            await fetch('/api/marks', {
+              method: checked ? 'POST' : 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ port: t.port, targetId: t.targetId, note: note.value || null, url: t.url, title: t.title }),
+            });
+            $('#status').textContent = checked ? 'marked ' + (t.title || '').slice(0, 40) : 'unmarked';
+            t.marked = checked ? { note: note.value } : null;
+            row.className = 'row' + (checked ? ' marked' : '') + (t.focused ? ' focused' : '');
+          };
+          box.addEventListener('change', () => apply(box.checked));
+          note.addEventListener('change', () => box.checked && apply(true));
+          list.appendChild(row);
+        }
+      }
+
+      $('#refresh').addEventListener('click', load);
+      $('#clear').addEventListener('click', async () => {
+        const marked = tabs.filter(t => t.marked);
+        for (const t of marked) {
+          await fetch('/api/marks', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ port: t.port, targetId: t.targetId }),
+          });
+        }
+        load();
+      });
+      load();
+      setInterval(load, 10000);
+    </script>
+  </body>
+</html>

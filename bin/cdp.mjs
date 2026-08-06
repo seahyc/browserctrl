@@ -6,6 +6,9 @@ import { listBrowsers, requireBrowser } from '../lib/discovery.mjs';
 import { BROWSERS } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as claims from '../lib/claims.mjs';
+import * as state from '../lib/state.mjs';
+import * as annotations from '../lib/annotations.mjs';
+import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 
 const MUTATING = new Set([
   'nav', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close',
@@ -123,6 +126,57 @@ const main = async () => {
 
   if (cmd === 'release' && (flags.mine || !positional[1])) return out({ released: claims.releaseMine() });
 
+  if (cmd === 'annotations') {
+    if (flags.clear) return out({ cleared: annotations.clear() });
+    const rows = flags.consume ? annotations.consume() : annotations.pending();
+    return out(flags.json ? rows : annotations.render(rows));
+  }
+
+  if (cmd === 'bridge') {
+    await ensureRunning();
+    return out({ bridge: `http://127.0.0.1:${BRIDGE_PORT}`, tray: `http://127.0.0.1:${BRIDGE_PORT}/tray` });
+  }
+
+  if (cmd === 'record' && positional[1] === 'stop') {
+    await ensureRunning();
+    const id = positional[2] || (await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`)).json()).find(r => !r.stoppedAt)?.id;
+    if (!id) throw new Error('No recording is running.');
+    const res = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/stop`, { method: 'POST' })).json();
+    return out({
+      ...res,
+      next: res.hasVideo ? `cdp annotate ${id} --browser <name>` : `cdp recording ${id} --steps`,
+    });
+  }
+
+  if (cmd === 'recordings') {
+    await ensureRunning();
+    const rows = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`)).json();
+    return out(
+      rows.length
+        ? rows.map(r => `${r.id}  ${r.stoppedAt ? 'done' : 'RECORDING'}  ${r.events} events  ${r.marks} marks${r.label ? `  ${r.label}` : ''}`).join('\n')
+        : '(no recordings)',
+    );
+  }
+
+  if (cmd === 'recording') {
+    await ensureRunning();
+    const id = positional[1];
+    if (!id) throw new Error('Which recording? See: cdp recordings');
+    if (flags.steps) return out(await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/steps`)).text());
+    const marks = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/marks`)).json();
+    if (flags.json) return out(marks);
+    const summary = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}`)).json();
+    const lines = [`${summary.id}  ${Math.round(summary.durationMs / 1000)}s  ${summary.events} events  video: ${summary.hasVideo ? 'yes' : 'no'}`, ''];
+    for (const m of marks) {
+      lines.push(`${m.clock}  ${m.note || '(no note)'}`);
+      lines.push(`     -> ${m.summary}`);
+      const el = m.events?.[0]?.element;
+      if (el) lines.push(`     -> ${el.role} "${el.name}"${el.testid ? ` [${el.testid}]` : ''}  selector: ${el.selector}`);
+      if (m.events?.[0]?.url) lines.push(`     -> ${m.events[0].url}`);
+    }
+    return out(lines.join('\n'));
+  }
+
   const port = await requireBrowser(flags);
   const conn = await connect(port);
   try {
@@ -132,12 +186,65 @@ const main = async () => {
       return out(`Daemon stopped for port ${port}`);
     }
     if (cmd === 'tabs') {
-      const rows = await ops.tabs(conn);
+      const rows = await ops.tabs(conn, { focus: !flags['no-focus'] });
       return out(
         rows
-          .map(t => `${t.id}  ${(t.title || '').slice(0, 40).padEnd(40)}  ${t.url.slice(0, 60)}${t.claimedBy ? `  [${t.claimedBy}]` : ''}`)
+          .map(t => {
+            const tags = [];
+            if (t.focused) tags.push('←you');
+            if (t.marked) tags.push(`marked${t.marked.note ? `: ${t.marked.note}` : ''}`);
+            if (t.suspended) tags.push('suspended');
+            if (t.claimedBy) tags.push(t.claimedBy);
+            const name = t.alias ? `${t.alias} (${t.id})` : t.id;
+            return `${name.padEnd(22)} ${(t.title || '').slice(0, 38).padEnd(38)}  ${t.url.slice(0, 52)}${tags.length ? `  [${tags.join(' | ')}]` : ''}`;
+          })
           .join('\n') || '(no tabs)',
       );
+    }
+    if (cmd === 'marks') {
+      const rows = state.marks(port);
+      if (!rows.length) return out('(no marked tabs)');
+      const all = await ops.tabs(conn);
+      return out(
+        rows
+          .map(m => {
+            const t = all.find(x => x.targetId === m.targetId);
+            return `${m.targetId.slice(0, 8)}  ${(t?.title || m.title || '(closed)').slice(0, 40).padEnd(40)}  ${Math.round(m.ageMs / 60000)}m ago${m.note ? `  note: ${m.note}` : ''}`;
+          })
+          .join('\n'),
+      );
+    }
+    if (cmd === 'tray') {
+      await ensureRunning();
+      const trayUrl = `http://127.0.0.1:${BRIDGE_PORT}/tray`;
+      await ops.newTab(conn, trayUrl);
+      return out({ tray: trayUrl });
+    }
+    if (cmd === 'record') {
+      await ensureRunning();
+      const sub = positional[1];
+      if (sub === 'start') {
+        const meta = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ port, video: Boolean(flags.video), apps: flags.apps !== 'false', label: flags.label === true ? null : flags.label }),
+        })).json();
+        return out({ ...meta, note: 'Drive the browser now. Stop with: cdp record stop ' + meta.id });
+      }
+      if (sub === 'stop') {
+        const id = positional[2] || (await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`)).json()).find(r => !r.stoppedAt)?.id;
+        if (!id) throw new Error('No recording is running.');
+        const res = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/stop`, { method: 'POST' })).json();
+        return out({ ...res, annotate: res.hasVideo ? `cdp annotate ${id} --browser <name>` : 'no video: read the steps with cdp recording ' + id + ' --steps' });
+      }
+      throw new Error('Usage: cdp record start|stop [id]');
+    }
+    if (cmd === 'annotate') {
+      await ensureRunning();
+      const id = positional[1];
+      const url = `http://127.0.0.1:${BRIDGE_PORT}/annotator?id=${encodeURIComponent(id)}`;
+      await ops.newTab(conn, url);
+      return out({ annotator: url });
     }
     if (cmd === 'open') {
       const res = await ops.newTab(conn, positional[1]);
@@ -246,6 +353,29 @@ const main = async () => {
       case 'release':
         claims.release(port, targetId);
         return out({ released: tab.id });
+      case 'overlay': {
+        await ensureRunning();
+        // The overlay refuses to install twice, so upgrading it needs an
+        // explicit teardown.
+        if (flags.force) await ops.evaluate(conn, targetId, 'delete window.__cdpOverlay, true').catch(() => {});
+        const res = await ops.installOverlay(conn, targetId, { bridgePort: BRIDGE_PORT });
+        if (flags.on) await ops.toggleOverlay(conn, targetId);
+        return out({ ...res, hotkey: 'option+A in the page toggles annotate mode', state: await ops.overlayState(conn, targetId) });
+      }
+      case 'name':
+        if (!positional[2]) {
+          state.clearAlias(port, targetId);
+          return out({ cleared: tab.id });
+        }
+        return out(state.setAlias(port, targetId, positional[2]));
+      case 'mark':
+        return out({
+          marked: tab.alias || tab.id,
+          title: tab.title,
+          ...state.mark(port, targetId, { note: flags.note === true ? null : flags.note, url: tab.url, title: tab.title }),
+        });
+      case 'unmark':
+        return out({ unmarked: tab.alias || tab.id, wasMarked: state.unmark(port, targetId) });
       default:
         return out(usage());
     }

@@ -11,6 +11,9 @@ import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
 import { BROWSERS } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as claims from '../lib/claims.mjs';
+import * as state from '../lib/state.mjs';
+import * as annotations from '../lib/annotations.mjs';
+import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 
 const SERVER_NAME = 'browser';
 const SERVER_VERSION = '2.0.0';
@@ -164,6 +167,55 @@ const TOOLS = [
       type: 'object',
       properties: { ...browserProp, ...tabProp, limit: { type: 'number' }, failedOnly: { type: 'boolean' }, clear: { type: 'boolean' } },
       required: ['tab'],
+    },
+  },
+  {
+    name: 'browser_annotations',
+    description:
+      'Read what the human marked on a page for you: their note plus the element they pointed at (role, accessible name, test id, selectors, cropped screenshot) and which tab it was. Call this when a result mentions pending annotations, when the human refers to something they marked, or at the start of browser work.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        consume: { type: 'boolean', description: 'Mark them handled so they stop being reported. Do this once you have acted on them.' },
+        clear: { type: 'boolean', description: 'Throw them away without acting.' },
+      },
+    },
+  },
+  {
+    name: 'browser_marks',
+    description: 'Tabs the human handed over, with their notes. Resolve one by passing tab="marked" to any other tool.',
+    inputSchema: { type: 'object', properties: { ...browserProp } },
+  },
+  {
+    name: 'browser_annotate_mode',
+    description:
+      'Arm annotation on a tab so the human can point at elements: installs the overlay, which they toggle with option+A. Use when you want the human to show you which elements they mean.',
+    inputSchema: { type: 'object', properties: { ...browserProp, ...tabProp, on: { type: 'boolean', description: 'Also switch annotate mode on immediately.' } }, required: ['tab'] },
+  },
+  {
+    name: 'browser_record',
+    description:
+      'Record a play: every click, input and navigation across the browser with element identity, optionally with screen video and a frontmost-app timeline. action=start begins, action=stop ends and writes readable steps, action=list shows recordings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...browserProp,
+        action: { type: 'string', enum: ['start', 'stop', 'list'] },
+        id: { type: 'string', description: 'Which recording to stop. Defaults to the one running.' },
+        video: { type: 'boolean', description: 'Also capture the screen, so moments outside the browser are visible.' },
+        label: { type: 'string' },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'browser_recording',
+    description:
+      'Read a recording: its steps, and any moments the human marked on the video resolved to the nearest real event, so a mark comes back as "click on button Confirm and apply", not a frame number.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string' }, steps: { type: 'boolean', description: 'Return the full step list rather than just the marks.' } },
+      required: ['id'],
     },
   },
   {
@@ -361,6 +413,69 @@ const handlers = {
       return text(await ops.diagnostics(conn, tab.targetId, { limit: args.limit ?? 50, clear: Boolean(args.clear) }));
     }),
 
+  browser_annotations: async args => {
+    if (args.clear) return text({ cleared: annotations.clear() });
+    const rows = args.consume ? annotations.consume() : annotations.pending();
+    return text(annotations.render(rows));
+  },
+
+  browser_marks: async args => {
+    const port = resolveBrowserArg(args);
+    const rows = state.marks(port);
+    return text(
+      rows.length
+        ? rows.map(m => ({
+            targetId: m.targetId,
+            id: m.targetId.slice(0, 8),
+            port: m.port,
+            note: m.note,
+            title: m.title,
+            url: m.url,
+            minutesAgo: Math.round(m.ageMs / 60000),
+          }))
+        : 'No tabs are marked. Ask the human to run `cdp tray` or `cdp mark <url-substring>`.',
+    );
+  },
+
+  browser_annotate_mode: args =>
+    withConn(args, async conn => {
+      await ensureRunning();
+      const tab = await ops.resolveTab(conn, args.tab);
+      const res = await ops.installOverlay(conn, tab.targetId, { bridgePort: BRIDGE_PORT });
+      if (args.on) await ops.toggleOverlay(conn, tab.targetId);
+      return text({ ...res, tab: tab.id, hotkey: 'option+A toggles annotate mode in that page', state: await ops.overlayState(conn, tab.targetId) });
+    }),
+
+  browser_record: async args => {
+    await ensureRunning();
+    const base = `http://127.0.0.1:${BRIDGE_PORT}/api/recordings`;
+    if (args.action === 'list') return text(await (await fetch(base)).json());
+    if (args.action === 'start') {
+      const port = resolveBrowserArg(args);
+      if (!port) throw new Error('Which browser should be recorded? Pass browser=<name>.');
+      const meta = await (
+        await fetch(base, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ port, video: Boolean(args.video), apps: true, label: args.label ?? null }),
+        })
+      ).json();
+      return text({ ...meta, next: 'The human drives the browser now. Stop with browser_record action=stop.' });
+    }
+    const id = args.id || (await (await fetch(base)).json()).find(r => !r.stoppedAt)?.id;
+    if (!id) throw new Error('No recording is running.');
+    return text(await (await fetch(`${base}/${id}/stop`, { method: 'POST' })).json());
+  },
+
+  browser_recording: async args => {
+    await ensureRunning();
+    const base = `http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${args.id}`;
+    if (args.steps) return text(await (await fetch(`${base}/steps`)).text());
+    const marks = await (await fetch(`${base}/marks`)).json();
+    const summary = await (await fetch(base)).json();
+    return text({ summary, marks });
+  },
+
   browser_eval: args =>
     withConn(args, async conn => {
       const tab = await ops.resolveTab(conn, args.tab);
@@ -377,7 +492,15 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
   const handler = handlers[name];
   if (!handler) return fail(`Unknown tool ${name}`);
   try {
-    return await withTimeout(handler(args), TOOL_TIMEOUT_MS, name);
+    const result = await withTimeout(handler(args), TOOL_TIMEOUT_MS, name);
+    // The only handoff path that needs nothing from the harness: if the human
+    // has left annotations or marked tabs, say so on the way out.
+    if (name !== 'browser_annotations' && name !== 'browser_marks' && !result.isError) {
+      const note = annotations.piggyback(state.marks().length);
+      const last = result.content?.filter(c => c.type === 'text').pop();
+      if (note && last) last.text += note;
+    }
+    return result;
   } catch (e) {
     return fail(e.message);
   }

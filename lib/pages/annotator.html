@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Annotate a recording</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font: 14px ui-sans-serif, system-ui, -apple-system, sans-serif; margin: 0; padding: 20px; }
+      .wrap { display: grid; grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr); gap: 20px; align-items: start; }
+      video { width: 100%; background: #000; border-radius: 8px; }
+      h1 { font-size: 16px; margin: 0 0 12px; }
+      .marks { border: 1px solid #d0d7de; border-radius: 8px; padding: 12px; max-height: 78vh; overflow: auto; }
+      .mark { border-bottom: 1px solid #eaeef2; padding: 8px 0; }
+      .mark:last-child { border-bottom: 0; }
+      .t { font: 12px ui-monospace, Menlo, monospace; color: #2f6feb; cursor: pointer; }
+      .sum { color: #57606a; font-size: 12px; margin-top: 3px; }
+      textarea { width: 100%; box-sizing: border-box; border: 1px solid #d0d7de; border-radius: 6px; padding: 6px; font: inherit; }
+      button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid #d0d7de; background: transparent; cursor: pointer; }
+      .prim { background: #2f6feb; color: #fff; border: 0; }
+      .hint { color: #57606a; font-size: 12px; margin-top: 8px; }
+      .noevents { color: #57606a; }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">Recording</h1>
+    <div class="wrap">
+      <div>
+        <video id="v" controls></video>
+        <div style="margin-top:10px">
+          <textarea id="note" rows="2" placeholder="What should the agent do about this moment? (⌘⏎ to save)"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+            <button class="prim" id="add">Mark at current time</button>
+            <span class="hint">Marks resolve to the nearest browser event, so the agent gets the element, not a frame number.</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="marks" id="marks"></div>
+        <div class="hint">Agent reads these with <code>cdp recording &lt;id&gt;</code>.</div>
+      </div>
+    </div>
+
+    <script>
+      const id = new URLSearchParams(location.search).get('id');
+      const v = document.getElementById('v');
+      v.src = '/api/recordings/' + id + '/video';
+      document.getElementById('title').textContent = id;
+
+      async function load() {
+        const marks = await (await fetch('/api/recordings/' + id + '/marks')).json();
+        const box = document.getElementById('marks');
+        if (!marks.length) {
+          box.innerHTML = '<div class="noevents">No marks yet. Scrub to a moment and mark it.</div>';
+          return;
+        }
+        box.innerHTML = '';
+        for (const m of marks) {
+          const el = document.createElement('div');
+          el.className = 'mark';
+          el.innerHTML = '<span class="t"></span> <span class="note"></span><div class="sum"></div>';
+          el.querySelector('.t').textContent = m.clock;
+          el.querySelector('.note').textContent = m.note || '(no note)';
+          el.querySelector('.sum').textContent = m.summary;
+          el.querySelector('.t').addEventListener('click', () => {
+            v.currentTime = m.t;
+            v.play();
+          });
+          box.appendChild(el);
+        }
+      }
+
+      async function addMark() {
+        const note = document.getElementById('note');
+        await fetch('/api/recordings/' + id + '/marks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ t: v.currentTime, note: note.value }),
+        });
+        note.value = '';
+        load();
+      }
+
+      document.getElementById('add').addEventListener('click', addMark);
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addMark();
+      });
+      load();
+    </script>
+  </body>
+</html>

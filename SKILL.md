@@ -38,6 +38,67 @@ Chrome 146+ refuses `--remote-debugging-port` on a real profile, so for your
 signed-in Chrome profile use the `chrome://inspect/#remote-debugging` toggle
 instead. Other browsers take the launch flag fine.
 
+## Sharing tabs with the human
+
+Three ways to mean the same tab, so a person and an agent can talk about one:
+
+```bash
+cdp tabs --browser dia         # the human's tab is flagged ←you
+cdp read active --browser dia  # "the tab I am looking at", no ids involved
+cdp name <tab> checkout --browser dia   # then --tab checkout works for both
+```
+
+**Marks are how the human hands over tabs they are not on.** A mark is not a
+claim: a claim is the agents' mutual exclusion, a mark is the human's
+instruction. They expire after 8 hours.
+
+```bash
+cdp mark "review-app" --note "check the empty state" --browser dia   # by URL substring
+cdp tray --browser dia          # a page listing every tab with a checkbox each
+cdp marks --browser dia
+cdp read marked --browser dia   # the agent resolves the handover
+```
+
+## Annotation: point at elements for the agent
+
+```bash
+cdp overlay <tab> --browser dia   # arm it; the human presses option+A in the page
+cdp annotations                   # what they marked
+cdp annotations --consume         # once you have acted on them
+```
+
+In annotate mode, hovering outlines elements and clicking one opens a note
+field. Each annotation carries the note, the element's role, accessible name,
+test id and several selectors, a cropped screenshot, and which tab it was.
+Annotating a tab marks it too.
+
+Delivery to the agent, in order of portability: the `browser_annotations` MCP
+tool works everywhere; every `browser_*` result appends a line when the queue
+is non-empty, which needs nothing from the harness; and in Claude Code a
+`UserPromptSubmit` hook puts them in front of the agent automatically.
+
+Transport note, because it is not obvious: the overlay hands data back through
+a **CDP binding**, not `fetch`. Current Chromium blocks an HTTPS page from
+calling loopback (Local Network Access), so an HTTP bridge call from a real
+site silently hangs. The extension path uses its background worker instead,
+which is exempt.
+
+## Recording a play
+
+```bash
+cdp record start --browser dia --video --label "shortlist flow"
+# ... drive the browser, and anything else on screen ...
+cdp record stop
+cdp recording <id> --steps        # readable steps with element identity
+cdp annotate <id> --browser dia   # mark moments on the video
+cdp recording <id>                # marks resolved to real events
+```
+
+Three layers on one clock: browser events with element identity, an optional
+screen video, and a frontmost-app sample each second so time spent outside the
+browser is still legible. A mark at 0:42 comes back as "click on button
+'Confirm and apply' [data-testid=wb-confirm]", not as a frame number.
+
 ## Read before you act
 
 `cdp read` snapshots the page into `ref_1..ref_N` with roles, accessible names
@@ -136,7 +197,9 @@ claude mcp add browser -- node ~/.claude/skills/chrome-cdp/mcp/server.mjs
 
 Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
 `browser_read`, `browser_navigate`, `browser_wait`, `browser_act`,
-`browser_screenshot`, `browser_diagnostics`, `browser_eval`.
+`browser_screenshot`, `browser_diagnostics`, `browser_eval`,
+`browser_annotations`, `browser_marks`, `browser_annotate_mode`,
+`browser_record`, `browser_recording`.
 
 `browser_act` takes one action or a `steps` array that runs in order and stops
 at the first failure. Screenshots return inline images to clients that render
@@ -148,9 +211,17 @@ them and always include the saved path, so Codex can read the PNG itself.
 lib/discovery.mjs   which browsers are debuggable, and how to enable the rest
 lib/daemon.mjs      one master daemon per port: browser WS, sessions, event buffers
 lib/claims.mjs      advisory tab ownership across agents
+lib/state.mjs       human-set state: tab aliases and marks
 lib/refs.mjs        the page snapshot and ref resolution
 lib/ops.mjs         every operation, one function each
+lib/overlay/        the annotation overlay, shared verbatim with the extension
+lib/annotations.mjs the annotation queue
+lib/recorder.mjs    recording lifecycle    lib/recstore.mjs  where recordings live
+lib/bridge.mjs      loopback HTTP: tray page, video annotator, extension endpoint
+lib/pages/          tray and video-annotator pages
 bin/cdp.mjs         CLI frontend        mcp/server.mjs   MCP frontend
+hooks/              Claude Code UserPromptSubmit hook
+extension/          wraps the same overlay; adds a popup and browser shortcuts
 ```
 
 A daemon per port holds one browser WebSocket, so Chrome's "Allow remote
@@ -169,6 +240,16 @@ user-data-dir, so it never touches a real profile. It also checks that every
 command documented here exists in the CLI: v1 shipped docs for `net`, `loadall`
 and `snap --compact`, none of which existed.
 
+## The extension
+
+`extension/` is loaded unpacked from `chrome://extensions` (Developer mode).
+It exists for the three things injection cannot do: a browser-level shortcut
+(option+A annotate, option+M hand over this tab), a popup that marks several
+tabs at once, and working in tabs where no debug port is on. It carries no
+annotation logic: `extension/annotate.js` is a verbatim copy of
+`lib/overlay/annotate.js`, refreshed with `npm run sync-extension`, and a test
+fails if the two drift.
+
 ## Gotchas
 
 - Only loaded tabs appear in `cdp tabs`. A tab discarded by memory saver needs
@@ -179,3 +260,11 @@ and `snap --compact`, none of which existed.
   iframes, where `eval` cannot reach.
 - Element refs come from one snapshot. If the page re-renders (a modal opens, a
   list reorders), read again before acting.
+- The overlay and the recorder refuse to install twice, so after changing
+  either, use `cdp overlay <tab> --force` or start a fresh recording rather
+  than expecting a silent upgrade.
+- A daemon started before a code change keeps running the old logic. Clients
+  compare a code version on connect and restart a stale daemon, which is why
+  you may see "restarting the daemon" after editing `lib/`.
+- Screen recording needs the macOS permission once, granted to whatever runs
+  ffmpeg.

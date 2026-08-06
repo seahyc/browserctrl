@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light dark; }
+      body { font: 13px ui-sans-serif, system-ui, sans-serif; margin: 0; padding: 12px; width: 420px; }
+      h1 { font-size: 13px; margin: 0 0 2px; }
+      p { color: #57606a; margin: 0 0 10px; font-size: 12px; }
+      .row { display: flex; gap: 8px; align-items: flex-start; padding: 6px; border-radius: 6px; }
+      .row:hover { background: rgba(127, 127, 127, 0.08); }
+      .row.marked { background: rgba(47, 111, 235, 0.1); }
+      .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .u { color: #57606a; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .meta { min-width: 0; flex: 1; }
+      input[type="text"] { width: 100%; box-sizing: border-box; margin-top: 4px; font: inherit; font-size: 12px; padding: 3px 6px; }
+      .foot { border-top: 1px solid #d0d7de; margin-top: 10px; padding-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+      button { font: inherit; font-size: 12px; padding: 4px 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>Hand tabs to the agent</h1>
+    <p>Tick any tab, including ones you are not on. Alt+A annotates elements on the current page.</p>
+    <div id="list"></div>
+    <div class="foot">
+      <span id="count" style="color:#57606a"></span>
+      <button id="open-tray">Open full tray</button>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
