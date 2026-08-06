@@ -455,7 +455,7 @@
       node.textContent = String(i + 1);
       style(node, {
         position: 'fixed', zIndex: 2147483645, width: '20px', height: '20px', borderRadius: '50% 50% 50% 2px',
-        background: '#d1242f', color: '#fff', font: '11px ui-sans-serif, system-ui', display: 'flex',
+        background: pin.consumed ? '#6e7781' : '#d1242f', color: '#fff', font: '11px ui-sans-serif, system-ui', display: 'flex',
         alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
       });
       node.__pin = pin;
@@ -471,7 +471,14 @@
       pinEls.push(node);
     });
     placePins();
-    setBadge(pins.length ? pins.length + ' annotation' + (pins.length === 1 ? '' : 's') + ' on this page · option+A to add' : '', pins.length > 0 && !state.on);
+    var unread = pins.filter(function (p) { return !p.consumed; }).length;
+    setBadge(
+      pins.length
+        ? pins.length + ' annotation' + (pins.length === 1 ? '' : 's') + ' on this page' +
+          (unread < pins.length ? ' (' + (pins.length - unread) + ' already read)' : '') + ' · option+A to add'
+        : '',
+      pins.length > 0 && !state.on,
+    );
   }
 
   function refreshPins() {
