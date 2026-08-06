@@ -7,9 +7,25 @@
 // seamlessness Claude Code allows. Silent and fast when the queue is empty.
 import { pending, render } from '../lib/annotations.mjs';
 import { marks } from '../lib/state.mjs';
+import { register } from '../lib/sessions.mjs';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+// Claude Code hands hooks a JSON payload on stdin; session_id is what lets an
+// annotation be aimed at one session rather than every agent on the machine.
+function readStdin() {
+  try {
+    return JSON.parse(require('fs').readFileSync(0, 'utf8'));
+  } catch {
+    return {};
+  }
+}
 
 try {
-  const rows = pending();
+  const input = process.stdin.isTTY ? {} : readStdin();
+  const sessionId = input.session_id || process.env.CLAUDE_CODE_SESSION_ID || null;
+  if (sessionId) register({ id: sessionId, client: 'claude-code', cwd: input.cwd || process.cwd() });
+  const rows = pending({ sessionId });
   const marked = marks();
   if (!rows.length && !marked.length) process.exit(0);
 

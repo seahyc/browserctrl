@@ -17,7 +17,27 @@ async function post(path, body) {
 }
 
 chrome.runtime.onMessage.addListener((envelope, sender, sendResponse) => {
-  if (!envelope || envelope.kind !== 'annotation') return;
+  if (!envelope) return;
+
+  // The content script cannot call loopback itself on an HTTPS page, so every
+  // read goes through here too, not just writes.
+  if (envelope.kind === 'pins-request' || envelope.kind === 'resolve') {
+    (async () => {
+      try {
+        if (envelope.kind === 'resolve') {
+          await fetch(`${BRIDGE}/api/annotations/${envelope.id}`, { method: 'DELETE' });
+        }
+        const pins = await (await fetch(`${BRIDGE}/api/annotations?url=${encodeURIComponent(envelope.url)}`)).json();
+        const live = await (await fetch(`${BRIDGE}/api/sessions`)).json();
+        sendResponse({ pins, sessions: live });
+      } catch (e) {
+        sendResponse({ pins: [], sessions: [], error: e.message });
+      }
+    })();
+    return true;
+  }
+
+  if (envelope.kind !== 'annotation') return;
   const payload = { ...envelope.payload, source: 'extension' };
   if (sender.tab) payload.page = { ...(payload.page || {}), url: sender.tab.url, title: sender.tab.title };
   post('/annotations', payload)
@@ -36,15 +56,36 @@ chrome.commands.onCommand.addListener(async command => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
   if (command === 'toggle-annotate') {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => window.__cdpOverlay && window.__cdpOverlay.toggle(),
-    });
+    // Message the content script rather than injecting: injecting would
+    // require host permissions for every site the human ever annotates.
+    try {
+      await chrome.tabs.sendMessage(tab.id, { kind: 'command', command: 'toggle-annotate' });
+    } catch {
+      // No content script here (a chrome:// page, the web store, a PDF).
+      await chrome.action.setBadgeText({ text: '—', tabId: tab.id });
+      setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 1500);
+    }
   }
   if (command === 'mark-tab') {
-    await markTab(tab);
-    await chrome.action.setBadgeText({ text: '✓', tabId: tab.id });
-    setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 1500);
+    // A 1.5s badge on the toolbar is invisible in practice, so say it in the
+    // page where the human is actually looking.
+    let ok = true;
+    try {
+      await markTab(tab);
+    } catch {
+      ok = false;
+    }
+    try {
+      await chrome.tabs.sendMessage(tab.id, {
+        kind: 'command',
+        command: 'toast',
+        text: ok ? 'This tab is handed to the agent' : 'Could not reach the cdp bridge: run `cdp bridge`',
+      });
+    } catch {
+      /* no content script here */
+    }
+    await chrome.action.setBadgeText({ text: ok ? '✓' : '!', tabId: tab.id });
+    setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 4000);
   }
 });
 

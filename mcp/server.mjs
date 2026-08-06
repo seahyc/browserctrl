@@ -14,6 +14,7 @@ import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
+import * as sessions from '../lib/sessions.mjs';
 
 const SERVER_NAME = 'browser';
 const SERVER_VERSION = '2.0.0';
@@ -178,6 +179,7 @@ const TOOLS = [
       properties: {
         consume: { type: 'boolean', description: 'Mark them handled so they stop being reported. Do this once you have acted on them.' },
         clear: { type: 'boolean', description: 'Throw them away without acting.' },
+        all: { type: 'boolean', description: 'Include annotations the human aimed at a different agent session.' },
       },
     },
   },
@@ -415,8 +417,13 @@ const handlers = {
 
   browser_annotations: async args => {
     if (args.clear) return text({ cleared: annotations.clear() });
-    const rows = args.consume ? annotations.consume() : annotations.pending();
-    return text(annotations.render(rows));
+    const sessionId = args.all ? null : SESSION_ID;
+    const rows = args.consume ? annotations.consume({ sessionId }) : annotations.pending({ sessionId });
+    const others = args.all ? [] : annotations.pending().filter(r => r.for && r.for !== SESSION_ID);
+    const note = others.length
+      ? `\n\n(${others.length} more annotation${others.length === 1 ? '' : 's'} are aimed at another agent session; pass all=true to see them.)`
+      : '';
+    return text(annotations.render(rows) + note);
   },
 
   browser_marks: async args => {
@@ -441,7 +448,7 @@ const handlers = {
     withConn(args, async conn => {
       await ensureRunning();
       const tab = await ops.resolveTab(conn, args.tab);
-      const res = await ops.installOverlay(conn, tab.targetId, { bridgePort: BRIDGE_PORT });
+      const res = await ops.installOverlay(conn, tab.targetId, { bridgePort: BRIDGE_PORT, force: Boolean(args.force) });
       if (args.on) await ops.toggleOverlay(conn, tab.targetId);
       return text({ ...res, tab: tab.id, hotkey: 'option+A toggles annotate mode in that page', state: await ops.overlayState(conn, tab.targetId) });
     }),
@@ -483,6 +490,10 @@ const handlers = {
     }),
 };
 
+// Announce this session so the human can aim an annotation at it by name.
+const SESSION_ID =
+  process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_SESSION_ID || `pid:${process.ppid}`;
+
 const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} } });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
@@ -491,6 +502,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
   const { name, arguments: args = {} } = request.params;
   const handler = handlers[name];
   if (!handler) return fail(`Unknown tool ${name}`);
+  sessions.touch(SESSION_ID);
   try {
     const result = await withTimeout(handler(args), TOOL_TIMEOUT_MS, name);
     // The only handoff path that needs nothing from the harness: if the human
@@ -511,6 +523,11 @@ await server.connect(transport);
 
 // Decide once, after the handshake, whether this client renders inline images.
 const info = server.getClientVersion?.();
+sessions.register({
+  id: SESSION_ID,
+  client: info?.name || 'unknown',
+  cwd: process.env.CDP_SESSION_CWD || process.cwd(),
+});
 clientRendersImages = Boolean(info?.name && IMAGE_CLIENTS.some(rx => rx.test(info.name)));
 if (process.env.CDP_MCP_IMAGES === '1') clientRendersImages = true;
 if (process.env.CDP_MCP_IMAGES === '0') clientRendersImages = false;

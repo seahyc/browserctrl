@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // CLI frontend. Thin: parse args, call lib/ops, print. No protocol logic here.
 import { execFile } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, requireBrowser } from '../lib/discovery.mjs';
 import { BROWSERS } from '../lib/env.mjs';
@@ -89,8 +92,21 @@ async function launch(name) {
     if (!running) break;
     await new Promise(r => setTimeout(r, 500));
   }
-  await run('/usr/bin/open', ['-a', meta.app, '--args', `--remote-debugging-port=${meta.port}`]);
-  return { launched: meta.label, port: meta.port, note: 'Tabs are restored by the browser; the debug port is live once it finishes starting.' };
+  // Load the handoff extension alongside the debug port, so a browser started
+  // this way has both halves: CDP for the agent, extension UI for the human.
+  // Chrome 137+ ignores --load-extension for non-enterprise profiles; other
+  // Chromium forks still honour it. Where it is ignored, load it once from
+  // chrome://extensions instead and it persists in the profile.
+  const extension = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'extension');
+  const args = [`--remote-debugging-port=${meta.port}`];
+  if (!flags['no-extension'] && fs.existsSync(extension)) args.push(`--load-extension=${extension}`);
+  await run('/usr/bin/open', ['-a', meta.app, '--args', ...args]);
+  return {
+    launched: meta.label,
+    port: meta.port,
+    extension: args.length > 1 ? extension : 'not loaded',
+    note: 'Tabs are restored by the browser; the debug port is live once it finishes starting.',
+  };
 }
 
 const { flags, positional } = parseArgs(process.argv.slice(2));
@@ -356,9 +372,8 @@ const main = async () => {
       case 'overlay': {
         await ensureRunning();
         // The overlay refuses to install twice, so upgrading it needs an
-        // explicit teardown.
-        if (flags.force) await ops.evaluate(conn, targetId, 'delete window.__cdpOverlay, true').catch(() => {});
-        const res = await ops.installOverlay(conn, targetId, { bridgePort: BRIDGE_PORT });
+        // explicit teardown of both the object and the DOM marker.
+        const res = await ops.installOverlay(conn, targetId, { bridgePort: BRIDGE_PORT, force: Boolean(flags.force) });
         if (flags.on) await ops.toggleOverlay(conn, targetId);
         return out({ ...res, hotkey: 'option+A in the page toggles annotate mode', state: await ops.overlayState(conn, targetId) });
       }

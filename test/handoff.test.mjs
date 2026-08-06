@@ -200,3 +200,93 @@ test('the extension asks for no more permission than it needs', () => {
     'the extension must only be able to reach the local bridge');
   assert.ok(!manifest.permissions.includes('debugger'), 'the extension has no business with the debugger API');
 });
+
+// ---------------------------------------------------------------- pins ------
+
+t('past annotations show as pins anchored to their elements', async () => {
+  annotations.clear();
+  await ops.installOverlay(conn, tabId, { bridgePort: 1, force: true });
+  await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#go', 'first note')");
+  await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#name', 'second note')");
+  await new Promise(r => setTimeout(r, 1200));
+
+  const rows = annotations.pending();
+  assert.equal(rows.length, 2);
+  const shown = await ops.evaluate(
+    conn,
+    tabId,
+    `window.__cdpOverlay.setPins(${JSON.stringify(rows)}, [])`,
+  );
+  assert.equal(shown, 2, 'both annotations should render as pins');
+
+  const placed = await ops.evaluate(
+    conn,
+    tabId,
+    `JSON.stringify([...document.documentElement.children]
+       .filter(n => n.tagName === 'DIV' && n.style && (n.style.borderRadius || '').indexOf('50%') === 0)
+       .map(n => ({ text: n.textContent, left: parseFloat(n.style.left), top: parseFloat(n.style.top) })))`,
+  );
+  const parsed = JSON.parse(placed);
+  assert.equal(parsed.length, 2);
+  assert.ok(parsed.every(p => p.left >= 0 && p.top >= 0), 'pins should be positioned on the page');
+  assert.deepEqual(parsed.map(p => p.text), ['1', '2'], 'pins are numbered in order');
+});
+
+t('a pin for an element that no longer exists still shows, flagged', async () => {
+  annotations.clear();
+  await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#go', 'about to vanish')");
+  await new Promise(r => setTimeout(r, 1000));
+  const rows = annotations.pending();
+  await ops.evaluate(conn, tabId, "document.getElementById('go').remove(), true");
+  await ops.evaluate(conn, tabId, `window.__cdpOverlay.setPins(${JSON.stringify(rows)}, [])`);
+  const moved = await ops.evaluate(
+    conn,
+    tabId,
+    `[...document.documentElement.children]
+       .filter(n => n.tagName === 'DIV' && (n.style.borderRadius || '').indexOf('50%') === 0)
+       .map(n => n.title)[0]`,
+  );
+  assert.match(moved || '', /gone/, 'an orphaned pin should say so rather than disappear');
+  await ops.navigate(conn, tabId, fixture.url, { waitUntil: 'load' });
+  annotations.clear();
+});
+
+// ------------------------------------------------------------- routing -----
+
+test('an annotation aimed at one session is hidden from the others', () => {
+  annotations.clear();
+  annotations.add({ note: 'for everyone', page: { url: 'x' } });
+  annotations.add({ note: 'for session A', for: 'session-a', page: { url: 'x' } });
+
+  const seenByA = annotations.pending({ sessionId: 'session-a' }).map(r => r.note);
+  const seenByB = annotations.pending({ sessionId: 'session-b' }).map(r => r.note);
+  assert.deepEqual(seenByA, ['for everyone', 'for session A']);
+  assert.deepEqual(seenByB, ['for everyone'], 'B must not see what was aimed at A');
+
+  assert.equal(annotations.consume({ sessionId: 'session-b' }).length, 1);
+  assert.deepEqual(
+    annotations.pending({ sessionId: 'session-a' }).map(r => r.note),
+    ['for session A'],
+    "B consuming the shared one must not take A's",
+  );
+  annotations.clear();
+});
+
+test('resolving an annotation removes it and its screenshot', () => {
+  annotations.clear();
+  const row = annotations.add({ note: 'temporary', page: { url: 'x' } });
+  fs.writeFileSync(annotations.shotPath(row.id), 'not really a png');
+  annotations.update(row.id, { screenshot: annotations.shotPath(row.id) });
+  assert.equal(annotations.remove(row.id), true);
+  assert.equal(annotations.pending().length, 0);
+  assert.equal(fs.existsSync(annotations.shotPath(row.id)), false, 'the screenshot should go with it');
+});
+
+test('live sessions are listed so an annotation can be aimed at one', async () => {
+  const sessionsMod = await import('../lib/sessions.mjs');
+  sessionsMod.register({ id: 'sess-1', client: 'claude-code', cwd: '/tmp/project-one' });
+  sessionsMod.register({ id: 'sess-2', client: 'codex', cwd: '/tmp/project-two' });
+  const live = sessionsMod.live();
+  assert.ok(live.length >= 2);
+  assert.ok(live.some(s => s.name.includes('project-one')), 'a session should be nameable by its project');
+});
