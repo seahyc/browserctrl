@@ -106,3 +106,10 @@ test('the MCP server starts and lists its tools over stdio', () => {
   assert.ok(names.includes('browser_read'), `browser_read missing from ${names.join(', ')}`);
   assert.ok(names.includes('browser_act'));
 });
+
+test('a stale DevToolsActivePort file does not report a dead browser as debuggable', async () => {
+  // Port 9 (discard) is never a browser; nothing should ever be open here.
+  const { portOpen, browserWsUrl } = await import('../lib/discovery.mjs');
+  assert.equal(await portOpen(9, 200), false);
+  await assert.rejects(() => browserWsUrl(9), /No browser is debuggable/);
+});
