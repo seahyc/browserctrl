@@ -343,14 +343,38 @@ test('a client that sends no name in the handshake is not left as unknown', asyn
   assert.equal(typeof inferClient(undefined), 'string');
 });
 
-test('video capture is timed from the first real frame, not from spawn', async () => {
+test('video time is read off ffmpeg progress, not assumed from spawn', async () => {
   const rec = await import('../lib/recorder.mjs');
   const now = 1_000_000;
   // Progress before any frame lands says nothing about when capture began.
-  assert.equal(rec.calibrateFromProgress('frame=0\nout_time_us=0\n', now), null);
-  // 11s of frames already encoded means capture began 11s ago, not now.
-  assert.equal(rec.calibrateFromProgress('frame=165\nout_time_us=11000000\n', now), now - 11000);
-  assert.equal(rec.calibrateFromProgress('bitrate=N/A\n', now), null);
+  assert.equal(rec.progressSample('frame=0\nout_time_us=0\n', now), null);
+  assert.equal(rec.progressSample('bitrate=N/A\n', now), null);
+  assert.deepEqual(rec.progressSample('frame=165\nout_time_us=11000000\n', now), { w: now, v: 11 });
+});
+
+test('a mark maps through the measured video clock, so a slow start does not shift it', async () => {
+  const rec = await import('../lib/recorder.mjs');
+  const store = await import('../lib/recstore.mjs');
+  const id = 'rec_clocktest';
+  fs.mkdirSync(store.dir(id), { recursive: true });
+  fs.writeFileSync(store.metaPath(id), JSON.stringify({ id, startedAt: 1000, videoStartedAt: 1000 }));
+  // Capture ran at half speed for its first 10s of video, then real time:
+  // 10s of video took 20s of wall clock, then 10s took 10s.
+  fs.writeFileSync(
+    store.clockPath(id),
+    [
+      { w: 1000, v: 0 },
+      { w: 21000, v: 10 },
+      { w: 31000, v: 20 },
+    ].map(r => JSON.stringify(r)).join('\n') + '\n',
+  );
+  // Naive anchor+t would call this 6000; the measured clock says 13000.
+  assert.equal(rec.videoTimeToWall(id, 6), 13000);
+  assert.equal(rec.videoTimeToWall(id, 15), 26000);
+  // And back again.
+  assert.equal(Math.round(rec.wallToVideoTime(id, 13000)), 6);
+  assert.equal(Math.round(rec.wallToVideoTime(id, 26000)), 15);
+  fs.rmSync(store.dir(id), { recursive: true, force: true });
 });
 
 test('video is encoded in a way that keeps video time equal to wall-clock time', async () => {
@@ -360,4 +384,5 @@ test('video is encoded in a way that keeps video time equal to wall-clock time',
   assert.ok(args.join(' ').includes('h264_videotoolbox'), 'software encoding cannot keep up with a retina display');
   assert.ok(args.join(' ').includes('scale=w=min'), 'an unscaled retina capture drops frames');
   assert.ok(args.includes('-progress'), 'progress output is what makes calibration possible');
+  assert.ok(args.includes('-use_wallclock_as_timestamps'), 'otherwise a stalled capture loses time outright');
 });
