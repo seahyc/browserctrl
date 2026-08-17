@@ -523,12 +523,16 @@ await server.connect(transport);
 
 // Decide once, after the handshake, whether this client renders inline images.
 const info = server.getClientVersion?.();
+// Not `info?.name || 'unknown'`: Codex sends no client name in the handshake,
+// so every Codex session used to land in the annotation picker as "unknown ·
+// <dir>", indistinguishable from any other client that omits one.
+const client = sessions.inferClient(info?.name);
 sessions.register({
   id: SESSION_ID,
-  client: info?.name || 'unknown',
+  client,
   cwd: process.env.CDP_SESSION_CWD || process.cwd(),
 });
-clientRendersImages = Boolean(info?.name && IMAGE_CLIENTS.some(rx => rx.test(info.name)));
+clientRendersImages = IMAGE_CLIENTS.some(rx => rx.test(client));
 if (process.env.CDP_MCP_IMAGES === '1') clientRendersImages = true;
 if (process.env.CDP_MCP_IMAGES === '0') clientRendersImages = false;
 void fs;

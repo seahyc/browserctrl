@@ -7,7 +7,7 @@
 // seamlessness Claude Code allows. Silent and fast when the queue is empty.
 import { pending, render } from '../lib/annotations.mjs';
 import { marks } from '../lib/state.mjs';
-import { register } from '../lib/sessions.mjs';
+import { register, titleFromPrompt } from '../lib/sessions.mjs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
@@ -24,7 +24,16 @@ function readStdin() {
 try {
   const input = process.stdin.isTTY ? {} : readStdin();
   const sessionId = input.session_id || process.env.CLAUDE_CODE_SESSION_ID || null;
-  if (sessionId) register({ id: sessionId, client: 'claude-code', cwd: input.cwd || process.cwd() });
+  // The first prompt is what names the session in the annotation picker. Later
+  // prompts pass null, and register() keeps the title it already learned.
+  if (sessionId) {
+    register({
+      id: sessionId,
+      client: 'claude-code',
+      cwd: input.cwd || process.cwd(),
+      title: titleFromPrompt(input.prompt),
+    });
+  }
   const rows = pending({ sessionId });
   const marked = marks();
   if (!rows.length && !marked.length) process.exit(0);

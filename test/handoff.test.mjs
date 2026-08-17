@@ -290,3 +290,74 @@ test('live sessions are listed so an annotation can be aimed at one', async () =
   assert.ok(live.length >= 2);
   assert.ok(live.some(s => s.name.includes('project-one')), 'a session should be nameable by its project');
 });
+
+test('a session is named by what it is working on, not just where it is', async () => {
+  const sessionsMod = await import('../lib/sessions.mjs');
+  sessionsMod.register({
+    id: 'sess-title',
+    client: 'claude-code',
+    cwd: '/tmp/project-one',
+    title: 'fix the workbench spacing',
+  });
+  const row = sessionsMod.live().find(s => s.id === 'sess-title');
+  assert.ok(row.name.startsWith('fix the workbench spacing'), `got ${row.name}`);
+});
+
+test('a later prompt does not wipe the title the first one established', async () => {
+  const sessionsMod = await import('../lib/sessions.mjs');
+  sessionsMod.register({ id: 'sess-keep', client: 'claude-code', cwd: '/tmp/p', title: 'first thing asked' });
+  sessionsMod.register({ id: 'sess-keep', client: 'claude-code', cwd: '/tmp/p', title: null });
+  const row = sessionsMod.live().find(s => s.id === 'sess-keep');
+  assert.ok(row.name.startsWith('first thing asked'), `got ${row.name}`);
+});
+
+test('two sessions in one directory do not render as the same row', async () => {
+  const sessionsMod = await import('../lib/sessions.mjs');
+  sessionsMod.register({ id: 'twin-aaaa', client: 'claude-code', cwd: '/tmp/same-place', pid: 111 });
+  sessionsMod.register({ id: 'twin-bbbb', client: 'claude-code', cwd: '/tmp/same-place', pid: 222 });
+  const live = sessionsMod.live();
+  const a = live.find(s => s.id === 'twin-aaaa');
+  const b = live.find(s => s.id === 'twin-bbbb');
+  assert.notEqual(a.name, b.name, 'identical names make the picker unusable');
+});
+
+test('a prompt becomes a short title, and code fences do not leak into it', async () => {
+  const { titleFromPrompt } = await import('../lib/sessions.mjs');
+  assert.equal(titleFromPrompt('  fix   the spacing\nunder the buttons  '), 'fix the spacing under the buttons');
+  assert.equal(titleFromPrompt('do this ```js\nconst x = 1;\n``` please'), 'do this please');
+  assert.equal(titleFromPrompt(''), null);
+  // Harness chatter arrives on the same hook as a real prompt; one of these
+  // named a session "<task-notification> <task-id>ade7b8...".
+  assert.equal(titleFromPrompt('<task-notification> <task-id>abc</task-id>'), null);
+  assert.equal(titleFromPrompt('<system-reminder>be careful</system-reminder>'), null);
+  assert.equal(titleFromPrompt('[SYSTEM NOTIFICATION - NOT USER INPUT] ...'), null);
+  assert.equal(titleFromPrompt(null), null);
+  assert.ok(titleFromPrompt('word '.repeat(40)).length <= 60);
+});
+
+test('a client that sends no name in the handshake is not left as unknown', async () => {
+  const { inferClient } = await import('../lib/sessions.mjs');
+  assert.equal(inferClient('claude-code'), 'claude-code', 'a reported name is authoritative');
+  // The parent of this test process is node, so inference has nothing to go on
+  // and must not invent a client.
+  assert.equal(typeof inferClient(undefined), 'string');
+});
+
+test('video capture is timed from the first real frame, not from spawn', async () => {
+  const rec = await import('../lib/recorder.mjs');
+  const now = 1_000_000;
+  // Progress before any frame lands says nothing about when capture began.
+  assert.equal(rec.calibrateFromProgress('frame=0\nout_time_us=0\n', now), null);
+  // 11s of frames already encoded means capture began 11s ago, not now.
+  assert.equal(rec.calibrateFromProgress('frame=165\nout_time_us=11000000\n', now), now - 11000);
+  assert.equal(rec.calibrateFromProgress('bitrate=N/A\n', now), null);
+});
+
+test('video is encoded in a way that keeps video time equal to wall-clock time', async () => {
+  const rec = await import('../lib/recorder.mjs');
+  const args = rec.videoArgs('rec_test', { screen: '3', fps: '15' });
+  assert.ok(args.includes('cfr'), 'without CFR, dropped frames silently shorten the video');
+  assert.ok(args.join(' ').includes('h264_videotoolbox'), 'software encoding cannot keep up with a retina display');
+  assert.ok(args.join(' ').includes('scale=w=min'), 'an unscaled retina capture drops frames');
+  assert.ok(args.includes('-progress'), 'progress output is what makes calibration possible');
+});
