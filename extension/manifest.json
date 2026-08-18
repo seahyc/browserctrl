@@ -3,25 +3,61 @@
   "name": "cdp handoff",
   "version": "2.1.0",
   "description": "Hand tabs and page elements to a coding agent: annotate elements, mark tabs, record plays.",
-  "permissions": ["tabs", "storage", "scripting", "activeTab"],
-  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
-  "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_popup": "popup.html", "default_title": "Hand tabs to the agent" },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "tabs",
+    "storage",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Hand tabs to the agent",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["annotate.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "annotate.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
   ],
   "commands": {
     "toggle-annotate": {
-      "suggested_key": { "default": "Alt+A", "mac": "Alt+A" },
+      "suggested_key": {
+        "default": "Alt+A",
+        "mac": "Alt+A"
+      },
       "description": "Toggle annotate mode on this page"
     },
     "mark-tab": {
-      "suggested_key": { "default": "Alt+M", "mac": "Alt+M" },
+      "suggested_key": {
+        "default": "Alt+M",
+        "mac": "Alt+M"
+      },
       "description": "Hand this tab to the agent"
     }
   }

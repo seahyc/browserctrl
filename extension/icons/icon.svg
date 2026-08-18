@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- An annotation pin: the same object the overlay drops on a page, in the
+       same blue. Solid silhouette with a white keyline so it reads on both a
+       light and a dark toolbar, and a hole in the middle so it is still a pin
+       and not a blob at 16px. -->
+  <path d="M32 4C20.4 4 11 13.4 11 25c0 14.4 17.3 31.4 19.3 33.3a2.5 2.5 0 0 0 3.4 0C35.7 56.4 53 39.4 53 25 53 13.4 43.6 4 32 4z"
+        fill="#2f6feb" stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="32" cy="24.5" r="8" fill="#ffffff"/>
+</svg>

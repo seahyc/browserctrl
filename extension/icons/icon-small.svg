@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- 16px variant: tighter margins and a thinner keyline, because at that size
+       the outline of the full-size art eats the interior and the hole closes up. -->
+  <path d="M32 2C19.3 2 9 12.3 9 25c0 15.2 18.6 33.5 20.8 35.6a3 3 0 0 0 4.4 0C36.4 58.5 55 40.2 55 25 55 12.3 44.7 2 32 2z"
+        fill="#2f6feb" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="32" cy="24" r="9.5" fill="#ffffff"/>
+</svg>
