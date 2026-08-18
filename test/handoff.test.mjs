@@ -386,3 +386,52 @@ test('video is encoded in a way that keeps video time equal to wall-clock time',
   assert.ok(args.includes('-progress'), 'progress output is what makes calibration possible');
   assert.ok(args.includes('-use_wallclock_as_timestamps'), 'otherwise a stalled capture loses time outright');
 });
+
+test('injecting the recorder twice does not record every click twice', async () => {
+  const rec = await import('../lib/recorder.mjs');
+  const script = rec.injectionScript('rec_abc');
+  // A tab gets this from the daemon at creation and from the start pass, so the
+  // second run must be a no-op rather than attaching a second set of listeners.
+  assert.match(script, /window\.__cdpRecorder&&window\.__cdpRecording===id\)return/);
+  // But a recorder from a different recording is still replaced.
+  assert.match(script, /delete window\.__cdpRecorder/);
+  assert.ok(script.includes('rec_abc'));
+});
+
+test('the same batch arriving twice does not become two clicks', async () => {
+  const store = await import('../lib/recstore.mjs');
+  const id = 'rec_dupetest';
+  fs.mkdirSync(store.dir(id), { recursive: true });
+  const batch = [
+    { t: 1000, type: 'page', url: 'https://example.com/' },
+    { t: 1100, type: 'click', url: 'https://example.com/', element: { selector: 'h1' } },
+  ];
+  assert.equal(store.appendEvents(id, batch), 2);
+  assert.equal(store.appendEvents(id, batch), 0, 'a redelivered batch adds nothing');
+  // A real second click on the same element is a different instant, so it stays.
+  assert.equal(store.appendEvents(id, [{ t: 1600, type: 'click', url: 'https://example.com/', element: { selector: 'h1' } }]), 1);
+  const rows = store.readJsonl(store.eventsPath(id));
+  assert.equal(rows.filter(r => r.type === 'click').length, 2);
+  store.forgetEventKeys(id);
+  fs.rmSync(store.dir(id), { recursive: true, force: true });
+});
+
+test('a mark prefers what the human did over a page that happened to load', async () => {
+  const rec = await import('../lib/recorder.mjs');
+  const store = await import('../lib/recstore.mjs');
+  const id = 'rec_ranktest';
+  fs.mkdirSync(store.dir(id), { recursive: true });
+  fs.writeFileSync(store.metaPath(id), JSON.stringify({ id, startedAt: 0, videoStartedAt: 0 }));
+  // The page load is 60ms from the mark; the click is 140ms away.
+  fs.writeFileSync(
+    store.eventsPath(id),
+    [
+      { t: 9940, type: 'page', url: 'https://example.com/' },
+      { t: 10140, type: 'click', url: 'https://example.com/', element: { role: 'h1', name: 'Example Domain' } },
+    ].map(r => JSON.stringify(r)).join('\n') + '\n',
+  );
+  fs.writeFileSync(store.marksPath(id), JSON.stringify({ id: 'mk_1', t: 10, at: 10000, note: 'here' }) + '\n');
+  const [resolved] = rec.resolvedMarks(id);
+  assert.match(resolved.summary, /click on h1 "Example Domain"/, `got ${resolved.summary}`);
+  fs.rmSync(store.dir(id), { recursive: true, force: true });
+});
