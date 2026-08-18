@@ -253,7 +253,21 @@ const main = async () => {
         const res = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/stop`, { method: 'POST' })).json();
         return out({ ...res, annotate: res.hasVideo ? `cdp annotate ${id} --browser <name>` : 'no video: read the steps with cdp recording ' + id + ' --steps' });
       }
-      throw new Error('Usage: cdp record start|stop [id]');
+      if (sub === 'arm') {
+        const st = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/prewarm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ port }),
+        })).json();
+        return out({ ...st, note: 'Capture is warming. `cdp record start --video` will adopt it, so the first seconds are on film.' });
+      }
+      if (sub === 'disarm') {
+        return out(await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/prewarm`, { method: 'DELETE' })).json());
+      }
+      if (sub === 'status') {
+        return out(await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/prewarm`)).json());
+      }
+      throw new Error('Usage: cdp record start|stop [id] | cdp record arm|disarm|status');
     }
     if (cmd === 'annotate') {
       await ensureRunning();

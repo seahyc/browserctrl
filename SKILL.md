@@ -86,6 +86,8 @@ which is exempt.
 ## Recording a play
 
 ```bash
+cdp record arm --browser dia      # optional: opens the capture device now, so
+                                  # `start` is instant and the first ~2s are on film
 cdp record start --browser dia --video --label "shortlist flow"
 # ... drive the browser, and anything else on screen ...
 cdp record stop
@@ -93,6 +95,10 @@ cdp recording <id> --steps        # readable steps with element identity
 cdp annotate <id> --browser dia   # mark moments on the video
 cdp recording <id>                # marks resolved to real events
 ```
+
+`record arm` is opt-in on purpose: an armed capture writes video continuously
+whether or not you ever record. `cdp record status` says whether one is warm,
+`cdp record disarm` stops it.
 
 Three layers on one clock: browser events with element identity, an optional
 screen video, and a frontmost-app sample each second so time spent outside the

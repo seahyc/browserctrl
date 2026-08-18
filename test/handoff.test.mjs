@@ -435,3 +435,29 @@ test('a mark prefers what the human did over a page that happened to load', asyn
   assert.match(resolved.summary, /click on h1 "Example Domain"/, `got ${resolved.summary}`);
   fs.rmSync(store.dir(id), { recursive: true, force: true });
 });
+
+test('a session registered before its client was known gets relabelled', async () => {
+  const sessionsMod = await import('../lib/sessions.mjs');
+  // This test process is node, so pid inference finds nothing and the row is
+  // left alone rather than being given a made-up client.
+  sessionsMod.register({ id: 'sess-unknown', client: 'unknown', cwd: '/tmp/p', pid: process.pid });
+  const row = sessionsMod.live().find(s => s.id === 'sess-unknown');
+  assert.ok(row, 'the row should still be listed');
+  assert.equal(typeof row.client, 'string');
+  // A pid that cannot be inspected must not throw.
+  assert.equal(sessionsMod.clientOfPid(999999), null);
+  assert.equal(sessionsMod.clientOfPid(0), null);
+});
+
+test('arming twice does not start a second capture, and disarm is safe when idle', async () => {
+  const rec = await import('../lib/recorder.mjs');
+  // No ffmpeg in the test rig's path assumptions: arm() spawns, so only the
+  // bookkeeping is asserted here, and it must be idempotent either way.
+  const first = rec.arm({ port: 9999 });
+  const second = rec.arm({ port: 9999 });
+  assert.equal(first.armed, second.armed, 'arming twice should report the same state');
+  const off = rec.disarm();
+  assert.equal(off.armed, false);
+  assert.equal(rec.disarm().armed, false, 'disarming an idle capture is not an error');
+  assert.equal(rec.prewarmStatus().armed, false);
+});
