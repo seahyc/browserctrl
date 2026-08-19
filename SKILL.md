@@ -170,6 +170,41 @@ cdp eval <tab> "location.href"
 Console and network are buffered by the daemon from the moment it attaches to
 a tab, so reload after attaching if you need the events from page load.
 
+## Browser-level control the protocol does not have
+
+CDP drives pages. It cannot touch tab groups, bookmarks, history, downloads,
+the reading list, sessions, or half of `chrome.tabs` (pin, mute, duplicate,
+move, discard, zoom) — those exist only as extension APIs.
+
+So the extension doubles as a permission carrier. There is no RPC protocol:
+`cdp ext` attaches CDP to the extension's own service worker and evaluates
+there, which means anything the manifest grants is callable without teaching
+this CLI about it first.
+
+```bash
+cdp ext --browser dia                      # is it loaded, and what does it grant
+cdp ext outline --browser dia              # every tab, annotated with its group
+cdp ext group --url /merge_requests/42,/merge_requests/71 --title "Review" --color blue
+cdp ext undo-close --browser dia           # restore the last closed tab
+cdp ext eval "chrome.bookmarks.getTree()" --browser dia
+cdp ext eval "chrome.tabs.update(123, {pinned: true})" --browser dia
+```
+
+`cdp ext eval` takes any expression; a promise is awaited and the result comes
+back as JSON. That is the escape hatch — reach for the named subcommands when
+they fit and `eval` when they do not.
+
+This needs the extension loaded (`chrome://extensions` -> Developer mode ->
+Load unpacked -> `extension/`). Without it you get a message saying so rather
+than a confusing failure. MV3 terminates idle service workers, so the
+extension keeps a 30s alarm heartbeat and `cdp ext` retries a few times before
+declaring it absent.
+
+**The extension stays loopback-only on purpose.** `host_permissions` is pinned
+to `127.0.0.1` and `localhost`, and `debugger` is refused; a test enforces
+both. None of the APIs above need host access, so broad host permissions would
+buy nothing and cost a great deal of trust.
+
 ## Tabs and claims
 
 Multiple agents share one browser, so tabs are claimed. Any mutating command

@@ -8,6 +8,7 @@ import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, requireBrowser } from '../lib/discovery.mjs';
 import { BROWSERS } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
+import * as ext from '../lib/ext.mjs';
 import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
@@ -275,6 +276,27 @@ const main = async () => {
       const url = `http://127.0.0.1:${BRIDGE_PORT}/annotator?id=${encodeURIComponent(id)}`;
       await ops.newTab(conn, url);
       return out({ annotator: url });
+    }
+    if (cmd === 'ext') {
+      const sub = positional[1];
+      if (!sub || sub === 'info') return out(await ext.info(port));
+      if (sub === 'group') {
+        const pats = (flags.url || '').split(',').map(s => s.trim()).filter(Boolean);
+        if (!pats.length) throw new Error('Usage: cdp ext group --url <substr>[,<substr>...] [--title T] [--color blue] [--collapsed]');
+        return out(await ext.evaluate(port, `__cdpAgent.groupByUrl(${JSON.stringify(pats)}, ${JSON.stringify({
+          title: flags.title || 'agent',
+          color: flags.color || 'blue',
+          collapsed: Boolean(flags.collapsed),
+        })})`));
+      }
+      if (sub === 'outline') return out(await ext.evaluate(port, '__cdpAgent.outline()'));
+      if (sub === 'undo-close') return out(await ext.evaluate(port, '__cdpAgent.undoClose()'));
+      if (sub === 'eval') {
+        const expr = positional.slice(2).join(' ');
+        if (!expr) throw new Error('Usage: cdp ext eval "chrome.bookmarks.getTree()"');
+        return out(await ext.evaluate(port, expr));
+      }
+      throw new Error('Usage: cdp ext [info] | group --url a,b | outline | undo-close | eval <chrome.* expression>');
     }
     if (cmd === 'open') {
       const res = await ops.newTab(conn, positional[1]);

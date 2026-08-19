@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "cdp handoff",
-  "version": "2.1.0",
-  "description": "Hand tabs and page elements to a coding agent: annotate elements, mark tabs, record plays.",
+  "version": "3.0.0",
+  "description": "Hand tabs and page elements to a coding agent, and let the agent drive browser-level chrome.* APIs the DevTools Protocol cannot reach.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -13,7 +13,20 @@
     "tabs",
     "storage",
     "scripting",
-    "activeTab"
+    "activeTab",
+    "tabGroups",
+    "bookmarks",
+    "history",
+    "downloads",
+    "sessions",
+    "cookies",
+    "search",
+    "topSites",
+    "readingList",
+    "notifications",
+    "contextMenus",
+    "alarms",
+    "idle"
   ],
   "host_permissions": [
     "http://127.0.0.1/*",
