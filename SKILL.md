@@ -186,9 +186,18 @@ cdp ext --browser dia                      # is it loaded, and what does it gran
 cdp ext outline --browser dia              # every tab, annotated with its group
 cdp ext group --url /merge_requests/42,/merge_requests/71 --title "Review" --color blue
 cdp ext undo-close --browser dia           # restore the last closed tab
-cdp ext eval "chrome.bookmarks.getTree()" --browser dia
-cdp ext eval "chrome.tabs.update(123, {pinned: true})" --browser dia
+cdp ext apis --browser dia                 # every chrome.* function actually reachable
+cdp ext api tabs.update '[123,{"pinned":true}]'    # generic invoker: any granted API
+cdp ext api bookmarks.search '[{"query":"gitlab"}]'
+cdp ext api downloads.search '[{"limit":5}]'
+cdp ext eval "chrome.tabs.query({})" --browser dia # raw expression escape hatch
 ```
+
+`cdp ext api` is the one that keeps this honest: it dots into the `chrome`
+namespace at runtime, so a permission added to the manifest is immediately
+callable without touching the CLI. `cdp ext apis` lists what is genuinely
+reachable, which turns "did I typo it or is the permission missing?" into a
+question you can answer.
 
 `cdp ext eval` takes any expression; a promise is awaited and the result comes
 back as JSON. That is the escape hatch — reach for the named subcommands when

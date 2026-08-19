@@ -169,3 +169,32 @@ globalThis.__cdpAgent = {
     return { restored: recent.tab?.url ?? `${recent.window?.tabs?.length} tabs` };
   },
 };
+
+// Generic invoker: reach any granted chrome.* API without this file or the CLI
+// needing to know it exists. `path` is dotted from the chrome namespace, e.g.
+// "tabs.update", "bookmarks.search", "downloads.pause", "tabGroups.move".
+globalThis.__cdpAgent.api = async function (path, args = []) {
+  const parts = path.replace(/^chrome\./, '').split('.');
+  let ctx = chrome;
+  for (const part of parts.slice(0, -1)) {
+    ctx = ctx?.[part];
+    if (!ctx) throw new Error(`no such chrome namespace: ${parts.slice(0, -1).join('.')}`);
+  }
+  const fnName = parts[parts.length - 1];
+  const fn = ctx?.[fnName];
+  if (typeof fn !== 'function') throw new Error(`chrome.${path} is not a function (permission missing?)`);
+  return await fn.apply(ctx, args);
+};
+
+// What is actually reachable, given what the manifest granted. Saves guessing
+// whether a failure is a typo or a missing permission.
+globalThis.__cdpAgent.apis = function () {
+  const out = {};
+  for (const ns of Object.keys(chrome)) {
+    const v = chrome[ns];
+    if (!v || typeof v !== 'object') continue;
+    const fns = Object.keys(v).filter(k => typeof v[k] === 'function');
+    if (fns.length) out[ns] = fns.sort();
+  }
+  return out;
+};

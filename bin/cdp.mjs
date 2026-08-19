@@ -291,12 +291,24 @@ const main = async () => {
       }
       if (sub === 'outline') return out(await ext.evaluate(port, '__cdpAgent.outline()'));
       if (sub === 'undo-close') return out(await ext.evaluate(port, '__cdpAgent.undoClose()'));
+      if (sub === 'api') {
+        const apiPath = positional[2];
+        if (!apiPath) throw new Error('Usage: cdp ext api <chrome.path> [jsonArgs]   e.g. cdp ext api tabs.update \'[123,{"pinned":true}]\'');
+        let args = [];
+        const raw = positional.slice(3).join(' ').trim();
+        if (raw) {
+          try { args = JSON.parse(raw); } catch { throw new Error(`args must be JSON: ${raw}`); }
+          if (!Array.isArray(args)) args = [args];
+        }
+        return out(await ext.evaluate(port, `__cdpAgent.api(${JSON.stringify(apiPath)}, ${JSON.stringify(args)})`));
+      }
+      if (sub === 'apis') return out(await ext.evaluate(port, '__cdpAgent.apis()'));
       if (sub === 'eval') {
         const expr = positional.slice(2).join(' ');
         if (!expr) throw new Error('Usage: cdp ext eval "chrome.bookmarks.getTree()"');
         return out(await ext.evaluate(port, expr));
       }
-      throw new Error('Usage: cdp ext [info] | group --url a,b | outline | undo-close | eval <chrome.* expression>');
+      throw new Error('Usage: cdp ext [info] | apis | api <chrome.path> [jsonArgs] | group --url a,b | outline | undo-close | eval <expr>');
     }
     if (cmd === 'open') {
       const res = await ops.newTab(conn, positional[1]);
