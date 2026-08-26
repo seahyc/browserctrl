@@ -23,15 +23,21 @@ function readStdin() {
 
 try {
   const input = process.stdin.isTTY ? {} : readStdin();
-  const sessionId = input.session_id || process.env.CLAUDE_CODE_SESSION_ID || null;
+  const sessionId = input.session_id || process.env.CODEX_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
+  const promptTitle = titleFromPrompt(input.prompt);
   // The first prompt is what names the session in the annotation picker. Later
   // prompts pass null, and register() keeps the title it already learned.
   if (sessionId) {
     register({
       id: sessionId,
-      client: 'claude-code',
+      // Codex desktop also runs this hook. Its session id is definitive, even
+      // though its hook payload is compatible with Claude Code's format.
+      client: process.env.CDP_CLIENT || (process.env.CODEX_SESSION_ID ? 'codex' : 'claude-code'),
       cwd: input.cwd || process.cwd(),
-      title: titleFromPrompt(input.prompt),
+      title: promptTitle,
+      // System notifications also traverse this hook. They keep the session
+      // alive, but must not outrank a task the human actually chatted with.
+      chat: Boolean(promptTitle),
     });
   }
   const rows = pending({ sessionId });

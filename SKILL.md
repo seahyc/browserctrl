@@ -113,6 +113,8 @@ and test ids, plus the visible text. Act on refs, not on guessed selectors.
 ```bash
 cdp tabs --browser dia
 cdp read a1b2c3d4 --browser dia
+# Use --json when another tool should parse the result; --text none skips page text.
+cdp read a1b2c3d4 --json --max-text 8000
 # ref_1    button     Sign in with Google              [signin-google]
 # ref_2    textbox    Your name
 # ref_7    select     Access level
@@ -137,7 +139,12 @@ cdp upload <tab> --ref ref_4 --files /abs/a.pdf,/abs/b.png
 cdp scroll <tab> --dy 600
 cdp scroll-to <tab> --ref ref_9
 cdp drag <tab> --from ref_1 --to ref_2
+cdp act <tab> --steps '[{"action":"scroll","dy":800},{"action":"key","key":"Enter"}]'
 ```
+
+`cdp act` is the token-efficient batch equivalent of repeated `browser_act`
+calls. It stops at the first failure and accepts the same action shapes as the
+MCP tool. Add `--json` for machine-readable results.
 
 ## Wait for conditions, never sleep
 
@@ -162,7 +169,8 @@ cdp shot <tab> /tmp/out.png            # add --full, or --ref ref_3 / --selector
 cdp console <tab>                      # console output + uncaught errors
 cdp network <tab> --failed             # 4xx/5xx and failed requests
 cdp cookies <tab>
-cdp text <tab>                         # visible text only
+cdp text <tab> --max-text 8000         # bounded visible text (20,000 by default)
+cdp text <tab> --match '评价|平台'      # only lines matching a case-insensitive regex
 cdp html <tab> [selector]
 cdp eval <tab> "location.href"
 ```
@@ -191,7 +199,19 @@ cdp ext api tabs.update '[123,{"pinned":true}]'    # generic invoker: any grante
 cdp ext api bookmarks.search '[{"query":"gitlab"}]'
 cdp ext api downloads.search '[{"limit":5}]'
 cdp ext eval "chrome.tabs.query({})" --browser dia # raw expression escape hatch
+
+# Shortcuts for the extension-backed native tab-group API:
+cdp group --url taobao.com,shopee.sg --title Shopping --color blue
+cdp ungroup --url taobao.com,shopee.sg
 ```
+
+The grouping helper includes every matching tab, not just the first match for
+each pattern. Native grouping still requires the handoff extension; CDP alone
+cannot access tab groups. For task-scoped research, group the tabs immediately
+after opening them, keep a ledger of the tabs opened by the task, and close
+those tabs before handoff; then ungroup the now-empty group. Never use a broad
+URL pattern that could match the user's pre-existing tabs. If a tab is claimed
+or protected, leave it open and report it rather than force-closing it.
 
 `cdp ext api` is the one that keeps this honest: it dots into the `chrome`
 namespace at runtime, so a permission added to the manifest is immediately
@@ -237,12 +257,10 @@ Same capabilities, typed. Register once:
 
 ```bash
 # Claude Code
-claude mcp add browser -- node ~/.claude/skills/chrome-cdp/mcp/server.mjs
+claude mcp add browser -- node ~/.agents/skills/chrome-cdp/mcp/server.mjs
 
-# Codex: ~/.codex/config.toml
-# [mcp_servers.browser]
-# command = "node"
-# args = ["/Users/<you>/.claude/skills/chrome-cdp/mcp/server.mjs"]
+# Codex
+codex mcp add browser -- node ~/.agents/skills/chrome-cdp/mcp/server.mjs
 ```
 
 Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
@@ -293,10 +311,13 @@ and `snap --compact`, none of which existed.
 ## The extension
 
 `extension/` is loaded unpacked from `chrome://extensions` (Developer mode).
-It exists for the three things injection cannot do: a browser-level shortcut
-(option+A annotate, option+M hand over this tab), a popup that marks several
-tabs at once, and working in tabs where no debug port is on. It carries no
-annotation logic: `extension/annotate.js` is a verbatim copy of
+Its toolbar click is the primary path: it immediately enters annotation mode.
+It also provides browser-level shortcuts (option+A annotate, option+M hand over
+this tab), and a right-click toolbar menu for the less-common whole-tab and
+multi-tab handoffs. After saving a note, send “review my browser handoff” in
+the agent task. If the bridge is temporarily unavailable, the extension retains
+the note and retries it rather than falsely confirming it.
+It carries no annotation logic: `extension/annotate.js` is a verbatim copy of
 `lib/overlay/annotate.js`, refreshed with `npm run sync-extension`, and a test
 fails if the two drift.
 

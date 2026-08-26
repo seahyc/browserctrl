@@ -7,6 +7,8 @@
       body { font: 13px ui-sans-serif, system-ui, sans-serif; margin: 0; padding: 12px; width: 420px; }
       h1 { font-size: 13px; margin: 0 0 2px; }
       p { color: #57606a; margin: 0 0 10px; font-size: 12px; }
+      .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 10px; }
+      .primary { background: #2f6feb; border: 1px solid #1f5fc4; border-radius: 6px; color: #fff; font-weight: 600; }
       .row { display: flex; gap: 8px; align-items: flex-start; padding: 6px; border-radius: 6px; }
       .row:hover { background: rgba(127, 127, 127, 0.08); }
       .row.marked { background: rgba(47, 111, 235, 0.1); }
@@ -20,7 +22,11 @@
   </head>
   <body>
     <h1>Hand tabs to the agent</h1>
-    <p>Tick any tab, including ones you are not on. Alt+A annotates elements on the current page.</p>
+    <p>Point out a page element or hand over the whole tab. No shortcut to remember.</p>
+    <div class="actions">
+      <button class="primary" id="annotate">Annotate this page</button>
+      <button id="hand-tab">Hand active tab to agent</button>
+    </div>
     <div id="list"></div>
     <div class="foot">
       <span id="count" style="color:#57606a"></span>

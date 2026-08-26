@@ -139,6 +139,14 @@ test('the piggyback line is the harness-independent handoff', () => {
   annotations.clear();
 });
 
+test('recipient picker defaults to the recent task, with broadcast explicit', () => {
+  const overlay = fs.readFileSync(path.join(process.cwd(), 'lib/overlay/annotate.js'), 'utf8');
+  assert.match(overlay, /your most recent task/);
+  assert.match(overlay, /All active agents/);
+  assert.match(overlay, /Broadcast — everyone can see this/);
+  assert.match(overlay, /state\.for === '__all__' \? null : state\.for/);
+});
+
 // ------------------------------------------------------------ recording -----
 
 t('a recording captures a real click with element identity', async () => {
@@ -199,6 +207,28 @@ test('the extension asks for no more permission than it needs', () => {
   assert.deepEqual(manifest.host_permissions, ['http://127.0.0.1/*', 'http://localhost/*'],
     'the extension must only be able to reach the local bridge');
   assert.ok(!manifest.permissions.includes('debugger'), 'the extension has no business with the debugger API');
+});
+
+test('the extension makes the handoff discoverable and waits for delivery', () => {
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const popup = fs.readFileSync(path.join(here, '..', 'extension', 'popup.html'), 'utf8');
+  const background = fs.readFileSync(path.join(here, '..', 'extension', 'background.js'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(here, '..', 'extension', 'manifest.json'), 'utf8'));
+  assert.match(popup, /Annotate this page/, 'the primary handoff must not depend on remembering a shortcut');
+  assert.match(popup, /Hand active tab to agent/, 'the whole-tab handoff must be visible too');
+  assert.match(background, /OUTBOX_KEY/, 'an unreachable bridge must preserve the annotation for retry');
+  assert.match(background, /queued: true/, 'the page needs an honest delivery result');
+  assert.ok(!manifest.action.default_popup, 'a toolbar click should annotate, not open an advanced handoff dashboard');
+  assert.match(background, /chrome\.action\.onClicked/, 'the toolbar action must enter annotation mode directly');
+  assert.match(background, /cdp-hand-tab/, 'whole-tab handoff belongs in the secondary context menu');
+  assert.match(background, /Cannot annotate this page/, 'protected browser pages need a visible explanation');
+});
+
+test('the agent picker supports finding a task by name', () => {
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const overlay = fs.readFileSync(path.join(here, '..', 'lib', 'overlay', 'annotate.js'), 'utf8');
+  assert.match(overlay, /Search agent or task/, 'the picker needs a visible search affordance');
+  assert.match(overlay, /forQuery/, 'the search field must filter live sessions');
 });
 
 // ---------------------------------------------------------------- pins ------
@@ -291,6 +321,16 @@ test('live sessions are listed so an annotation can be aimed at one', async () =
   assert.ok(live.some(s => s.name.includes('project-one')), 'a session should be nameable by its project');
 });
 
+test('sessions with a recent human chat rank above background activity', async () => {
+  const sessionsMod = await import('../lib/sessions.mjs');
+  sessionsMod.register({ id: 'background-only', client: 'codex', cwd: '/tmp/background' });
+  sessionsMod.register({ id: 'recent-chat', client: 'codex', cwd: '/tmp/chat', chat: true });
+  sessionsMod.touch('background-only');
+  const ranked = sessionsMod.live().filter(s => ['background-only', 'recent-chat'].includes(s.id));
+  assert.deepEqual(ranked.map(s => s.id), ['recent-chat', 'background-only']);
+  assert.ok(ranked[0].lastChatMs >= 0);
+});
+
 test('a session is named by what it is working on, not just where it is', async () => {
   const sessionsMod = await import('../lib/sessions.mjs');
   sessionsMod.register({
@@ -341,6 +381,15 @@ test('a client that sends no name in the handshake is not left as unknown', asyn
   // The parent of this test process is node, so inference has nothing to go on
   // and must not invent a client.
   assert.equal(typeof inferClient(undefined), 'string');
+});
+
+test('the Codex hook does not relabel a Codex task as Claude Code', () => {
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const hook = fs.readFileSync(path.join(here, '..', 'hooks', 'annotations.mjs'), 'utf8');
+  const server = fs.readFileSync(path.join(here, '..', 'mcp', 'server.mjs'), 'utf8');
+  assert.match(hook, /process\.env\.CODEX_SESSION_ID \? 'codex' : 'claude-code'/);
+  assert.match(server, /process\.env\.CODEX_SESSION_ID \? 'codex' : sessions\.inferClient/);
+  assert.match(hook, /chat: Boolean\(promptTitle\)/, 'only real prompts should count as chat recency');
 });
 
 test('video time is read off ffmpeg progress, not assumed from spawn', async () => {

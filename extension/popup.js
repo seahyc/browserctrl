@@ -60,4 +60,19 @@ document.getElementById('open-tray').addEventListener('click', () => {
   chrome.tabs.create({ url: `${BRIDGE}/tray` });
 });
 
+async function activeAction(kind, button) {
+  button.disabled = true;
+  const label = button.textContent;
+  button.textContent = 'Working…';
+  const result = await chrome.runtime.sendMessage({ kind });
+  if (result?.ok) window.close();
+  else {
+    button.textContent = result?.error || 'Could not complete that action';
+    setTimeout(() => { button.textContent = label; button.disabled = false; }, 2500);
+  }
+}
+
+document.getElementById('annotate').addEventListener('click', e => activeAction('toggle-active-annotate', e.currentTarget));
+document.getElementById('hand-tab').addEventListener('click', e => activeAction('hand-active-tab', e.currentTarget));
+
 render();

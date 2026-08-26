@@ -73,6 +73,22 @@ t('fill fires input events frameworks listen for', async () => {
   assert.equal(await ops.evaluate(conn, tabId, "document.getElementById('name').value"), 'Ada Lovelace');
 });
 
+t('read ignores CDP annotation controls and sees controls in open shadow DOM', async () => {
+  await ops.evaluate(conn, tabId, `
+    document.body.insertAdjacentHTML('beforeend', '<div data-cdp="annotation"><textarea id="cdp-note" aria-label="CDP note"></textarea><button id="cdp-save">Save annotation</button></div><div id="shadow-host"></div>');
+    var root = document.getElementById('shadow-host').attachShadow({ mode: 'open' });
+    root.innerHTML = '<button id="real-send" aria-label="Send message">Send</button>';
+    root.querySelector('button').addEventListener('click', function () { document.body.dataset.sent = 'yes'; });
+  `);
+  const snap = await ops.readPage(conn, tabId);
+  assert.equal(snap.elements.some(e => e.name === 'CDP note' || e.name === 'Save annotation'), false, 'internal annotation controls must never get refs');
+  const send = snap.elements.find(e => e.name === 'Send message');
+  assert.ok(send, 'controls in open shadow DOM should get refs');
+  await ops.click(conn, tabId, { ref: send.ref, token: snap.token });
+  assert.equal(await ops.evaluate(conn, tabId, 'document.body.dataset.sent'), 'yes');
+  await assert.rejects(() => ops.fill(conn, tabId, { selector: '#cdp-note', value: 'do not touch' }), /annotation UI/);
+});
+
 t('key sends a real Enter to the focused element', async () => {
   await ops.click(conn, tabId, { selector: '#name' });
   await ops.key(conn, tabId, 'Enter');

@@ -6,6 +6,7 @@
 // It deliberately holds no annotation logic. annotate.js is the same file the
 // daemon injects.
 const BRIDGE = 'http://127.0.0.1:17222';
+const OUTBOX_KEY = 'cdp-annotation-outbox';
 
 async function post(path, body) {
   const res = await fetch(BRIDGE + path, {
@@ -14,6 +15,36 @@ async function post(path, body) {
     body: JSON.stringify(body),
   });
   return res.json();
+}
+
+// A page can be closed immediately after its note is saved, and the bridge can
+// be restarting at precisely that moment. Keep the handoff in extension
+// storage until the bridge confirms it, rather than showing a false success.
+async function outbox() {
+  return (await chrome.storage.local.get(OUTBOX_KEY))[OUTBOX_KEY] || [];
+}
+
+async function queueAnnotation(payload) {
+  const queued = await outbox();
+  queued.push({ id: crypto.randomUUID(), payload, createdAt: Date.now() });
+  await chrome.storage.local.set({ [OUTBOX_KEY]: queued });
+}
+
+async function flushOutbox() {
+  const queued = await outbox();
+  if (!queued.length) return { sent: 0, waiting: 0 };
+  const waiting = [];
+  let sent = 0;
+  for (const item of queued) {
+    try {
+      await post('/annotations', item.payload);
+      sent += 1;
+    } catch {
+      waiting.push(item);
+    }
+  }
+  await chrome.storage.local.set({ [OUTBOX_KEY]: waiting });
+  return { sent, waiting: waiting.length };
 }
 
 chrome.runtime.onMessage.addListener((envelope, sender, sendResponse) => {
@@ -40,9 +71,15 @@ chrome.runtime.onMessage.addListener((envelope, sender, sendResponse) => {
   if (envelope.kind !== 'annotation') return;
   const payload = { ...envelope.payload, source: 'extension' };
   if (sender.tab) payload.page = { ...(payload.page || {}), url: sender.tab.url, title: sender.tab.title };
-  post('/annotations', payload)
-    .then(row => sendResponse({ ok: true, id: row.id }))
-    .catch(err => sendResponse({ ok: false, error: err.message }));
+  (async () => {
+    try {
+      const row = await post('/annotations', payload);
+      sendResponse({ ok: true, id: row.id });
+    } catch (err) {
+      await queueAnnotation(payload);
+      sendResponse({ ok: false, queued: true, error: err.message });
+    }
+  })();
   return true; // keep the channel open for the async reply
 });
 
@@ -52,41 +89,81 @@ async function markTab(tab, note = null) {
   return post('/api/marks/by-url', { url: tab.url, title: tab.title, note });
 }
 
+async function toggleAnnotate(tab) {
+  try {
+    await chrome.tabs.sendMessage(tab.id, { kind: 'command', command: 'toggle-annotate' });
+    return { ok: true };
+  } catch {
+    await chrome.action.setBadgeText({ text: '—', tabId: tab.id });
+    setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 1500);
+    const error = 'This page cannot be annotated. Switch to a normal website; browser pages, PDFs, and the Web Store are protected.';
+    await chrome.notifications.create(`cdp-annotate-${Date.now()}`, {
+      type: 'basic', iconUrl: 'icons/icon48.png', title: 'Cannot annotate this page', message: error,
+    }).catch(() => {});
+    return { ok: false, error };
+  }
+}
+
+async function handTab(tab) {
+  try {
+    await markTab(tab);
+  } catch {
+    try {
+      await chrome.tabs.sendMessage(tab.id, {
+        kind: 'command', command: 'toast', text: 'Could not reach the cdp bridge. Your handoff was not sent.',
+      });
+    } catch {}
+    return { ok: false, error: 'Could not reach the cdp bridge.' };
+  }
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      kind: 'command', command: 'toast', text: 'This tab is handed to the agent. In Codex, send: review my browser handoff',
+    });
+  } catch {}
+  await chrome.action.setBadgeText({ text: '✓', tabId: tab.id });
+  setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 4000);
+  return { ok: true };
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message?.kind || !['toggle-active-annotate', 'hand-active-tab'].includes(message.kind)) return;
+  (async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return sendResponse({ ok: false, error: 'No active tab.' });
+    sendResponse(message.kind === 'toggle-active-annotate' ? await toggleAnnotate(tab) : await handTab(tab));
+  })();
+  return true;
+});
+
+// The toolbar is the everyday path: click it, point at an element, write the
+// note. Whole-tab handoff is useful but rare, so it belongs in the context
+// menu instead of stealing half of the primary UI.
+chrome.action.onClicked.addListener(async tab => {
+  if (tab) await toggleAnnotate(tab);
+});
+
+function installMenus() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: 'cdp-hand-tab', title: 'Hand this tab to the agent', contexts: ['action'] });
+    chrome.contextMenus.create({ id: 'cdp-open-tray', title: 'Manage handed-off tabs…', contexts: ['action'] });
+  });
+}
+chrome.runtime.onInstalled.addListener(installMenus);
+installMenus();
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!tab) return;
+  if (info.menuItemId === 'cdp-hand-tab') await handTab(tab);
+  if (info.menuItemId === 'cdp-open-tray') chrome.tabs.create({ url: `${BRIDGE}/tray` });
+});
+
 chrome.commands.onCommand.addListener(async command => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
   if (command === 'toggle-annotate') {
-    // Message the content script rather than injecting: injecting would
-    // require host permissions for every site the human ever annotates.
-    try {
-      await chrome.tabs.sendMessage(tab.id, { kind: 'command', command: 'toggle-annotate' });
-    } catch {
-      // No content script here (a chrome:// page, the web store, a PDF).
-      await chrome.action.setBadgeText({ text: '—', tabId: tab.id });
-      setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 1500);
-    }
+    await toggleAnnotate(tab);
   }
-  if (command === 'mark-tab') {
-    // A 1.5s badge on the toolbar is invisible in practice, so say it in the
-    // page where the human is actually looking.
-    let ok = true;
-    try {
-      await markTab(tab);
-    } catch {
-      ok = false;
-    }
-    try {
-      await chrome.tabs.sendMessage(tab.id, {
-        kind: 'command',
-        command: 'toast',
-        text: ok ? 'This tab is handed to the agent' : 'Could not reach the cdp bridge: run `cdp bridge`',
-      });
-    } catch {
-      /* no content script here */
-    }
-    await chrome.action.setBadgeText({ text: ok ? '✓' : '!', tabId: tab.id });
-    setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 4000);
-  }
+  if (command === 'mark-tab') await handTab(tab);
 });
 
 // Badge the toolbar with the number of annotations still waiting, so the
@@ -102,8 +179,13 @@ async function refreshBadge() {
   }
 }
 chrome.alarms?.create('cdp-badge', { periodInMinutes: 0.25 });
-chrome.alarms?.onAlarm.addListener(a => a.name === 'cdp-badge' && refreshBadge());
-refreshBadge();
+chrome.alarms?.onAlarm.addListener(a => {
+  if (a.name === 'cdp-badge') {
+    refreshBadge();
+    flushOutbox();
+  }
+});
+flushOutbox().then(refreshBadge);
 
 // ---------------------------------------------------------------------------
 // Agent browser control
@@ -139,15 +221,19 @@ globalThis.__cdpAgent = {
   /** Group tabs whose URL contains any of `patterns` into one named group. */
   async groupByUrl(patterns, { title = 'agent', color = 'blue', collapsed = false } = {}) {
     const all = await chrome.tabs.query({});
-    const ids = [];
-    for (const p of patterns) {
-      const hit = all.find(t => (t.url || '').includes(p));
-      if (hit) ids.push(hit.id);
-    }
+    const ids = all.filter(t => patterns.some(p => (t.url || '').includes(p))).map(t => t.id);
     if (!ids.length) return { grouped: 0, missing: patterns };
     const groupId = await chrome.tabs.group({ tabIds: ids });
     await chrome.tabGroups.update(groupId, { title, color, collapsed });
     return { grouped: ids.length, groupId, title, missing: patterns.filter(p => !all.some(t => (t.url || '').includes(p))) };
+  },
+
+  /** Remove matching tabs from their current groups without closing them. */
+  async ungroupByUrl(patterns) {
+    const all = await chrome.tabs.query({});
+    const ids = all.filter(t => t.groupId > -1 && patterns.some(p => (t.url || '').includes(p))).map(t => t.id);
+    if (ids.length) await chrome.tabs.ungroup(ids);
+    return { ungrouped: ids.length };
   },
 
   /** Readable overview of every tab, annotated with its group. */

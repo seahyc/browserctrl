@@ -10,6 +10,7 @@ import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
 import { BROWSERS } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
+import * as ext from '../lib/ext.mjs';
 import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
@@ -73,6 +74,30 @@ const TOOLS = [
     name: 'browser_close',
     description: 'Close a tab.',
     inputSchema: { type: 'object', properties: { ...browserProp, ...tabProp }, required: ['tab'] },
+  },
+  {
+    name: 'browser_group',
+    description: 'Group all tabs whose URLs contain any supplied pattern. Requires the cdp handoff extension; returns the group id and count.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...browserProp,
+        urlPatterns: { type: 'array', items: { type: 'string' }, description: 'URL substrings; all matching tabs are included.' },
+        title: { type: 'string' },
+        color: { type: 'string' },
+        collapsed: { type: 'boolean' },
+      },
+      required: ['urlPatterns'],
+    },
+  },
+  {
+    name: 'browser_ungroup',
+    description: 'Remove matching tabs from their current tab groups without closing them.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...browserProp, urlPatterns: { type: 'array', items: { type: 'string' } } },
+      required: ['urlPatterns'],
+    },
   },
   {
     name: 'browser_read',
@@ -332,6 +357,20 @@ const handlers = {
       return text(await ops.closeTab(conn, tab.targetId));
     }),
 
+  browser_group: args => {
+    const patterns = Array.isArray(args.urlPatterns) ? args.urlPatterns.filter(Boolean) : [];
+    if (!patterns.length) return fail('urlPatterns must contain at least one URL substring');
+    return withConn(args, async (_conn, port) => text(await ext.evaluate(port, `__cdpAgent.groupByUrl(${JSON.stringify(patterns)}, ${JSON.stringify({
+      title: args.title || 'agent', color: args.color || 'blue', collapsed: Boolean(args.collapsed),
+    })})`)));
+  },
+
+  browser_ungroup: args => {
+    const patterns = Array.isArray(args.urlPatterns) ? args.urlPatterns.filter(Boolean) : [];
+    if (!patterns.length) return fail('urlPatterns must contain at least one URL substring');
+    return withConn(args, async (_conn, port) => text(await ext.evaluate(port, `__cdpAgent.ungroupByUrl(${JSON.stringify(patterns)})`)));
+  },
+
   browser_read: args =>
     withConn(args, async conn => {
       const tab = await ops.resolveTab(conn, args.tab);
@@ -492,7 +531,7 @@ const handlers = {
 
 // Announce this session so the human can aim an annotation at it by name.
 const SESSION_ID =
-  process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_SESSION_ID || `pid:${process.ppid}`;
+  process.env.CODEX_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || `pid:${process.ppid}`;
 
 const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} } });
 
@@ -526,7 +565,9 @@ const info = server.getClientVersion?.();
 // Not `info?.name || 'unknown'`: Codex sends no client name in the handshake,
 // so every Codex session used to land in the annotation picker as "unknown ·
 // <dir>", indistinguishable from any other client that omits one.
-const client = sessions.inferClient(info?.name);
+// Codex's compatible hook/MCP envelope may report itself as Claude Code. Its
+// session environment is authoritative and must win for the human picker.
+const client = process.env.CODEX_SESSION_ID ? 'codex' : sessions.inferClient(info?.name);
 sessions.register({
   id: SESSION_ID,
   client,

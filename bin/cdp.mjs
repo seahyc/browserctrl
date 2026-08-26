@@ -15,7 +15,7 @@ import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 
 const MUTATING = new Set([
-  'nav', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close',
+  'nav', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act',
 ]);
 
 function parseArgs(argv) {
@@ -47,8 +47,8 @@ function usage() {
     cdp tabs --browser dia                       tabs, with who has claimed them
 
   Read before you act:
-    cdp read <tab> --browser dia                 snapshot with ref_1..N + page text
-    cdp text <tab>                               visible text only
+    cdp read <tab> --browser dia [--json]        snapshot with ref_1..N + page text
+    cdp text <tab> [--max-text 8000] [--match re] visible text, bounded by default
     cdp html <tab> [selector]
     cdp eval <tab> <js>
 
@@ -62,6 +62,7 @@ function usage() {
     cdp upload <tab> --ref ref_2 --files a.pdf,b.png
     cdp scroll <tab> [--dy 600]     cdp scroll-to <tab> --ref ref_9
     cdp drag <tab> --from ref_1 --to ref_2
+    cdp act <tab> --steps '[{"action":"scroll","dy":800},{"action":"key","key":"Enter"}]'
 
   Navigate and wait (no blind sleeps):
     cdp nav <tab> <url> [--until load|domcontentloaded|networkidle|none]
@@ -76,6 +77,8 @@ function usage() {
 
   Tabs and claims:
     cdp open <url> --browser dia     cdp close <tab>     cdp wake <tab>
+    cdp group --url <substr>[,<substr>...] [--title T] [--color blue]
+    cdp ungroup --url <substr>[,<substr>...]
     cdp claims [--browser dia]       cdp release [<tab>|--mine]
     cdp status --browser dia         cdp stop --browser dia
 
@@ -149,6 +152,18 @@ const main = async () => {
     return out(flags.json ? rows : annotations.render(rows));
   }
 
+  if (cmd === 'group' || cmd === 'ungroup') {
+    const port = await requireBrowser(flags);
+    const patterns = String(flags.url || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!patterns.length) throw new Error(`Usage: cdp ${cmd} --url <substring>[,<substring>...]`);
+    const expression = cmd === 'group'
+      ? `__cdpAgent.groupByUrl(${JSON.stringify(patterns)}, ${JSON.stringify({
+          title: flags.title || 'agent', color: flags.color || 'blue', collapsed: Boolean(flags.collapsed),
+        })})`
+      : `__cdpAgent.ungroupByUrl(${JSON.stringify(patterns)})`;
+    return out(await ext.evaluate(port, expression));
+  }
+
   if (cmd === 'bridge') {
     await ensureRunning();
     return out({ bridge: `http://127.0.0.1:${BRIDGE_PORT}`, tray: `http://127.0.0.1:${BRIDGE_PORT}/tray` });
@@ -204,6 +219,7 @@ const main = async () => {
     }
     if (cmd === 'tabs') {
       const rows = await ops.tabs(conn, { focus: !flags['no-focus'] });
+      if (flags.json) return out(rows);
       return out(
         rows
           .map(t => {
@@ -338,6 +354,7 @@ const main = async () => {
           max: Number(flags.max || 400),
           includeHidden: Boolean(flags['include-hidden']),
         });
+        if (flags.json) return out(snap);
         const lines = snap.elements.map(
           e => `${e.ref.padEnd(8)} ${e.role.padEnd(10)} ${(e.name || '').slice(0, 60).padEnd(60)}${e.testid ? ` [${e.testid}]` : ''}${e.disabled ? ' (disabled)' : ''}`,
         );
@@ -346,12 +363,59 @@ const main = async () => {
             `${lines.join('\n')}\n\n--- text${snap.textTruncated ? ` (truncated from ${snap.textLength})` : ''} ---\n${snap.text}`,
         );
       }
-      case 'text':
-        return out(await ops.evaluate(conn, targetId, 'document.body ? document.body.innerText : ""'));
+      case 'text': {
+        const raw = await ops.evaluate(conn, targetId, 'document.body ? document.body.innerText : ""');
+        const source = String(raw || '');
+        let selected = source;
+        if (flags.match) {
+          let re;
+          try { re = new RegExp(String(flags.match), 'i'); }
+          catch (e) { throw new Error(`Invalid --match regex: ${e.message}`); }
+          selected = source.split(/\r?\n/).filter(line => re.test(line)).join('\n');
+        }
+        const limit = flags['max-text'] === undefined ? 20000 : Number(flags['max-text']);
+        const clipped = limit > 0 && selected.length > limit;
+        const text = clipped ? `${selected.slice(0, limit)}\n\n[truncated ${selected.length - limit} characters]` : selected;
+        return out(flags.json ? { text, textLength: selected.length, truncated: clipped } : text);
+      }
       case 'html':
         return out(await ops.html(conn, targetId, positional[2]));
       case 'eval':
         return out(await ops.evaluate(conn, targetId, positional.slice(2).join(' '), { timeoutMs }));
+      case 'act': {
+        let raw = flags.steps ?? positional.slice(2).join(' ');
+        if (!raw) throw new Error('Usage: cdp act <tab> --steps \'[{"action":"scroll","dy":800}]\'');
+        let steps;
+        try { steps = JSON.parse(raw); } catch (e) { throw new Error(`--steps must be valid JSON: ${e.message}`); }
+        if (!Array.isArray(steps) || !steps.length) throw new Error('--steps must be a non-empty JSON array');
+        const results = [];
+        for (const [i, a] of steps.entries()) {
+          try {
+            const target2 = { ref: a.ref, selector: a.selector, x: a.x, y: a.y };
+            let result;
+            switch (a.action) {
+              case 'click': result = await ops.click(conn, targetId, { ...target2, button: a.button || 'left', clickCount: a.clickCount || 1, modifiers: a.modifiers || [] }); break;
+              case 'double_click': result = await ops.click(conn, targetId, { ...target2, clickCount: 2, modifiers: a.modifiers || [] }); break;
+              case 'right_click': result = await ops.click(conn, targetId, { ...target2, button: 'right', modifiers: a.modifiers || [] }); break;
+              case 'hover': result = await ops.hover(conn, targetId, target2); break;
+              case 'type': result = await ops.type(conn, targetId, a.text ?? ''); break;
+              case 'key': result = await ops.key(conn, targetId, a.key); break;
+              case 'fill': result = await ops.fill(conn, targetId, { ...target2, value: a.value }); break;
+              case 'select': result = await ops.selectOption(conn, targetId, { ...target2, value: a.value, label: a.label }); break;
+              case 'scroll': result = await ops.scroll(conn, targetId, { deltaY: a.dy ?? 400, deltaX: a.dx ?? 0 }); break;
+              case 'scroll_to': result = await ops.scrollTo(conn, targetId, target2); break;
+              case 'drag': result = await ops.drag(conn, targetId, { from: { ref: a.from }, to: { ref: a.to } }); break;
+              case 'upload': result = await ops.upload(conn, targetId, { ...target2, files: a.files }); break;
+              default: throw new Error(`Unknown action "${a.action}"`);
+            }
+            results.push({ step: i + 1, action: a.action, result });
+          } catch (e) {
+            results.push({ step: i + 1, action: a.action, error: e.message });
+            return out(flags.json ? { results, stoppedAt: i + 1 } : results.map(r => JSON.stringify(r)).join('\n'));
+          }
+        }
+        return out(flags.json ? { results } : results.map(r => JSON.stringify(r)).join('\n'));
+      }
       case 'nav':
         return out(await ops.navigate(conn, targetId, positional[2], { waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000 }));
       case 'wait':
