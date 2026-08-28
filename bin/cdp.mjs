@@ -76,7 +76,9 @@ function usage() {
     cdp cookies <tab>
 
   Tabs and claims:
-    cdp open <url> --browser dia     cdp close <tab>     cdp wake <tab>
+    cdp open <url> --browser dia [--anonymous]          open a tab
+    cdp open <url> --browser dia --anonymous            clean temporary session
+    cdp close <tab>                    cdp wake <tab>
     cdp group --url <substr>[,<substr>...] [--title T] [--color blue]
     cdp ungroup --url <substr>[,<substr>...]
     cdp claims [--browser dia]       cdp release [<tab>|--mine]
@@ -225,6 +227,7 @@ const main = async () => {
           .map(t => {
             const tags = [];
             if (t.focused) tags.push('←you');
+            if (t.anonymous) tags.push('anonymous');
             if (t.marked) tags.push(`marked${t.marked.note ? `: ${t.marked.note}` : ''}`);
             if (t.suspended) tags.push('suspended');
             if (t.claimedBy) tags.push(t.claimedBy);
@@ -327,7 +330,7 @@ const main = async () => {
       throw new Error('Usage: cdp ext [info] | apis | api <chrome.path> [jsonArgs] | group --url a,b | outline | undo-close | eval <expr>');
     }
     if (cmd === 'open') {
-      const res = await ops.newTab(conn, positional[1]);
+      const res = await ops.newTab(conn, positional[1], { anonymous: Boolean(flags.anonymous) });
       if (flags.until !== 'none' && positional[1]) {
         await ops.waitForReady(conn, res.targetId, { waitUntil: flags.until || 'load' }).catch(() => {});
       }

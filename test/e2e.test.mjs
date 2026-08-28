@@ -39,6 +39,21 @@ t('tabs lists the fixture tab', async () => {
   assert.ok(tabs.some(x => x.targetId === tabId), 'fixture tab should be listed');
 });
 
+t('anonymous tabs use an isolated context that is disposed when closed', async () => {
+  const tab = await ops.newTab(conn, fixture.url, { anonymous: true });
+  assert.equal(tab.anonymous, true);
+  assert.ok(tab.browserContextId, 'anonymous tab should report its isolated context');
+  const info = await conn.browser('Target.getTargetInfo', { targetId: tab.targetId });
+  assert.equal(info.targetInfo.browserContextId, tab.browserContextId);
+  const listed = await ops.tabs(conn);
+  assert.equal(listed.find(row => row.targetId === tab.targetId)?.anonymous, true);
+
+  const closed = await ops.closeTab(conn, tab.targetId);
+  assert.equal(closed.anonymous, true);
+  const contexts = await conn.browser('Target.getBrowserContexts');
+  assert.equal(contexts.browserContextIds.includes(tab.browserContextId), false);
+});
+
 t('read returns refs, names, test ids and page text', async () => {
   const snap = await ops.readPage(conn, tabId);
   assert.equal(snap.title, 'cdp fixture');

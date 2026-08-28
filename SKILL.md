@@ -242,6 +242,7 @@ tab is refused by name and can override with `--steal`.
 
 ```bash
 cdp open https://example.com --browser dia
+cdp open https://example.com --browser dia --anonymous
 cdp tabs --browser dia            # shows [claude-code (3m ago)] on claimed tabs
 cdp claims
 cdp release <tab> --browser dia   # or: cdp release --mine
@@ -250,6 +251,13 @@ cdp wake <tab> --browser dia      # revive a tab suspended by memory saver
 cdp status --browser dia          # daemon state
 cdp stop --browser dia            # stop the daemon for that port
 ```
+
+Use `--anonymous` for signed-out and clean-session testing. It opens a temporary
+isolated browser context with none of the profile's cookies or site storage, so
+it does not sign the human out or alter their ordinary tabs. `cdp tabs` labels
+the tab anonymous, and `cdp close` disposes the entire temporary context. This
+is isolation, not an authentication bypass: complete the site's normal login
+and consent flow when required.
 
 ## MCP tools
 
@@ -279,6 +287,7 @@ them and always include the saved path, so Codex can read the PNG itself.
 lib/discovery.mjs   which browsers are debuggable, and how to enable the rest
 lib/daemon.mjs      one master daemon per port: browser WS, sessions, event buffers
 lib/claims.mjs      advisory tab ownership across agents
+lib/anonymous.mjs   contexts created by --anonymous, for safe whole-context cleanup
 lib/state.mjs       human-set state: tab aliases and marks
 lib/refs.mjs        the page snapshot and ref resolution
 lib/ops.mjs         every operation, one function each

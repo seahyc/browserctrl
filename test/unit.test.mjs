@@ -105,6 +105,13 @@ test('the MCP server starts and lists its tools over stdio', () => {
   const names = listed.result.tools.map(t => t.name);
   assert.ok(names.includes('browser_read'), `browser_read missing from ${names.join(', ')}`);
   assert.ok(names.includes('browser_act'));
+  const open = listed.result.tools.find(t => t.name === 'browser_open');
+  assert.equal(open.inputSchema.properties.anonymous?.type, 'boolean');
+});
+
+test('CLI help documents isolated anonymous tabs', () => {
+  const help = execFileSync(process.execPath, [path.join(ROOT, 'bin', 'cdp.mjs'), 'help'], { encoding: 'utf8' });
+  assert.match(help, /cdp open <url> --browser dia --anonymous/);
 });
 
 test('a stale DevToolsActivePort file does not report a dead browser as debuggable', async () => {

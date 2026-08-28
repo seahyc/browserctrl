@@ -18,7 +18,7 @@ import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 import * as sessions from '../lib/sessions.mjs';
 
 const SERVER_NAME = 'browser';
-const SERVER_VERSION = '2.0.0';
+const SERVER_VERSION = '2.1.0';
 const TOOL_TIMEOUT_MS = 60000;
 // Guard against a tool result that would blow up the client's context.
 const MAX_TEXT_BYTES = 100000;
@@ -63,10 +63,15 @@ const TOOLS = [
   },
   {
     name: 'browser_open',
-    description: 'Open a new tab at a URL and wait for it to load. Returns the new tab id.',
+    description: 'Open a new tab at a URL and wait for it to load. Optionally use a clean temporary session with no profile cookies or storage. Returns the new tab id.',
     inputSchema: {
       type: 'object',
-      properties: { ...browserProp, url: { type: 'string' }, until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle', 'none'] } },
+      properties: {
+        ...browserProp,
+        url: { type: 'string' },
+        until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle', 'none'] },
+        anonymous: { type: 'boolean', description: 'Use a temporary isolated browser context with no profile cookies or storage. Closing the tab disposes the entire context.' },
+      },
       required: ['url'],
     },
   },
@@ -346,7 +351,7 @@ const handlers = {
 
   browser_open: args =>
     withConn(args, async conn => {
-      const res = await ops.newTab(conn, args.url);
+      const res = await ops.newTab(conn, args.url, { anonymous: Boolean(args.anonymous) });
       if (args.until !== 'none') await ops.waitForReady(conn, res.targetId, { waitUntil: args.until || 'load' }).catch(() => {});
       return text(res);
     }),
