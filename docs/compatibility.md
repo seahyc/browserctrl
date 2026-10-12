@@ -4,7 +4,7 @@ Evidence collected on 2026-10-12. These are capability checks, not a comparative
 
 | Browser/platform | Result | Scope |
 | --- | --- | --- |
-| Dia, macOS | Live session tested | Native inventory includes dormant tabs. Extension inventory confirmed 22 application/preparation tabs in the Reference group. Collapse state needed restoring after a browser restart. Background grouping/closing honors other owners' claims. |
+| Dia, macOS | Live session tested | Native inventory includes dormant tabs. Live extension inspection, group collapse, duplicate-tab closure, and refusal to move a claimed tab were verified. A browser restart restored a group expanded, so its collapse state needed restoring. |
 | Chrome, macOS | Integration tests run; see [raw summary](chrome-test-results.json) | Owned headless profile only. The first run passed 18 of 22 tests and hit timeouts plus subsequent isolation failures on a heavily loaded host. No claim of seamless reliability from this run. |
 | Chrome, Linux | CI configured; result pending | Full Node suite and Python tests on Ubuntu with Node 22/24 and an isolated Chrome profile. See GitHub Actions for the actual run status. |
 | Safari 27.0.1, macOS | browserctrl unsupported; Apple's MCP discovery tested | `/usr/bin/safaridriver --mcp` connected and exposed its tools. Creating a fixture tab was refused because Safari's Allow remote automation setting is disabled. No Safari page-action or browserctrl integration pass is claimed. |
