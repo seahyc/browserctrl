@@ -223,6 +223,14 @@ Save a recipe only after `api call` returns the same facts the UI showed, and
 record that in its `verified` field. Recipes whose `kind` is `write` change data:
 follow the user's approval rules before calling one.
 
+## Captchas and verification pages
+
+When a page shows a slider, puzzle or "verify you are human" step, run
+`browserctrl captcha <tab> --browser dia` (MCP: `browser_captcha`). It drags an
+Alibaba drag-to-end slider once; for anything else, or if that drag fails, it
+notifies the human and waits until the challenge is gone. Continue only after it
+returns `solvedBy`; on timeout, report the blocked tab rather than retrying.
+
 ## Read before you act
 
 `browserctrl read` snapshots the page into `ref_1..ref_N` with roles, accessible names

@@ -15,6 +15,7 @@ import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
 import { listRecipes, loadRecipe, runRecipe } from '../lib/recipes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
+import * as captcha from '../lib/captcha.mjs';
 import { waitForBackgroundReady } from '../lib/readiness.mjs';
 import * as ext from '../lib/ext.mjs';
 import * as claims from '../lib/claims.mjs';
@@ -231,6 +232,15 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: { ...browserProp, ...tabProp, limit: { type: 'number' }, failedOnly: { type: 'boolean' }, clear: { type: 'boolean' } },
+      required: ['tab'],
+    },
+  },
+  {
+    name: 'browser_captcha',
+    description: 'Chromium only. Clear a captcha or verification challenge on a tab. Tries Alibaba\'s drag-to-end slider once with a trusted drag; for anything else (puzzle sliders, image challenges, framed challenges) or after a failed attempt, notifies the human and waits until the challenge is gone. Returns {captcha, solvedBy: auto|human} or {captcha: null}; errors when not cleared in time.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...browserProp, ...tabProp, timeoutMs: { type: 'number', description: 'How long to wait for the human (default 300000)' }, attempt: { type: 'boolean', description: 'Try the automatic slider drag first (default true)' } },
       required: ['tab'],
     },
   },
@@ -550,6 +560,13 @@ const handlers = {
       const tab = await ops.resolveTab(conn, args.tab);
       if (args.failedOnly) return text(await ops.failedRequests(conn, tab.targetId, { limit: args.limit ?? 50 }));
       return text(await ops.diagnostics(conn, tab.targetId, { limit: args.limit ?? 50, clear: Boolean(args.clear) }));
+    }),
+
+  browser_captcha: args =>
+    withConn(args, async (conn, port) => {
+      const tab = await ops.resolveTab(conn, args.tab);
+      claims.claim(port, tab.targetId, { steal: false });
+      return text(await captcha.solve(conn, tab.targetId, { timeoutMs: args.timeoutMs ?? 300000, attempt: args.attempt !== false }));
     }),
 
   browser_api: async args => {

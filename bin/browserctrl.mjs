@@ -22,9 +22,10 @@ import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 import { listRecipes, loadRecipe, runRecipe } from '../lib/recipes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
+import * as captcha from '../lib/captcha.mjs';
 
 const MUTATING = new Set([
-  'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act',
+  'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha',
 ]);
 
 function parseArgs(argv) {
@@ -75,6 +76,9 @@ function usage() {
     browserctrl native-group --ids UUIDs --group-id N --browser dia [--dry-run] [--allow-focus]
     browserctrl doctor --browser dia                     read-only connection diagnosis (JSON)
     browserctrl doctor --browser dia --watch-seconds 20   passive OS connection capture
+
+  Captchas: browserctrl captcha <tab> --browser dia [--timeout ms] [--no-attempt]
+    tries a drag-to-end slider once, otherwise notifies you and waits until the challenge clears
 
   API recipes: call a site's own API from a tab on that site (see references/recipes.md):
     browserctrl api list                                  saved recipes
@@ -593,6 +597,8 @@ const main = async () => {
         return out(await ops.scroll(conn, targetId, { deltaY: Number(flags.dy || 400), deltaX: Number(flags.dx || 0) }));
       case 'scroll-to':
         return out(await ops.scrollTo(conn, targetId, target));
+      case 'captcha':
+        return out(await captcha.solve(conn, targetId, { timeoutMs: Number(flags.timeout || 300000), attempt: !flags['no-attempt'] }));
       case 'shot': {
         const res = await ops.screenshot(conn, targetId, {
           path: positional[2],

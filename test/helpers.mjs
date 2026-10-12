@@ -51,6 +51,27 @@ export async function startFixtureServer() {
 <script>fetch('/api/orders/48213?offset=0&limit=2', {headers: {'x-csrf': 'tok-123'}}).then(r => r.json()).then(j => { document.body.dataset.loaded = j.data.orders.length; });</script></body></html>`);
       return;
     }
+    // An Alibaba-style "drag to the far right" slider. It passes only after a
+    // gradual drag that reaches the end of the track, not a single jump.
+    if (req.url.startsWith('/captcha-slider')) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<html><head><meta charset="utf-8"></head><body style="margin:40px"><p id="msg">请按住滑块，拖动到最右边</p>
+<div id="nc_1__scale_text" class="nc_scale" style="position:relative;width:300px;height:34px;background:#eee">
+<span id="nc_1_n1z" class="nc_iconfont btn_slide" style="position:absolute;left:0;top:0;width:40px;height:34px;background:#888"></span></div>
+<script>
+const h = document.getElementById('nc_1_n1z'), track = h.parentElement; let down = false, start = 0, moves = 0;
+h.addEventListener('mousedown', e => { down = true; start = e.clientX; moves = 0; });
+document.addEventListener('mousemove', e => { if (!down) return; moves++; h.style.left = Math.max(0, Math.min(260, e.clientX - start)) + 'px'; });
+document.addEventListener('mouseup', () => { if (!down) return; down = false;
+  if (parseFloat(h.style.left) >= 258 && moves >= 10) { track.remove(); document.getElementById('msg').textContent = '验证通过'; } else h.style.left = '0px'; });
+</script></body></html>`);
+      return;
+    }
+    if (req.url.startsWith('/verify/captcha')) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end('<html><body><canvas width="280" height="160"></canvas><p>Drag the piece into place</p></body></html>');
+      return;
+    }
     if (req.url.startsWith('/api/orders/')) {
       if (req.headers['x-csrf'] !== 'tok-123') { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end('{"error":"csrf"}'); return; }
       const q = new URL(req.url, 'http://x').searchParams;
