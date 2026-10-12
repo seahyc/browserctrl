@@ -82,6 +82,15 @@ t('param defaults may use built-ins such as now_iso', async () => {
   assert.match(res.items[0], /^\d{4}-\d\d-\d\dT/);
 });
 
+t('an owned tab that drifted off the site is navigated back and reused', async () => {
+  const first = await runRecipe(conn, ordersRecipe());
+  const owned = (await ops.tabs(conn)).find(x => x.id === first.tab);
+  await ops.navigate(conn, owned.targetId, 'about:blank');
+  const again = await runRecipe(conn, ordersRecipe());
+  assert.equal(again.tab, first.tab);
+  assert.equal(again.items.length, 5);
+});
+
 t('a page hook returns items and the next cursor', async () => {
   const recipe = {
     name: 'fixture/hook', origin, warm_path: '/shop', settle_ms: 0, paginate: { start: 0 },
