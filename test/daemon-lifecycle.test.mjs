@@ -49,6 +49,19 @@ async function fixture(t) {
   return { port, browser, trace };
 }
 
+async function assertSoleDaemon(port, ownerPid) {
+  const deadline = Date.now() + 5000;
+  let pids;
+  do {
+    const { stdout } = await exec('ps', ['-axo', 'pid=,command=']);
+    pids = stdout.split('\n').filter(line => line.trim().endsWith(`/lib/daemon-run.mjs ${port}`))
+      .map(line => Number(line.trim().split(/\s+/)[0]));
+    if (pids.length === 1 && pids[0] === ownerPid) return;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  } while (Date.now() < deadline);
+  assert.deepEqual(pids, [ownerPid], 'losing startup processes must exit, leaving the shared owner');
+}
+
 const options = { skip: !chromeBinary(), timeout: 60000 };
 test('independent agents concurrently start and reuse one daemon', options, async t => {
   const { port } = await fixture(t);
@@ -59,8 +72,7 @@ test('independent agents concurrently start and reuse one daemon', options, asyn
   const health = results.map(result => JSON.parse(result.stdout));
   assert.ok(health.every(result => Number.isInteger(result.pid)));
   assert.equal(new Set(health.map(result => result.pid)).size, 1);
-  const { stdout } = await exec('ps', ['-axo', 'pid=,command=']);
-  assert.equal(stdout.split('\n').filter(line => line.trim().endsWith(`/lib/daemon-run.mjs ${port}`)).length, 1);
+  await assertSoleDaemon(port, health[0].pid);
 });
 
 test('a hung tab preserves the browser connection and never replays the command', options, async t => {
@@ -158,8 +170,7 @@ test('independent agents reclaim a stale socket without creating duplicate daemo
     `import {connect} from ${JSON.stringify(daemonModule)}; const c=await connect(${port}); console.log(JSON.stringify(await c.health())); c.close();`,
   ])));
   assert.equal(new Set(results.map(result => JSON.parse(result.stdout).pid)).size, 1);
-  const { stdout } = await exec('ps', ['-axo', 'pid=,command=']);
-  assert.equal(stdout.split('\n').filter(line => line.trim().endsWith(`/lib/daemon-run.mjs ${port}`)).length, 1);
+  await assertSoleDaemon(port, JSON.parse(results[0].stdout).pid);
 });
 
 
