@@ -1,9 +1,9 @@
 {
   "name": "browserctrl",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
-  "description": "Cross-browser CDP control for coding agents: CLI + MCP server over one core.",
+  "description": "Browser control for agents: shared Chromium CDP and Safari MCP, with CLI and MCP frontends.",
   "bin": {
     "browserctrl": "bin/browserctrl.mjs",
     "cdp": "bin/cdp.mjs",

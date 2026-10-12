@@ -6,6 +6,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import fs from 'fs';
+import { safariMCP } from '../lib/safari-frontend.mjs';
 import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
 import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
@@ -18,7 +19,7 @@ import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 import * as sessions from '../lib/sessions.mjs';
 
 const SERVER_NAME = 'browser';
-const SERVER_VERSION = '2.1.0';
+const SERVER_VERSION = '2.3.0';
 const TOOL_TIMEOUT_MS = 60000;
 // Guard against a tool result that would blow up the client's context.
 const MAX_TEXT_BYTES = 100000;
@@ -27,7 +28,7 @@ const MAX_TEXT_BYTES = 100000;
 // path, which it can read with its own file tool.
 const IMAGE_CLIENTS = [/claude/i, /cursor/i, /vscode/i, /zed/i];
 
-const BROWSER_ENUM = Object.keys(BROWSERS);
+const BROWSER_ENUM = [...Object.keys(BROWSERS), 'safari'];
 const browserProp = {
   agentId: { type: 'string', description: 'Stable unique identity for this agent. Required when multiple agents share one MCP server; reuse it on every call.' },
   browser: {
@@ -51,6 +52,8 @@ const targetProps = {
 };
 
 const TOOLS = [
+  { name: 'browser_safari', description: "Safari 27+ on macOS via Apple's official MCP server. Use action=tools to discover native tools and schemas, or action=call with tool and arguments. Every page operation requires an explicit full tab handle; node UIDs come from get_page_content. Shared daemon serializes current-tab selection and action. Chromium grouping, recording and raw CDP are unsupported.",
+    inputSchema: { type: 'object', properties: { agentId: browserProp.agentId, action: { type: 'string', enum: ['tools', 'call', 'status', 'stop'] }, tool: { type: 'string' }, arguments: { type: 'object' }, tab: { type: 'string' } }, required: ['action'] } },
   {
     name: 'browser_list',
     description:
@@ -331,7 +334,23 @@ async function actOnce(conn, targetId, a) {
   }
 }
 
+async function safariHandler(args, name = 'browser_safari') {
+    if (args.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
+    const safari = await import('../lib/safari.mjs');
+    if (name === 'browser_safari') {
+      if (args.action === 'tools') return text(await safari.safariTools());
+      if (args.action === 'status') return text(await safari.safariStatus());
+      if (args.action === 'stop') return text(await safari.safariStop());
+      if (args.action !== 'call') throw new Error('Unknown Safari action');
+      return safari.safariCall(args.tool, args.arguments ?? {}, { tab: args.tab });
+    }
+    const request = safariMCP(name, args);
+    return safari.safariCall(request.name, request.args, { tab: request.tab });
+
+}
+
 const handlers = {
+  browser_safari: safariHandler,
   browser_list: async () => {
     const rows = await listBrowsers();
     return text(
@@ -545,7 +564,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 
 server.setRequestHandler(CallToolRequestSchema, async request => {
   const { name, arguments: args = {} } = request.params;
-  const handler = handlers[name];
+  const handler = name === 'browser_safari' || args.browser === 'safari' ? () => safariHandler(args, name) : handlers[name];
   if (!handler) return fail(`Unknown tool ${name}`);
   sessions.touch(SESSION_ID);
   try {

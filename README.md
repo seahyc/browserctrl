@@ -3,86 +3,113 @@
 [![Tests](https://github.com/seahyc/browserctrl/actions/workflows/test.yml/badge.svg)](https://github.com/seahyc/browserctrl/actions/workflows/test.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Control a running Chromium browser from the terminal or an MCP client. `browserctrl` connects to browser sessions you already have open, snapshots pages into readable element references, and sends actions through the Chrome DevTools Protocol (CDP).
+**browserctrl lets a coding agent work with a real browser you choose.** It can inspect a page, click buttons, fill forms, wait for a page to change, and read console or network errors. You can use it from a terminal, connect it to an agent that supports MCP, or install its agent skill when your agent supports skills.
 
-The project is developed and tested on macOS. Chrome, Dia, Brave, Edge, Chromium, and Arc are recognized there; Dia's native dormant-tab and tab-group controls are macOS-specific. The full CDP test suite passes on Linux with Node 22/24 and an explicitly configured debugging port. Automatic browser discovery and launch still use macOS app paths. Windows and Safari are not supported by browserctrl. Safari 27's separate official MCP integration is outside this project.
+## A note of thanks
 
-## Install
+browserctrl grew from [Petr Baudis's original `chrome-cdp-skill`](https://github.com/pasky/chrome-cdp-skill). Thank you, Petr, for creating and sharing the small, dependency-light tool that made this project possible. browserctrl keeps that browser-control foundation and adds a shared connection that its CLI, MCP server, and Python client can use together, along with optional coordination and browser features. The two projects have different scopes; browserctrl does not claim to be a performance improvement or a replacement for the original.
 
-Requirements: Node.js 22 or newer. Clone the repository and install its pinned dependencies:
+## Ask your coding agent to install it
+
+Copy and paste this request into your coding agent:
+
+> Please set up browserctrl from https://github.com/seahyc/browserctrl so I can use it with a browser I explicitly choose. First check the repository instructions, my operating system, and whether you support a command-line tool, MCP servers, or installable agent skills. Pick the simplest supported option and explain what you chose. Prefer a local checkout and local dependencies. Do not use administrator access or make global configuration changes without asking me first. Do not launch, restart, or connect to a signed-in browser; change browser settings; load an extension; or grant browser permissions without asking first. Show me the exact setup steps and how to undo them. If this agent cannot install or use browser skills, set up the CLI or explain how I can run it myself.
+
+For a manual CLI setup, install [Node.js 22 or newer](https://nodejs.org/), then run:
 
 ```sh
 git clone https://github.com/seahyc/browserctrl.git
 cd browserctrl
 npm ci
+node bin/browserctrl.mjs help
 ```
 
-Run the CLI from the checkout with `node bin/browserctrl.mjs`. To make the commands available on your `PATH`, run `npm link`; this provides `browserctrl`, plus the compatibility commands `cdp` and `browserctl`. For an agent that loads skills from `~/.agents/skills`, clone or link this repository as `~/.agents/skills/browserctrl` and invoke `$browserctrl`.
+Run commands this way from the checkout with `node bin/browserctrl.mjs <command>`. If you want `browserctrl` available as a shell command everywhere, `npm link` adds it to your PATH (and also provides the compatibility names `cdp` and `browserctl`). That is an optional global setup step.
 
-The MCP server uses the installed dependency. Configure your MCP client to start `node /absolute/path/to/browserctrl/mcp/server.mjs` from this checkout.
+## Choose how to connect your agent
 
-## Connect a browser
+- **CLI:** A good default when your agent can run terminal commands. It does not require the agent to support skills or MCP. From the checkout, use `node bin/browserctrl.mjs`; after `npm link`, use `browserctrl`.
+- **MCP:** Use this when your agent can connect to MCP servers. Point its MCP configuration to `node /absolute/path/to/browserctrl/mcp/server.mjs`, using the checkout's absolute path. The server uses dependencies installed by `npm ci` in that checkout.
+- **Agent skill:** Use this only if your agent has a skill-installation mechanism. For agents that load skills from `~/.agents/skills`, link or clone this repository at `~/.agents/skills/browserctrl`, then invoke `$browserctrl`. Other agents may use a different skill format or may not support skills; follow that agent's instructions instead of assuming this path works everywhere.
+- **Python client:** Python projects can use the persistent client in `python/chrome_cdp`. Add the repository's `python` directory to `PYTHONPATH` and import `ChromeCDP` from `chrome_cdp`. It starts a Node sidecar, so Node.js 22 or newer and the installed repository dependencies are still required. See [the Python helpers](python/chrome_cdp/HELPERS.md).
 
-Select the browser explicitly; browserctrl has no default browser:
+The Chromium interfaces use the same browser-control core. Safari uses Apple’s official MCP server through its own adapter; the Python CDP client is Chromium-only. Pick the one your agent already supports; you do not need to configure all of them.
+
+## What using it looks like
+
+First, list available browsers and choose one by name. browserctrl does not guess which browser you mean:
 
 ```sh
-browserctrl browsers
-browserctrl tabs --browser chrome
-browserctrl open https://example.com --browser chrome
+node bin/browserctrl.mjs browsers
+node bin/browserctrl.mjs tabs --browser chrome
+node bin/browserctrl.mjs open https://example.com --browser chrome
 ```
 
-On macOS, enable Chrome remote debugging for the existing profile in `chrome://inspect/#remote-debugging`, then run `browserctrl browsers` again. Recent Chrome versions may reject command-line debugging flags for an existing profile. For a separate clean profile, launch Chrome with a debugging port and a dedicated user-data directory, for example:
+On macOS, Chrome may need remote debugging enabled for its existing profile. Open `chrome://inspect/#remote-debugging` in Chrome, enable the setting, then run `browsers` again. Recent Chrome versions may not accept debugging flags for an existing profile. To use a separate clean profile instead, you can launch Chrome with a dedicated debugging port and user-data directory:
 
 ```sh
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
   --remote-debugging-port=9222 --user-data-dir=/tmp/browserctrl-chrome
 ```
 
-Use `--port <n>` instead of `--browser <name>` for a custom endpoint. Do not point a disposable test at a profile containing data you need.
+For a custom debugging endpoint, use `--port <number>` instead of `--browser <name>`. Do not use a disposable test against a browser profile that contains data you need.
 
-## Read, then act
-
-Take a fresh page snapshot and use its `ref_` identifiers for actions:
+Read the page before taking action. The snapshot gives elements simple references such as `ref_2`; use those references to click or fill the intended element:
 
 ```sh
-browserctrl read <tab-id> --browser chrome
-browserctrl click <tab-id> --ref ref_2 --browser chrome
-browserctrl fill <tab-id> --ref ref_3 --value "Example" --browser chrome
-browserctrl wait <tab-id> --text "Saved" --browser chrome
+node bin/browserctrl.mjs read <tab-id> --browser chrome
+node bin/browserctrl.mjs click <tab-id> --ref ref_2 --browser chrome
+node bin/browserctrl.mjs fill <tab-id> --ref ref_3 --value "Example" --browser chrome
+node bin/browserctrl.mjs wait <tab-id> --text "Saved" --browser chrome
 ```
 
-Refs are invalidated by navigation and by the next snapshot. Take another snapshot when the page changes. If a command times out or the connection drops during an action, its outcome may be uncertain; browserctrl does not replay that action. Observe the page before deciding whether to try again.
+Take a new snapshot after navigation or page changes. References are invalidated by navigation and by the next snapshot. If a command times out or the connection drops during an action, check the page before trying again: browserctrl does not replay actions whose result is uncertain.
 
-## What it does
+## How this differs from the original
 
-browserctrl pools commands through one long-lived daemon per browser port. That connection can retain console and network events across CLI calls. Tab claims coordinate cooperating agents: a claim expires after 15 minutes unless renewed. Claims do not isolate browser data or protect against other tools that bypass browserctrl.
+[Petr Baudis's chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill) is the foundation. It is a smaller, dependency-light way to control Chromium, with Windows, Linux and macOS support. Choose it if its focused CLI does what you need.
+
+browserctrl adds a connection shared by multiple agents, tab claims to reduce interference, an MCP server, a persistent Python client, optional tab organization and human handoffs, and Safari support through Apple's interface. These additions also bring more code and dependencies. We have not measured an equivalent speed or reliability comparison, so we do not claim a percentage improvement. Windows profile discovery and pipe transport follow upstream's approach; our locking and shared daemon are additional work. Safari control is supplied by Apple and WebKit. Thank you to both upstream teams and everyone who shares improvements.
+
+## Sharing a browser safely
+
+The CLI, MCP server, and Python client share a long-lived connection for each browser debugging port. This lets browser events such as console messages and network errors remain available across commands. Agents using browserctrl can also claim a tab while working on it; claims expire after 15 minutes unless renewed. Claims help coordinate agents that use browserctrl, but they do not hide or isolate your browser data and cannot control other tools.
+
+browserctrl supports Chromium browsers on macOS, Linux and Windows. It recognizes Chrome, Dia, Brave, Edge, Chromium and Arc where installed. Dia also has optional native controls for dormant tabs (tabs not shown in its ordinary tab list) and tab groups. An optional browser extension enables tab groups and other browser-level features that the page-control protocol does not provide; ordinary page control does not require the extension. Loading the extension and granting its requested permissions is a separate setup step.
+
+Platform-specific details and test evidence are in [compatibility](docs/compatibility.md). Windows uses named pipes and a PowerShell lock adapter; it does not require AppleScript. Automatic browser relaunch, screen video, and Dia's native dormant-tab controls remain macOS-only.
+
+### Safari
+
+Safari 27 or later on macOS has its own official automation interface. Enable Safari Settings → Advanced → Show features for web developers, then Settings → Developer → Allow remote automation and external agents. Safari may ask you to authenticate. browserctrl does not enable this permission for you.
+
+```sh
+node bin/browserctrl.mjs safari tools --browser safari
+node bin/browserctrl.mjs open https://example.com --browser safari
+node bin/browserctrl.mjs read <full-tab-handle> --browser safari
+```
+
+Safari returns its own element IDs, called node UIDs, instead of Chromium's `ref_2` references. The CLI supports common page operations; the `browser_safari` MCP tool also exposes Apple's native tools and batch interactions. A shared Safari connection serializes tab selection and actions, and checks tab ownership before touching a tab. This adds coordination around Apple's tools, rather than replacing the browser engine.
+
+Safari automation uses a separate session. Do not assume it shares your normal Safari tabs, logins or history. Chromium tab groups, dormant Dia tabs, raw CDP, Python CDP calls and recording are not supported by the Safari adapter. Background input depends on Safari itself; browserctrl cannot remove Apple's focus or automation-window restrictions. For one agent that only needs Safari, [Apple's default MCP](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/) may be all you need.
+
+## How browserctrl is organized
 
 ```mermaid
 flowchart LR
-    CLI[CLI] --> Pool[Shared daemon per browser port]
-    MCP[MCP client] --> Pool
-    Python[Python client] --> Pool
-    Pool --> CDP[Chromium CDP]
-    Pool --- Claims[Per-tab claims]
-    CDP --> Tabs[Browser tabs]
-    CDP -. optional .-> Extension[Extension APIs and tab groups]
-    Pool -. optional .-> Native[macOS Dia adapter]
+    CLI[Terminal commands] --> Shared[Shared browser connection]
+    MCP[MCP-enabled agent] --> Shared
+    Py[Python client] --> Shared
+    Shared --> Chromium[Chosen Chromium browser]
+    CLI --> SafariPool[Shared Safari adapter]
+    MCP --> SafariPool
+    SafariPool --> Apple[Apple Safari MCP]
+    Shared -. optional .-> Ext[Extension for browser-level features]
+    Shared -. macOS Dia .-> Dia[Native dormant-tab and group controls]
 ```
 
-| Capability | Upstream `pasky/chrome-cdp-skill` | `seahyc/browserctrl` |
-| --- | --- | --- |
-| Connection model | Persistent daemon per tab; 20-minute idle exit, as documented upstream | Shared daemon per browser port; long-lived while in use |
-| Coordination | Target selection by tab ID | Per-tab claims, snapshot refs, and named workflows |
-| Interfaces | CLI skill | CLI, MCP server, and persistent Python client over the same core |
-| Browser-level workflows | CDP page control | Optional unpacked extension for extension APIs and tab groups; Dia native tab controls on macOS |
-| Platform status | Upstream documents Chrome-family detection on macOS, Linux, and Windows | macOS live testing plus Linux CDP tests on Node 22/24; Linux uses an explicit port, while Windows remains unsupported |
+For complete command usage, run `node bin/browserctrl.mjs help` (or `browserctrl help` after `npm link`). See [compatibility details](docs/compatibility.md), [contributing](CONTRIBUTING.md), and [security reporting](SECURITY.md).
 
-This comparison describes documented scope, not a performance benchmark. The [CI matrix](https://github.com/seahyc/browserctrl/actions/runs/38212070928) passed 183 Node tests and 13 Python tests on each Node version; one optional legacy-installation check was skipped. See [compatibility results](docs/compatibility.md) for the exact scope and limitations.
+## License
 
-The optional extension must be loaded as an unpacked extension from `extension/` in a supported Chromium browser. Extension-backed operations are unavailable without it. CDP page control continues to work without the extension.
-
-For complete command usage, run `browserctrl help`. For bug reports and contributions, see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports are covered in [SECURITY.md](SECURITY.md).
-
-## Attribution and license
-
-browserctrl began as a fork of [pasky/chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill) by Petr Baudis. The upstream project and this project are MIT-licensed; see [LICENSE](LICENSE) for the retained license and copyright notices.
+browserctrl and the upstream project are MIT-licensed. See [LICENSE](LICENSE) for the retained copyright and license notices.

@@ -7,8 +7,8 @@ Evidence collected on 2026-10-12. These are capability checks, not a comparative
 | Dia, macOS | Live session tested | Native inventory includes dormant tabs. Live extension inspection, group collapse, duplicate-tab closure, and refusal to move a claimed tab were verified. A browser restart restored a group expanded, so its collapse state needed restoring. |
 | Chrome, macOS | Integration tests run; see [raw summary](chrome-test-results.json) | Owned headless profile only. The first run passed 18 of 22 tests and hit timeouts plus subsequent isolation failures on a heavily loaded host. No claim of seamless reliability from this run. |
 | Chrome-family Chromium, Linux | [Full CI passed](https://github.com/seahyc/browserctrl/actions/runs/38212070928) | Ubuntu, Node 22 and 24: each job passed 183 Node tests and 13 Python tests. One optional legacy-installation test was skipped. The suite includes real isolated-browser page input, screenshots, waits, and ten-agent concurrency. |
-| Safari 27.0.1, macOS | browserctrl unsupported; Apple's MCP discovery tested | `/usr/bin/safaridriver --mcp` connected and exposed its tools. Creating a fixture tab was refused because Safari's Allow remote automation setting is disabled. No Safari page-action or browserctrl integration pass is claimed. |
-| Windows | Unsupported | The daemon currently uses Unix sockets and macOS/Linux kernel file locking. A Windows adapter is needed. |
+| Safari 27.0.1, macOS | Adapter implemented; live verification in progress | Official MCP discovery and an owned local fixture tab were verified. Protocol tests cover serialized tab selection, claims, failed switches and shutdown protection. Background input verification is in progress. |
+| Windows | Adapter implemented; CI verification pending | Named-pipe daemon IPC, kernel mutex locks through PowerShell, profile discovery and process identity verification. Actual Windows coverage runs in CI. |
 
 ## Dia boundaries
 
@@ -16,11 +16,11 @@ Page snapshots, input, waits, shared connections, tab claims, and extension APIs
 
 The optional extension's tab-group APIs are Chromium APIs, not Dia-specific. Chrome can use them after loading the extension, but extension grouping in Chrome has not yet been tested here. Dormant tabs absent from both CDP and the extension require the Dia native adapter. Do not infer that Chrome or another browser has the same dormant-tab behavior.
 
-Browser discovery and launch currently use macOS app paths. Linux callers should start their own browser with an explicit debugging port and use `--port`. Screen-video capture uses macOS-specific APIs; screenshots use CDP.
+Browser profile discovery supports macOS, Linux and Windows. Automatic relaunch remains macOS-only; elsewhere enable debugging or start an owned profile, then select `--browser` at its configured port or `--port` explicitly. Screen-video capture uses macOS-specific APIs; screenshots use CDP.
 
 ## Safari boundaries
 
-Safari does not implement browserctrl's CDP transport. Its WebDriver and official MCP tools are separate protocols. A future Safari adapter could translate shared page operations, but it would also need ownership and recovery semantics, and capability flags for grouping, dormant tabs, recording, and background behavior. None of that is implemented by this release.
+Safari does not implement browserctrl's CDP transport. Its WebDriver and official MCP tools are separate protocols. The Safari adapter keeps one official MCP process, serializes current-tab selection and actions, and checks cooperating-agent claims. Common page operations and Apple native tool calls are supported. Chromium groups, dormant Dia tabs, recording, uploads and raw CDP are not supported. Safari automation uses a separate session; it does not imply access to the normal signed-in profile. Background behavior depends on Safari and must be tested separately.
 
 Sources: [Chrome debugging changes](https://developer.chrome.com/blog/remote-debugging-port), [Safari MCP introduction](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/).
 
@@ -28,7 +28,7 @@ Sources: [Chrome debugging changes](https://developer.chrome.com/blog/remote-deb
 
 Compared with `pasky/chrome-cdp-skill` main at `ffea76a24b0471663ddd9d9f24335bbc442b6266`, browserctrl adds one shared connection per browser port, cooperating-agent claims, richer snapshots and actions, a typed MCP frontend, a persistent Python client, bounded batches/workflows, optional browser-level extension APIs, and Dia native adapters.
 
-Upstream is smaller, requires no npm dependencies for its CLI, and documents Chrome-family discovery on macOS, Linux, and Windows. browserctrl has broader workflow and coordination features, but does not currently match upstream's Windows support. We have not run an equivalent upstream-vs-browserctrl latency or reliability benchmark, so there is no defensible percentage improvement.
+Upstream is smaller, requires no npm dependencies for its CLI, and documents Chrome-family discovery on macOS, Linux, and Windows. browserctrl has broader workflow and coordination features, and now includes a Windows pipe and lock adapter. We have not run an equivalent upstream-vs-browserctrl latency or reliability benchmark, so there is no defensible percentage improvement.
 
 ## Latest verified implementation
 

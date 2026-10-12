@@ -1,6 +1,6 @@
 ---
 name: browserctrl
-description: Control Chromium browsers (Chrome, Dia, Brave, Edge, Arc), including dormant Dia tabs on macOS, from the terminal or as MCP tools - list and pick a browser, snapshot a page into stable element refs, click/fill/select/upload by ref, wait for real conditions instead of sleeping, screenshot, and read console and network logs. Use for browser QA, dogfooding a review app, or any task that needs a real logged-in browser session.
+description: Control Chromium browsers (Chrome, Dia, Brave, Edge, Arc) and Safari 27+ on macOS, including dormant Dia tabs on macOS, from the terminal or as MCP tools - list and pick a browser, snapshot a page into stable element refs, click/fill/select/upload by ref, wait for real conditions instead of sleeping, screenshot, and read console and network logs. Use for browser QA, dogfooding a review app, or any task that needs a real logged-in browser session.
 ---
 
 # browserctrl
@@ -10,6 +10,38 @@ Project source and issues: [seahyc/browserctrl](https://github.com/seahyc/browse
 Invoke this skill as `$browserctrl`. The primary CLI is `browserctrl`; `cdp`
 and `browserctl` remain compatibility commands. Legacy runtime paths under
 `skills/chrome-cdp` have no SKILL.md and are not a second skill.
+
+## Safari and platform selection
+
+Select the browser explicitly. Chromium uses the existing CDP commands on macOS,
+Linux and Windows. Windows uses named pipes and a PowerShell lock adapter, not
+AppleScript. Automatic relaunch and screen video remain macOS-only. See
+[compatibility and test evidence](docs/compatibility.md) before promising support.
+
+For Safari 27+ on macOS, use `--browser safari` and the separate Apple MCP adapter.
+Check `browserctrl safari tools --browser safari` for supported schemas. Safari
+Settings must allow remote automation and external agents; obtain the user's
+permission before granting that access. Do not restart Safari to fix an uncertain
+operation. Read the returned error and re-observe before retrying an action.
+
+```sh
+browserctrl open https://example.com --browser safari
+browserctrl tabs --browser safari
+browserctrl read <full-tab-handle> --browser safari
+browserctrl safari call page_interactions --tab <full-tab-handle> --args '{"interactions":[{"type":"click","node":"42","purpose":"Open details"}]}' --browser safari
+```
+
+Safari calls use full native tab handles and node UIDs from Safari's own content
+read, never Chromium `ref_N` values. Every page call needs an explicit handle;
+the daemon checks the claim and serializes tab selection plus the call. Supply a
+stable `CDP_AGENT_ID` for CLI workflows or `agentId` on every shared MCP call.
+Release your claims at handoff. The MCP `browser_safari` tool supports `tools`,
+`call`, `status` and `stop`; common browser tools also route supported operations
+when `browser="safari"`. Unsupported operations fail explicitly. Python's
+`ChromeCDP` client, tab grouping, dormant Dia tabs, recording, uploads and raw CDP
+remain Chromium-only. Safari creates an automation session; do not assume access
+to the user's existing Safari tabs or signed-in state. Verify background behavior
+against a disposable page before offering an unattended workflow.
 
 ## Start here: reuse the shared connection
 

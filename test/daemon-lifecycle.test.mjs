@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../lib/daemon.mjs';
-import { SOCK } from '../lib/env.mjs';
+import { SOCK, runtimePath } from '../lib/env.mjs';
 import { startHeadlessBrowser, chromeBinary } from './helpers.mjs';
 
 const exec = promisify(execFile);
@@ -24,13 +24,13 @@ async function fixture(t) {
   const previousTrace = process.env.CDP_DIAGNOSTIC_LOG;
   process.env.CDP_DIAGNOSTIC_LOG = trace;
   t.after(async () => {
-    browser.child.kill('SIGCONT');
-    const { stdout } = await exec('ps', ['-axo', 'pid=,command=']);
+    if (process.platform !== 'win32') browser.child.kill('SIGCONT');
+    const { stdout } = await daemonProcesses(port);
     for (const line of stdout.split('\n')) {
       if (line.trim().endsWith(`/lib/daemon-run.mjs ${port}`)) {
         try {
           const pid = Number(line.trim().split(/\s+/)[0]);
-          process.kill(pid, 'SIGCONT');
+          if (process.platform !== 'win32') process.kill(pid, 'SIGCONT');
           process.kill(pid, 'SIGTERM');
           const deadline = Date.now() + 1000;
           while (Date.now() < deadline) {
@@ -41,7 +41,7 @@ async function fixture(t) {
         } catch {}
       }
     }
-    browser.close();
+    await browser.close();
     fs.rmSync(traceDir, { recursive: true, force: true });
     if (previousTrace === undefined) delete process.env.CDP_DIAGNOSTIC_LOG;
     else process.env.CDP_DIAGNOSTIC_LOG = previousTrace;
@@ -49,11 +49,16 @@ async function fixture(t) {
   return { port, browser, trace };
 }
 
+async function daemonProcesses(port) {
+  if (process.platform !== 'win32') return exec('ps', ['-axo', 'pid=,command=']);
+  const script = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*daemon-run.mjs ${port}' } | ForEach-Object { "$($_.ProcessId) $($_.CommandLine.Replace('\\','/'))" }`;
+  return exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
+}
 async function assertSoleDaemon(port, ownerPid) {
   const deadline = Date.now() + 5000;
   let pids;
   do {
-    const { stdout } = await exec('ps', ['-axo', 'pid=,command=']);
+    const { stdout } = await daemonProcesses(port);
     pids = stdout.split('\n').filter(line => line.trim().endsWith(`/lib/daemon-run.mjs ${port}`))
       .map(line => Number(line.trim().split(/\s+/)[0]));
     if (pids.length === 1 && pids[0] === ownerPid) return;
@@ -62,7 +67,8 @@ async function assertSoleDaemon(port, ownerPid) {
   assert.deepEqual(pids, [ownerPid], 'losing startup processes must exit, leaving the shared owner');
 }
 
-const options = { skip: !chromeBinary(), timeout: 60000 };
+const options = { skip: !chromeBinary(), timeout: process.platform === 'win32' ? 180000 : 60000 };
+const posixOptions = { ...options, skip: options.skip || process.platform === 'win32' };
 test('independent agents concurrently start and reuse one daemon', options, async t => {
   const { port } = await fixture(t);
   const results = await Promise.all(Array.from({ length: 6 }, () => exec(process.execPath, [
@@ -89,7 +95,7 @@ test('a hung tab preserves the browser connection and never replays the command'
   assert.equal(result.result.value, 1);
 });
 
-test('a hung browser retires its daemon and permits a fresh observation after recovery', options, async t => {
+test('a hung browser retires its daemon and permits a fresh observation after recovery', posixOptions, async t => {
   const { port, browser } = await fixture(t);
   const client = await connect(port);
   t.after(() => client.close());
@@ -125,7 +131,7 @@ test('concurrent clients share one tab attachment and domain initialization', op
   }
 });
 
-test('a frozen daemon is replaced on demand using verified process ownership', options, async t => {
+test('a frozen daemon is replaced on demand using verified process ownership', posixOptions, async t => {
   const { port } = await fixture(t);
   const client = await connect(port);
   t.after(() => client.close());
@@ -155,7 +161,7 @@ test('browser restart shares the existing daemon recovery instead of retiring it
 });
 
 
-test('independent agents reclaim a stale socket without creating duplicate daemons', options, async t => {
+test('independent agents reclaim a stale socket without creating duplicate daemons', posixOptions, async t => {
   const { port } = await fixture(t);
   const stale = spawn(process.execPath, ['--input-type=module', '-e',
     `import net from 'node:net'; net.createServer().listen(${JSON.stringify(SOCK(port))}, () => console.log('ready'));`,
@@ -174,7 +180,7 @@ test('independent agents reclaim a stale socket without creating duplicate daemo
 });
 
 
-test('a browser paused longer than the former health deadline keeps its pooled connection', options, async t => {
+test('a browser paused longer than the former health deadline keeps its pooled connection', posixOptions, async t => {
   const { port, browser } = await fixture(t);
   const client = await connect(port);
   t.after(() => client.close());
@@ -201,7 +207,7 @@ test('a browser paused longer than the former health deadline keeps its pooled c
 });
 
 
-test('a live legacy daemon is upgraded using its IPC status without a browser probe', options, async t => {
+test('a live legacy daemon is upgraded using its IPC status without a browser probe', posixOptions, async t => {
   const { port } = await fixture(t);
   const socketPath = SOCK(port);
   const legacy = spawn(process.execPath, ['--input-type=module', '-e', `

@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, requireBrowser } from '../lib/discovery.mjs';
+import { safariCLI } from '../lib/safari-frontend.mjs';
 import { BROWSERS } from '../lib/env.mjs';
 import { diagnose } from '../lib/diagnostics.mjs';
 import { captureConnections } from '../lib/connection-capture.mjs';
@@ -55,6 +56,14 @@ function usage() {
     browserctrl doctor --browser dia                     read-only connection diagnosis (JSON)
     browserctrl doctor --browser dia --watch-seconds 20   passive OS connection capture
 
+  Safari 27 on macOS, through Apple's MCP interface:
+    browserctrl safari tools --browser safari
+    browserctrl safari call <tool> --args '{"key":"value"}' --tab <handle> --browser safari
+    browserctrl tabs --browser safari
+    browserctrl open <url> --browser safari
+    browserctrl read <full-handle> --browser safari
+    Safari reads return node UIDs, not Chromium ref_N values.
+
   Read before you act:
     browserctrl read <tab> --browser dia [--json]        snapshot with ref_1..N + page text
     browserctrl text <tab> [--max-text 8000] [--match re] visible text, bounded by default
@@ -98,6 +107,7 @@ function usage() {
 }
 
 async function launch(name) {
+  if (process.platform !== 'darwin') throw new Error('Automatic relaunch currently requires macOS. Enable debugging in the browser, then use --browser or --port.');
   const meta = BROWSERS[String(name).toLowerCase()];
   if (!meta) throw new Error(`Unknown browser "${name}". Known: ${Object.keys(BROWSERS).join(', ')}`);
   const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, e => (e ? rej(e) : res())));
@@ -129,6 +139,26 @@ const cmd = positional[0];
 
 const main = async () => {
   if (!cmd || cmd === 'help' || flags.help) return out(usage());
+  if (flags.browser === 'safari' || cmd === 'safari') {
+    if (flags.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
+    const safari = await import('../lib/safari.mjs');
+    if (cmd === 'safari') {
+      if (positional[1] === 'tools') return out(await safari.safariTools());
+      if (positional[1] !== 'call') throw new Error('Usage: browserctrl safari tools | call <tool> --args JSON --tab <handle> --browser safari');
+      const args = flags.args ? JSON.parse(flags.args) : {};
+      const result = await safari.safariCall(positional[2], args, { tab: flags.tab });
+      if (result.isError) process.exitCode = 1;
+      return out(result);
+    }
+    if (cmd === 'status' || cmd === 'doctor') return out(await safari.safariStatus());
+    if (cmd === 'stop') return out(await safari.safariStop());
+    if (cmd === 'claims') return out(claims.list(9228));
+    if (cmd === 'release') return out({ released: flags.mine || !positional[1] ? claims.releaseMine() : claims.release(9228, positional[1]) });
+    const request = safariCLI(cmd, positional, flags);
+    const result = await safari.safariCall(request.name, request.args, { tab: request.tab });
+    if (result.isError) process.exitCode = 1;
+    return out(result);
+  }
   if (cmd === 'doctor') {
     const seconds = flags['watch-seconds'] === undefined ? null : Number(flags['watch-seconds']);
     if (seconds !== null && (flags['watch-seconds'] === true || !Number.isFinite(seconds) || seconds <= 0 || seconds > 60)) throw new Error('watch-seconds must be greater than 0 and at most 60.');
