@@ -114,8 +114,16 @@ browserctrl browsers
 
 If the selected browser is not debuggable, inspect `browserctrl browsers` and use its
 reported enablement instructions. Do not restart the user's signed-in Dia merely
-to enable debugging. `browserctrl launch dia` quits and relaunches Dia; use it only when
-the user has authorized that restart.
+to enable debugging. `browserctrl launch <browser>` quits and relaunches that browser's real
+profile with its debug port; use it only when the user has authorized that restart. It reports
+`"ready": true` only after the debug port answers (reopening once if the first launch was swallowed
+by the quitting instance) and fails loudly otherwise; it never claims success on a browser that did
+not come back.
+
+`browserctrl launch <browser> --user-data-dir <dir>` instead starts a separate instance on its own
+profile and leaves the user's running browser untouched. Chrome 136+ refuses a debug port on the real
+profile, so `launch chrome` without `--user-data-dir` refuses before quitting anything and points to
+the `chrome://inspect/#remote-debugging` toggle or the separate-profile option.
 
 ## Sharing tabs with the human
 

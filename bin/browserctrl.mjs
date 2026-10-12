@@ -5,7 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connect } from '../lib/daemon.mjs';
-import { listBrowsers, requireBrowser } from '../lib/discovery.mjs';
+import { listBrowsers, requireBrowser, httpGetJson } from '../lib/discovery.mjs';
+import { relaunchWithDebugPort, planLaunch } from '../lib/launch.mjs';
 import { safariCLI } from '../lib/safari-frontend.mjs';
 import { BROWSERS } from '../lib/env.mjs';
 import { diagnose } from '../lib/diagnostics.mjs';
@@ -65,7 +66,7 @@ function usage() {
 
   Pick a browser first. There is no default:
     browserctrl browsers                                 what is debuggable right now
-    browserctrl launch dia                               relaunch a browser with its debug port
+    browserctrl launch <browser> [--user-data-dir D]     relaunch with its debug port; waits until ready (D = separate instance)
     browserctrl tabs --browser dia                       tabs, with who has claimed them
     browserctrl native-tabs --browser dia                all Dia tabs, including dormant tabs
     browserctrl native-focus <native UUID> --browser dia  select and wake a native Dia tab
@@ -138,26 +139,40 @@ async function launch(name) {
   const meta = BROWSERS[String(name).toLowerCase()];
   if (!meta) throw new Error(`Unknown browser "${name}". Known: ${Object.keys(BROWSERS).join(', ')}`);
   const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, e => (e ? rej(e) : res())));
-  await run('/usr/bin/osascript', ['-e', `tell application "${meta.app}" to quit`]).catch(() => {});
-  for (let i = 0; i < 20; i += 1) {
-    const running = await new Promise(res => execFile('/usr/bin/pgrep', ['-x', meta.app], e => res(!e)));
-    if (!running) break;
-    await new Promise(r => setTimeout(r, 500));
-  }
   // Load the handoff extension alongside the debug port, so a browser started
   // this way has both halves: CDP for the agent, extension UI for the human.
   // Chrome 137+ ignores --load-extension for non-enterprise profiles; other
   // Chromium forks still honour it. Where it is ignored, load it once from
   // chrome://extensions instead and it persists in the profile.
   const extension = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'extension');
-  const args = [`--remote-debugging-port=${meta.port}`];
-  if (!flags['no-extension'] && fs.existsSync(extension)) args.push(`--load-extension=${extension}`);
-  await run('/usr/bin/open', ['-a', meta.app, '--args', ...args]);
+  const dataDir = flags['user-data-dir'] ? path.resolve(String(flags['user-data-dir'])) : null;
+  const plan = planLaunch({
+    name, meta, userDataDir: dataDir,
+    extension: !flags['no-extension'] && fs.existsSync(extension) ? extension : null,
+  });
+  if (dataDir) fs.mkdirSync(dataDir, { recursive: true });
+  const pgrep = argv => new Promise(res => execFile('/usr/bin/pgrep', argv, e => res(!e)));
+  let result;
+  try {
+    result = await relaunchWithDebugPort({
+      // A separate instance never touches the user's running browser.
+      quit: plan.separateInstance ? async () => {} : () => run('/usr/bin/osascript', ['-e', `tell application "${meta.app}" to quit`]),
+      isRunning: plan.separateInstance ? () => pgrep(['-f', '--', plan.processMatch]) : () => pgrep(['-x', meta.app]),
+      open: () => run('/usr/bin/open', [...(plan.separateInstance ? ['-n'] : []), '-a', meta.app, '--args', ...plan.args]),
+      probe: () => httpGetJson(meta.port, '/json/version', 1000),
+    });
+  } catch (e) {
+    throw new Error(`${e.message}. To enable debugging for ${meta.label}: ${meta.enable}`);
+  }
   return {
     launched: meta.label,
     port: meta.port,
-    extension: args.length > 1 ? extension : 'not loaded',
-    note: 'Tabs are restored by the browser; the debug port is live once it finishes starting.',
+    ready: result.ready,
+    browser: result.version.Browser,
+    waited_ms: result.waitedMs,
+    reopened: result.reopened,
+    profile: dataDir || 'real',
+    extension: plan.args.some(a => a.startsWith('--load-extension=')) ? extension : 'not loaded',
   };
 }
 
