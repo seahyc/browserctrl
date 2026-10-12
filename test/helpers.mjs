@@ -43,6 +43,23 @@ export async function startFixtureServer() {
       }, 400);
       return;
     }
+    // A small first-party API: a page that embeds a csrf token and calls a
+    // paginated JSON endpoint on load, as a site frontend would.
+    if (req.url.startsWith('/shop')) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<html><body><h1>shop</h1><script type="application/json" id="boot">{"App":{"csrfToken":"tok-123"}}</script>
+<script>fetch('/api/orders/48213?offset=0&limit=2', {headers: {'x-csrf': 'tok-123'}}).then(r => r.json()).then(j => { document.body.dataset.loaded = j.data.orders.length; });</script></body></html>`);
+      return;
+    }
+    if (req.url.startsWith('/api/orders/')) {
+      if (req.headers['x-csrf'] !== 'tok-123') { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end('{"error":"csrf"}'); return; }
+      const q = new URL(req.url, 'http://x').searchParams;
+      const offset = Number(q.get('offset')), limit = Number(q.get('limit'));
+      const all = Array.from({ length: 5 }, (_, i) => ({ id: 100 + i, title: `Item ${i}`, price: { cents: 250 * (i + 1) } }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ data: { orders: all.slice(offset, offset + limit) } }));
+      return;
+    }
     if (req.url.startsWith('/404')) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('nope');
