@@ -335,18 +335,17 @@ async function actOnce(conn, targetId, a) {
 }
 
 async function safariHandler(args, name = 'browser_safari') {
-    if (args.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
-    const safari = await import('../lib/safari.mjs');
-    if (name === 'browser_safari') {
-      if (args.action === 'tools') return text(await safari.safariTools());
-      if (args.action === 'status') return text(await safari.safariStatus());
-      if (args.action === 'stop') return text(await safari.safariStop());
-      if (args.action !== 'call') throw new Error('Unknown Safari action');
-      return safari.safariCall(args.tool, args.arguments ?? {}, { tab: args.tab });
-    }
-    const request = safariMCP(name, args);
-    return safari.safariCall(request.name, request.args, { tab: request.tab });
-
+  if (args.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
+  const safari = await import('../lib/safari.mjs');
+  if (name === 'browser_safari') {
+    if (args.action === 'tools') return text(await safari.safariTools());
+    if (args.action === 'status') return text(await safari.safariStatus());
+    if (args.action === 'stop') return text(await safari.safariStop());
+    if (args.action !== 'call') throw new Error('Unknown Safari action');
+    return safari.safariCall(args.tool, args.arguments ?? {}, { tab: args.tab });
+  }
+  const request = safariMCP(name, args);
+  return safari.safariCall(request.name, request.args, { tab: request.tab });
 }
 
 const handlers = {
