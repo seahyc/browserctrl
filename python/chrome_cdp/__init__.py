@@ -149,11 +149,9 @@ class ChromeCDP:
                 self.process.wait()
         # A dead child closes its pipe, allowing the reader to finish naturally.
         self._stdout_thread.join(timeout=1)
+        self.process.stdout.close()
         if self._stdout_thread.is_alive():
-            self.process.stdout.close()
             self._stdout_thread.join(timeout=1)
-        else:
-            self.process.stdout.close()
 
     def __enter__(self):
         return self
