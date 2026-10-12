@@ -5,6 +5,8 @@ description: Control Chromium browsers (Chrome, Dia, Brave, Edge, Arc), includin
 
 # browserctrl
 
+Project source and issues: [seahyc/browserctrl](https://github.com/seahyc/browserctrl).
+
 Invoke this skill as `$browserctrl`. The primary CLI is `browserctrl`; `cdp`
 and `browserctl` remain compatibility commands. Legacy runtime paths under
 `skills/chrome-cdp` have no SKILL.md and are not a second skill.
@@ -436,7 +438,7 @@ fresh observation before deciding whether an action needs repeating.
 ## Tests
 
 ```bash
-cd ~/.claude/skills/browserctrl && npm test
+cd ~/.agents/skills/browserctrl && npm test
 ```
 
 The suite drives a throwaway headless browser on port 9333 with its own

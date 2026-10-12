@@ -502,13 +502,27 @@ test('a session registered before its client was known gets relabelled', async (
 
 test('arming twice does not start a second capture, and disarm is safe when idle', async () => {
   const rec = await import('../lib/recorder.mjs');
-  // No ffmpeg in the test rig's path assumptions: arm() spawns, so only the
-  // bookkeeping is asserted here, and it must be idempotent either way.
-  const first = rec.arm({ port: 9999 });
-  const second = rec.arm({ port: 9999 });
+  const started = [];
+  let child;
+  const startCapture = (id, meta, handles) => {
+    started.push({ id, meta });
+    child = {
+      exitCode: null,
+      killed: false,
+      kill() {
+        this.killed = true;
+        this.exitCode = 0;
+      },
+    };
+    handles.ffmpeg = child;
+  };
+  const first = rec.arm({ port: 9999 }, { startCapture });
+  const second = rec.arm({ port: 9999 }, { startCapture });
+  assert.equal(started.length, 1, 'arming twice should start one capture');
   assert.equal(first.armed, second.armed, 'arming twice should report the same state');
   const off = rec.disarm();
   assert.equal(off.armed, false);
+  assert.equal(child.killed, true, 'disarm should stop the owned capture');
   assert.equal(rec.disarm().armed, false, 'disarming an idle capture is not an error');
   assert.equal(rec.prewarmStatus().armed, false);
 });

@@ -1,5 +1,8 @@
 # browserctrl
 
+[![Tests](https://github.com/seahyc/browserctrl/actions/workflows/test.yml/badge.svg)](https://github.com/seahyc/browserctrl/actions/workflows/test.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Control a running Chromium browser from the terminal or an MCP client. `browserctrl` connects to browser sessions you already have open, snapshots pages into readable element references, and sends actions through the Chrome DevTools Protocol (CDP).
 
 The project is developed and tested on macOS. Chrome, Dia, Brave, Edge, Chromium, and Arc are recognized there; Dia's native dormant-tab and tab-group controls are macOS-specific. Linux CDP use with an explicitly configured debugging port is possible, but is not yet presented as a tested platform. Windows and Safari are not supported by browserctrl. Safari 27's separate official MCP integration is outside this project.
@@ -54,11 +57,23 @@ Refs are invalidated by navigation and by the next snapshot. Take another snapsh
 
 browserctrl pools commands through one long-lived daemon per browser port. That connection can retain console and network events across CLI calls. Tab claims coordinate cooperating agents: a claim expires after 15 minutes unless renewed. Claims do not isolate browser data or protect against other tools that bypass browserctrl.
 
+```mermaid
+flowchart LR
+    CLI[CLI] --> Pool[Shared daemon per browser port]
+    MCP[MCP client] --> Pool
+    Python[Python client] --> Pool
+    Pool --> CDP[Chromium CDP]
+    Pool --- Claims[Per-tab claims]
+    CDP --> Tabs[Browser tabs]
+    CDP -. optional .-> Extension[Extension APIs and tab groups]
+    Pool -. optional .-> Native[macOS Dia adapter]
+```
+
 | Capability | Upstream `pasky/chrome-cdp-skill` | `seahyc/browserctrl` |
 | --- | --- | --- |
 | Connection model | Persistent daemon per tab; 20-minute idle exit, as documented upstream | Shared daemon per browser port; long-lived while in use |
 | Coordination | Target selection by tab ID | Per-tab claims, snapshot refs, and named workflows |
-| Interfaces | CLI skill | CLI and MCP server over the same core |
+| Interfaces | CLI skill | CLI, MCP server, and persistent Python client over the same core |
 | Browser-level workflows | CDP page control | Optional unpacked extension for extension APIs and tab groups; Dia native tab controls on macOS |
 | Platform status | Upstream documents Chrome-family detection on macOS, Linux, and Windows | Developed and tested on macOS; Linux with an explicit port is possible, with compatibility results tracked separately |
 
