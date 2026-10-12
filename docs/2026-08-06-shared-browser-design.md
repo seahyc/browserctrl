@@ -36,8 +36,10 @@ needed to answer "the tab I am looking at".
 - `browserctrl name <tab> <alias>` records a human-readable alias in the same store as
   claims. `--tab checkout` then works for both sides, and the annotation
   overlay offers naming so the human can christen a tab without the terminal.
-- A tab that errors on evaluate is discarded by memory saver; `browserctrl wake` fixes
-  it, and `tabs` labels it `(suspended)` rather than hiding the reason.
+- A tab discarded by memory saver may fail evaluation. `browserctrl focus` selects
+  and revives it; `tabs` labels a suspended tab `(suspended)`. `wake` remains a
+  compatibility alias for `focus`. A failed evaluation alone does not establish
+  that the tab was discarded.
 
 Taking over a human-opened tab already works in v2 and needs nothing new: tabs
 are enumerated regardless of who opened them, and claims arbitrate.

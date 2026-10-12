@@ -3,7 +3,7 @@
 import readline from 'node:readline';
 import {connect} from '../lib/daemon.mjs';
 import {requireBrowser} from '../lib/discovery.mjs';
-import {resolveTab} from '../lib/ops.mjs';
+import {resolveTab, focus, reload} from '../lib/ops.mjs';
 import * as claims from '../lib/claims.mjs';
 import {agentId} from '../lib/env.mjs';
 
@@ -56,6 +56,12 @@ try {
         owned(target);
         result = await conn.browser('Target.closeTarget', {targetId: target});
         release(target);
+      } else if (op === 'focus' || op === 'wake') {
+        owned(target);
+        result = await focus(conn, target);
+      } else if (op === 'reload' || op === 'refresh') {
+        owned(target);
+        result = await reload(conn, target, {waitUntil: params.waitUntil || 'load', timeoutMs: timeout_ms || 30000});
       } else if (op === 'send') {
         owned(target);
         result = await conn.send(target, method, params, timeout_ms);

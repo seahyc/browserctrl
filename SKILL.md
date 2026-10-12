@@ -27,6 +27,7 @@ operation. Read the returned error and re-observe before retrying an action.
 ```sh
 browserctrl open https://example.com --browser safari
 browserctrl tabs --browser safari
+browserctrl reload <full-tab-handle> --browser safari --until load
 browserctrl read <full-tab-handle> --browser safari
 browserctrl safari call page_interactions --tab <full-tab-handle> --args '{"interactions":[{"type":"click","node":"42","purpose":"Open details"}]}' --browser safari
 ```
@@ -39,7 +40,11 @@ Release your claims at handoff. The MCP `browser_safari` tool supports `tools`,
 `call`, `status` and `stop`; common browser tools also route supported operations
 when `browser="safari"`. Unsupported operations fail explicitly. Python's
 `ChromeCDP` client, tab grouping, dormant Dia tabs, recording, uploads and raw CDP
-remain Chromium-only. Safari creates an automation session; do not assume access
+remain Chromium-only. Safari reload schedules `location.reload()` once through native JavaScript
+evaluation and observes the new document. It is an adapter helper, not a direct
+Apple MCP reload tool. Safari `focus` and its `wake` alias select the automation
+context through `switch_tab`; normal Safari window foregrounding is not
+guaranteed. Safari creates an automation session; do not assume access
 to the user's existing Safari tabs or signed-in state. Verify background behavior
 against a disposable page before offering an unattended workflow.
 
@@ -229,9 +234,9 @@ MCP tool. Add `--json` for machine-readable results.
 ## Wait for conditions, never sleep
 
 For Chromium page readiness, use `ready` after navigation or attachment. It waits
-for the current page without reloading it or selecting its tab. `wake` selects
+for the current page without reloading it or selecting its tab. `focus` selects
 the tab and may revive a discarded page; it is not a readiness check. Do not call
-`wake` for every link in a review loop.
+`focus` for every link in a review loop.
 
 ```bash
 browserctrl ready <tab> --browser dia --until domcontentloaded --timeout 15000
@@ -254,6 +259,12 @@ browserctrl wait <tab> --network-idle --timeout 30000
 `display:none` node that is already in the markup would otherwise satisfy the
 wait instantly and hand you a page that has not updated. Add `--present` when
 existence really is the condition you mean.
+
+`reload` reloads the current URL without activating the tab and waits for the
+new document. Choose `--until load`, `domcontentloaded`, `networkidle` or `none`;
+the timeout defaults to 30000 milliseconds. `ready` only observes the existing
+page. `focus` selects it without reloading. Legacy `wake` aliases `focus`, and
+`refresh` aliases `reload`; focus needs no additional approval flag.
 
 ## See what happened
 
@@ -369,7 +380,8 @@ browserctrl tabs --browser dia            # shows [claude-code (3m ago)] on clai
 browserctrl claims
 browserctrl release <tab> --browser dia   # or: browserctrl release --mine
 browserctrl close <tab> --browser dia
-browserctrl wake <tab> --browser dia      # select the tab, reviving it if discarded
+browserctrl focus <tab> --browser dia     # select the tab without reloading
+browserctrl reload <tab> --browser dia --until load --timeout 30000
 browserctrl status --browser dia          # daemon state
 browserctrl stop --browser dia            # stop the daemon for that port
 ```
@@ -405,10 +417,17 @@ codex mcp add browser -- node ~/.agents/skills/browserctrl/mcp/server.mjs
 ```
 
 Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
-`browser_read`, `browser_navigate`, `browser_wait`, `browser_act`,
+`browser_read`, `browser_navigate`, `browser_wait`, `browser_focus`,
+`browser_reload`, `browser_act`,
 `browser_screenshot`, `browser_diagnostics`, `browser_eval`,
 `browser_annotations`, `browser_marks`, `browser_annotate_mode`,
 `browser_record`, `browser_recording`, `browser_activity`.
+
+`browser_wake` and `browser_refresh` remain aliases for `browser_focus` and
+`browser_reload`. The SDK uses `ops.focus` and `ops.reload`, with `ops.wake` and
+`ops.refresh` as aliases. The Chromium Python client exposes `client.focus(tab)`
+and `client.reload(tab, wait_until='load', timeout=None)`; `client.wake` and
+`client.refresh` are aliases.
 
 `browser_act` takes one action or a `steps` array that runs in order and stops
 at the first failure. Screenshots return inline images to clients that render
@@ -523,7 +542,7 @@ fails if the two drift.
 ## Gotchas
 
 - Only loaded tabs appear in `browserctrl tabs`. A tab discarded by memory saver needs
-  `browserctrl wake` (or a click in the browser) before it responds.
+  `browserctrl focus` (or a click in the browser) before it responds.
 - Screenshots are native resolution: CSS px = image px / DPR, and `shot` prints
   the DPR.
 - `browserctrl type` inserts text at the current focus and works inside cross-origin

@@ -126,6 +126,14 @@ const TOOLS = [
       required: ['tab'],
     },
   },
+  ...['browser_focus', 'browser_wake'].map(name => ({
+    name, description: name === 'browser_wake' ? 'Compatibility alias for browser_focus.' : 'Select a tab without reloading it. Use browser_wait readyState for background readiness.',
+    inputSchema: {type: 'object', properties: {...browserProp, ...tabProp}, required: ['tab']},
+  })),
+  ...['browser_reload', 'browser_refresh'].map(name => ({
+    name, description: name === 'browser_refresh' ? 'Compatibility alias for browser_reload.' : 'Reload the current page without selecting its tab, then wait for the new document. The reload is never automatically replayed.',
+    inputSchema: {type: 'object', properties: {...browserProp, ...tabProp, until: {type: 'string', enum: ['load','domcontentloaded','networkidle','none']}, timeoutMs: {type: 'number'}}, required: ['tab']},
+  })),
   {
     name: 'browser_navigate',
     description: 'Navigate a tab and wait for real readiness (load, domcontentloaded, or networkidle). No fixed sleeps.',
@@ -360,6 +368,10 @@ async function actOnce(conn, targetId, a) {
 async function safariHandler(args, name = 'browser_safari') {
   if (args.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
   const safari = await import('../lib/safari.mjs');
+  if (name === 'browser_reload' || name === 'browser_refresh') {
+    const {safariReload} = await import('../lib/safari-reload.mjs');
+    return text(await safariReload(args.tab, {waitUntil: args.until || 'load', timeoutMs: args.timeoutMs ?? 30000}));
+  }
   if (name === 'browser_activity') return text(await safari.safariActivity(args.action, {owner: args.owner, intent: args.intent, completed: args.completed, total: args.total}));
   if (name === 'browser_safari') {
     if (args.action === 'tools') return text(await safari.safariTools());
@@ -441,6 +453,17 @@ const handlers = {
           `TEXT${snap.textTruncated ? ` (truncated from ${snap.textLength} chars)` : ''}\n${snap.text}`,
       );
     }),
+
+  browser_focus: args => withConn(args, async conn => {
+    const tab = await ops.resolveTab(conn, args.tab);
+    return text(await ops.focus(conn, tab.targetId));
+  }),
+  browser_wake: args => handlers.browser_focus(args),
+  browser_reload: args => withConn(args, async conn => {
+    const tab = await ops.resolveTab(conn, args.tab);
+    return text(await ops.reload(conn, tab.targetId, {waitUntil: args.until || 'load', timeoutMs: args.timeoutMs ?? 30000}));
+  }),
+  browser_refresh: args => handlers.browser_reload(args),
 
   browser_navigate: args =>
     withConn(args, async (conn, port) => {
