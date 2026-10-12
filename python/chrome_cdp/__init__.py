@@ -5,6 +5,7 @@ A failed request is never retried. Inspect or reconnect explicitly after errors.
 """
 
 import json
+import warnings
 import os
 import queue
 import subprocess
@@ -26,6 +27,7 @@ class ChromeCDP:
         self.timeout = timeout
         self._lock = threading.Lock()
         self._id = 0
+        self.last_warnings = []
         self._closed = False
         self._stdout_queue = queue.Queue()
         self._buffer = bytearray()
@@ -80,6 +82,9 @@ class ChromeCDP:
             except (OSError, ValueError) as error:
                 self.close()
                 raise CDPError("CDP transport failed; outcome uncertain. No replay") from error
+            self.last_warnings = [item for item in response.get("warnings", []) if isinstance(item, str)]
+            for item in self.last_warnings:
+                warnings.warn(item, RuntimeWarning, stacklevel=2)
             if "error" in response:
                 raise CDPError(response["error"])
             return response["result"]
@@ -113,6 +118,10 @@ class ChromeCDP:
         line, _, rest = self._buffer.partition(b"\n")
         self._buffer = bytearray(rest)
         return bytes(line).removesuffix(b"\r")
+
+    def activity(self, action="list", **details):
+        """Describe progress or pause/resume an owner through the shared daemon."""
+        return self.request("activity", params={"action": action, **details})
 
     def health(self):
         return self.request("health")

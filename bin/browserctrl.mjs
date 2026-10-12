@@ -11,6 +11,7 @@ import { BROWSERS } from '../lib/env.mjs';
 import { diagnose } from '../lib/diagnostics.mjs';
 import { captureConnections } from '../lib/connection-capture.mjs';
 import * as ops from '../lib/ops.mjs';
+import { waitForBackgroundReady } from '../lib/readiness.mjs';
 import * as ext from '../lib/ext.mjs';
 import {planNativeGroup} from '../lib/tab-control.mjs';
 import {getNativeTabAdapter} from '../lib/adapters/index.mjs';
@@ -43,6 +44,22 @@ function parseArgs(argv) {
 
 const out = v => console.log(typeof v === 'string' ? v : JSON.stringify(v, null, 2));
 
+function activityOutput(report, flags) {
+  if (flags.json) return out(report);
+  return out(report.agents.map(a => {
+    const progress = a.total === null ? '' : ` ${a.completed ?? 0}/${a.total}`;
+    const tabs = a.tabIds.length ? ` tabs: ${a.tabIds.map(id => id.slice(0, 8)).join(', ')}` : '';
+    return `${a.owner} [${a.paused ? 'paused' : 'enabled'}] ${a.intent || '(task not described)'}${progress}${tabs}` +
+      a.warnings.map(w => `\n  Warning: ${w}`).join('');
+  }).join('\n') || '(no agent activity)');
+}
+
+function activityDetails(flags) {
+  return {owner: flags.owner, intent: flags.intent,
+    ...(flags.completed === undefined ? {} : {completed: Number(flags.completed)}),
+    ...(flags.total === undefined ? {} : {total: Number(flags.total)})};
+}
+
 function usage() {
   return `browserctrl — browser control
 
@@ -64,6 +81,12 @@ function usage() {
     browserctrl read <full-handle> --browser safari
     Safari reads return node UIDs, not Chromium ref_N values.
 
+  Agent activity:
+    browserctrl activity --browser dia [--json]
+    browserctrl activity describe --intent 'Reviewing guide links' --completed 0 --total 91 --browser dia
+    browserctrl activity pause --owner <agent-id> --browser dia
+    browserctrl activity resume --owner <agent-id> --browser dia
+
   Read before you act:
     browserctrl read <tab> --browser dia [--json]        snapshot with ref_1..N + page text
     browserctrl text <tab> [--max-text 8000] [--match re] visible text, bounded by default
@@ -83,6 +106,8 @@ function usage() {
     browserctrl act <tab> --steps '[{"action":"scroll","dy":800},{"action":"key","key":"Enter"}]'
 
   Navigate and wait (no blind sleeps):
+    browserctrl ready <tab> --browser dia [--until load|domcontentloaded] [--timeout 15000]
+                       [--selector CSS] [--text TEXT] [--url substring] (background, no activation)
     browserctrl nav <tab> <url> [--until load|domcontentloaded|networkidle|none]
     browserctrl wait <tab> --selector ".done" | --text "Saved" | --url /success | --gone ".spinner" | --network-idle
                    [--timeout 15000]
@@ -151,6 +176,7 @@ const main = async () => {
       if (result.isError) process.exitCode = 1;
       return out(result);
     }
+    if (cmd === 'activity') return activityOutput(await safari.safariActivity(positional[1] || 'list', activityDetails(flags)), flags);
     if (cmd === 'status' || cmd === 'doctor') return out(await safari.safariStatus());
     if (cmd === 'stop') return out(await safari.safariStop());
     if (cmd === 'claims') return out(claims.list(9228));
@@ -274,6 +300,11 @@ const main = async () => {
   const port = await requireBrowser(flags);
   const conn = await connect(port);
   try {
+    if (cmd === 'activity') return activityOutput(await conn.activity(positional[1] || 'list', activityDetails(flags)), flags);
+    if (cmd === 'ready') {
+      const tab = await ops.resolveTab(conn, positional[1]);
+      return out(await waitForBackgroundReady(conn, tab.targetId, {waitUntil: flags.until || 'load', timeoutMs: Number(flags.timeout || 15000), selector: flags.selector, text: flags.text, url: flags.url}));
+    }
     if (cmd === 'status') return out(await conn.status());
     if (cmd === 'stop') {
       await conn.stop().catch(() => {});
@@ -571,6 +602,7 @@ const main = async () => {
         return out(usage());
     }
   } finally {
+    for (const warning of conn.takeWarnings()) console.error(`Warning: ${warning}`);
     conn.close();
   }
 };

@@ -13,6 +13,7 @@ import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
 import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
+import { waitForBackgroundReady } from '../lib/readiness.mjs';
 import * as ext from '../lib/ext.mjs';
 import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
@@ -135,6 +136,22 @@ const TOOLS = [
     },
   },
   {
+    name: 'browser_activity',
+    description: 'List agent activity and rapid navigation warnings, describe your task and progress, or pause/resume an owner. Pause stops subsequent browser requests without closing tabs; already sent actions can finish.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...browserProp,
+        action: {type: 'string', enum: ['list', 'describe', 'pause', 'resume']},
+        owner: {type: 'string', description: 'Owner to pause or resume. Defaults to caller.'},
+        intent: {type: 'string', maxLength: 240},
+        completed: {type: 'integer', minimum: 0},
+        total: {type: 'integer', minimum: 0},
+      },
+      required: ['action'],
+    },
+  },
+  {
     name: 'browser_wait',
     description:
       'Wait for a condition instead of sleeping: a selector appearing, a selector disappearing, text on the page, a URL fragment, network idle, or a JS predicate. Use this after any action that triggers loading.',
@@ -148,6 +165,7 @@ const TOOLS = [
         text: { type: 'string' },
         url: { type: 'string' },
         fn: { type: 'string', description: 'JS expression that must become truthy.' },
+        readyState: {type: 'string', enum: ['load','domcontentloaded'], description: 'Wait for page readiness in the background without navigation or tab activation. May combine with selector/text/url.'},
         networkIdle: { type: 'boolean' },
         present: { type: 'boolean', description: 'Match mere presence in the DOM instead of visibility. Default false: selector waits require a visible element, so a display:none placeholder does not satisfy them.' },
         timeoutMs: { type: 'number' },
@@ -298,7 +316,10 @@ async function withConn(args, fn) {
   }
   const conn = await connect(port);
   try {
-    return await fn(conn, port);
+    const result = await fn(conn, port);
+    const warnings = conn.takeWarnings();
+    if (warnings.length) result.content.push({type: 'text', text: warnings.map(w => `Warning: ${w}`).join('\n')});
+    return result;
   } finally {
     conn.close();
   }
@@ -339,6 +360,7 @@ async function actOnce(conn, targetId, a) {
 async function safariHandler(args, name = 'browser_safari') {
   if (args.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
   const safari = await import('../lib/safari.mjs');
+  if (name === 'browser_activity') return text(await safari.safariActivity(args.action, {owner: args.owner, intent: args.intent, completed: args.completed, total: args.total}));
   if (name === 'browser_safari') {
     if (args.action === 'tools') return text(await safari.safariTools());
     if (args.action === 'status') return text(await safari.safariStatus());
@@ -427,9 +449,15 @@ const handlers = {
       return text(await ops.navigate(conn, tab.targetId, args.url, { waitUntil: args.until || 'load' }));
     }),
 
+  browser_activity: args => withConn(args, async conn => text(await conn.activity(args.action, {owner: args.owner, intent: args.intent, completed: args.completed, total: args.total}))),
+
   browser_wait: args =>
     withConn(args, async conn => {
       const tab = await ops.resolveTab(conn, args.tab);
+      if (args.readyState) {
+        if (args.networkIdle || args.gone || args.fn) throw new Error('readyState supports selector, text and url. Use a separate browser_wait for other conditions.');
+        return text(await waitForBackgroundReady(conn, tab.targetId, {waitUntil: args.readyState, timeoutMs: args.timeoutMs ?? 15000, selector: args.selector, text: args.text, url: args.url}));
+      }
       return text(
         await ops.waitFor(conn, tab.targetId, {
           selector: args.selector, gone: args.gone, text: args.text, url: args.url,

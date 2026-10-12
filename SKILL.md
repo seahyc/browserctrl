@@ -55,7 +55,10 @@ and can trigger a fresh debugging approval for each connection.
 2. Choose one unique identity for this agent and keep it across all calls:
    `CDP_AGENT_ID` for CLI/Python, or `agentId` for MCP. Give sibling agents
    different identities, even when they share one MCP server.
-3. Open a background tab per agent and keep its returned tab ID. For an existing
+3. Before bulk browsing, describe the work and its progress with `activity describe`.
+   Read [activity and background readiness](references/activity.md) for status,
+   pause/resume controls, and readiness checks. Open a background tab per agent
+   and keep its returned tab ID. For an existing
    user-designated tab, read it first and respect its claim. See
    [Tabs and claims](#tabs-and-claims) for ownership and handoffs.
 4. Keep the shared daemon running between actions and at task completion.
@@ -225,6 +228,19 @@ MCP tool. Add `--json` for machine-readable results.
 
 ## Wait for conditions, never sleep
 
+For Chromium page readiness, use `ready` after navigation or attachment. It waits
+for the current page without reloading it or selecting its tab. `wake` selects
+the tab and may revive a discarded page; it is not a readiness check. Do not call
+`wake` for every link in a review loop.
+
+```bash
+browserctrl ready <tab> --browser dia --until domcontentloaded --timeout 15000
+browserctrl ready <tab> --browser dia --selector ".results" --text "Results"
+```
+
+MCP `browser_wait` accepts `readyState: "load"` or `"domcontentloaded"`. Existing
+condition waits remain available:
+
 ```bash
 browserctrl nav <tab> https://example.com --until networkidle   # load | domcontentloaded | networkidle | none
 browserctrl wait <tab> --selector ".results"
@@ -353,7 +369,7 @@ browserctrl tabs --browser dia            # shows [claude-code (3m ago)] on clai
 browserctrl claims
 browserctrl release <tab> --browser dia   # or: browserctrl release --mine
 browserctrl close <tab> --browser dia
-browserctrl wake <tab> --browser dia      # revive a tab suspended by memory saver
+browserctrl wake <tab> --browser dia      # select the tab, reviving it if discarded
 browserctrl status --browser dia          # daemon state
 browserctrl stop --browser dia            # stop the daemon for that port
 ```
@@ -392,7 +408,7 @@ Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
 `browser_read`, `browser_navigate`, `browser_wait`, `browser_act`,
 `browser_screenshot`, `browser_diagnostics`, `browser_eval`,
 `browser_annotations`, `browser_marks`, `browser_annotate_mode`,
-`browser_record`, `browser_recording`.
+`browser_record`, `browser_recording`, `browser_activity`.
 
 `browser_act` takes one action or a `steps` array that runs in order and stops
 at the first failure. Screenshots return inline images to clients that render
@@ -475,7 +491,9 @@ background screenshot stalls, use `browserctrl shot <tab> output.png
 emulates page focus through CDP, then disables it after capture. It does not
 activate a browser tab or an OS window, but the page can observe focus events.
 Use it only when overriding that tab's focus emulation is acceptable. A cleanup
-failure is reported; inspect the tab before continuing. Safari uses Apple's
+failure is reported; inspect the tab before continuing. Focus emulation is not
+a guarantee: Windows CI needed an active owned target for reliable capture.
+Safari uses Apple's
 separate screenshot implementation and does not support this option.
 
 ## Tests

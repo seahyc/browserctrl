@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {runQueuedInput} from '../lib/input-queue.mjs';
+import {createActivityMonitor} from '../lib/activity.mjs';
+
+test('input queued before a pause is rejected at execution and never replayed', async t => {
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'browserctrl-input-pause-'));
+  t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  const activity=createActivityMonitor(9333,{file:path.join(directory,'activity.json')});
+  const queues=new Map();
+  let finish,entered;
+  const started=new Promise(resolve=>{entered=resolve;});
+  const gate=new Promise(resolve=>{finish=resolve;});
+  const sent=[];
+  const allowed=()=>activity.assertRunning('reviewer');
+  const first=runQueuedInput(queues,'tab',allowed,async()=>{sent.push('first');entered();await gate;});
+  await started;
+  const queued=runQueuedInput(queues,'tab',allowed,()=>sent.push('queued'));
+  const rejected=assert.rejects(queued,{code:'AGENT_PAUSED'});
+  activity.control('pause',{owner:'reviewer'});
+  finish();
+  await first;
+  await rejected;
+  assert.deepEqual(sent,['first']);
+  assert.equal(queues.size,0);
+  activity.control('resume',{owner:'reviewer'});
+  await runQueuedInput(queues,'tab',allowed,()=>sent.push('new action'));
+  assert.deepEqual(sent,['first','new action']);
+});

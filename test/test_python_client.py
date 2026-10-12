@@ -74,6 +74,23 @@ class ClientTests(unittest.TestCase):
         finally:
             fake.finish()
 
+    def test_activity_uses_sidecar_and_reports_navigation_warnings(self):
+        fake = FakeProcess([{'id': 1, 'result': {'ok': True}},
+                            {'id': 2, 'result': {'agents': []},
+                             'warnings': ['Agent reviewer: 5 navigation actions']}])
+        try:
+            with patch.object(client.subprocess, 'Popen', return_value=fake):
+                sdk = client.ChromeCDP(browser='dia')
+                with self.assertWarnsRegex(RuntimeWarning, 'reviewer'):
+                    self.assertEqual(sdk.activity('describe', intent='Review links', completed=1, total=91), {'agents': []})
+                self.assertEqual(sdk.last_warnings, ['Agent reviewer: 5 navigation actions'])
+                rows = [json.loads(row) for row in fake.stdin.getvalue().splitlines()]
+                self.assertEqual(rows[-1]['op'], 'activity')
+                self.assertEqual(rows[-1]['params']['intent'], 'Review links')
+                sdk.close()
+        finally:
+            fake.finish()
+
     def test_timeout_does_not_replay(self):
         fake = FakeProcess([{'id': 1, 'result': {'ok': True}}])
         try:

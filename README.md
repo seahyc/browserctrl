@@ -77,7 +77,7 @@ The CLI, MCP server, and Python client share a long-lived connection for each br
 
 browserctrl supports Chromium browsers on macOS, Linux and Windows. It recognizes Chrome, Dia, Brave, Edge, Chromium and Arc where installed. Dia also has optional native controls for dormant tabs (tabs not shown in its ordinary tab list) and tab groups. An optional browser extension enables tab groups and other browser-level features that the page-control protocol does not provide; ordinary page control does not require the extension. Loading the extension and granting its requested permissions is a separate setup step.
 
-Platform-specific details and test evidence are in [compatibility](docs/compatibility.md). Windows uses named pipes and a PowerShell lock adapter; it does not require AppleScript. An optional screenshot setting can generate background Chromium frames without activating a window. Automatic browser relaunch, screen video, and Dia's native dormant-tab controls remain macOS-only.
+Platform-specific details and test evidence are in [compatibility](docs/compatibility.md). Windows uses named pipes and a PowerShell lock adapter; it does not require AppleScript. An optional screenshot setting emulates page focus without activating a window. It does not guarantee background capture: Windows CI screenshots required selecting the owned test tab. Automatic browser relaunch, screen video, and Dia's native dormant-tab controls remain macOS-only.
 
 ### Safari
 
@@ -113,3 +113,9 @@ For complete command usage, run `node bin/browserctrl.mjs help` (or `browserctrl
 ## License
 
 browserctrl and the upstream project are MIT-licensed. See [LICENSE](LICENSE) for the retained copyright and license notices.
+
+## Know what each agent is doing
+
+Agents can describe their task and progress. `browserctrl activity --browser dia` shows who owns which tabs, what they are doing, and warnings about rapid navigation or tab selection. To pause a browser task, use `browserctrl activity pause --owner AGENT_ID --browser dia`; use `resume` to let it continue. A pause preserves tabs and ownership, and does not undo an action already sent. These controls also work through MCP and the Safari adapter.
+
+`browserctrl ready TAB_ID --browser dia` checks whether a page has loaded without selecting or reloading it. `wake` selects a tab; it is useful when selection is intended, but should not be part of every background readiness check. See [agent activity](references/activity.md).

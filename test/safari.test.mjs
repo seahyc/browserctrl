@@ -27,7 +27,7 @@ async function startFake(t, { claimApi = null, callTool = null } = {}) {
     async callTool(name, args) { return callTool ? callTool(name, args) : { content: [{ type: 'text', text: name }] }; },
     async close() {},
   };
-  const daemon = await createSafariDaemon({ socketPath, lockPath: `${socketPath}.lock`, clientFactory: async () => client, platform: 'darwin', claimApi: claims });
+  const daemon = await createSafariDaemon({ socketPath, lockPath: `${socketPath}.lock`, clientFactory: async () => client, platform: 'darwin', claimApi: claims, activityFile: path.join(dir, 'activity.json') });
   t.after(async () => {
     await daemon.shutdown();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -215,4 +215,31 @@ test('daemon refuses shutdown during an in-flight browser call', async t => {
   assert.equal(busy.error.code, 'DAEMON_BUSY');
   finishCall();
   await pending;
+});
+
+
+test('Safari pause blocks queued actions but leaves other owners running', async t => {
+  const events = [];
+  let release;
+  let started;
+  const entered = new Promise(resolve => { started = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const {socketPath} = await startFake(t, {claimApi: {claim() {}, list() {return [];}}, callTool: async (name, args) => {
+    events.push(name);
+    if (name === 'get_page_content' && args.marker === 'first') {started(); await gate;}
+    return {content: []};
+  }});
+  const first = ipc(socketPath, {op:'call',name:'get_page_content',args:{marker:'first'},tab:'owned',owner:'reviewer'});
+  await entered;
+  const queued = ipc(socketPath, {op:'call',name:'page_info',args:{},tab:'owned',owner:'reviewer'});
+  const paused = await ipc(socketPath, {op:'activity',action:'pause',activityOwner:'reviewer',owner:'human-controller'});
+  assert.equal(paused.result.agents[0].paused,true);
+  release();
+  assert.ok((await first).result);
+  assert.equal((await queued).error.code,'AGENT_PAUSED');
+  assert.ok(!(events.includes('page_info')));
+  const other = await ipc(socketPath, {op:'call',name:'page_info',args:{},tab:'other',owner:'other-owner'});
+  assert.ok(other.result);
+  await ipc(socketPath, {op:'activity',action:'resume',activityOwner:'reviewer',owner:'human-controller'});
+  assert.ok((await ipc(socketPath, {op:'call',name:'page_info',args:{},tab:'owned',owner:'reviewer'})).result);
 });
