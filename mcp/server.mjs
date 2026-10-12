@@ -13,6 +13,8 @@ import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
 import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
+import { listRecipes, loadRecipe, runRecipe } from '../lib/recipes.mjs';
+import { createStore } from '../lib/exemplars.mjs';
 import { waitForBackgroundReady } from '../lib/readiness.mjs';
 import * as ext from '../lib/ext.mjs';
 import * as claims from '../lib/claims.mjs';
@@ -230,6 +232,24 @@ const TOOLS = [
       type: 'object',
       properties: { ...browserProp, ...tabProp, limit: { type: 'number' }, failedOnly: { type: 'boolean' }, clear: { type: 'boolean' } },
       required: ['tab'],
+    },
+  },
+  {
+    name: 'browser_api',
+    description:
+      "Chromium only. Call a site's own API instead of driving its UI. action=list shows saved recipes; action=call runs one (name like shopee.sg/orders, params override its defaults) inside a tab on that site and returns structured items in seconds. Recipes with tab=handoff (e.g. Taobao) need a tab the human opened. action=endpoints lists fetch/XHR endpoints captured from tabs you drove (host optional); action=inspect returns full captured exemplars (headers, tokens, bodies) to write a new recipe from. Recipes live in ~/.config/browserctrl/recipes; see references/recipes.md.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...browserProp,
+        action: { type: 'string', enum: ['list', 'call', 'endpoints', 'inspect'] },
+        name: { type: 'string', description: 'Recipe for action=call, e.g. shopee.sg/orders' },
+        params: { type: 'object', description: 'Overrides for the recipe params' },
+        raw: { type: 'boolean', description: 'Return unmapped items' },
+        host: { type: 'string', description: 'Host for endpoints/inspect, e.g. shopee.sg' },
+        match: { type: 'string', description: 'Template substring for inspect' },
+      },
+      required: ['action'],
     },
   },
   {
@@ -531,6 +551,14 @@ const handlers = {
       if (args.failedOnly) return text(await ops.failedRequests(conn, tab.targetId, { limit: args.limit ?? 50 }));
       return text(await ops.diagnostics(conn, tab.targetId, { limit: args.limit ?? 50, clear: Boolean(args.clear) }));
     }),
+
+  browser_api: async args => {
+    if (args.action === 'list') return text(listRecipes());
+    if (args.action === 'endpoints') { const store = createStore(); return text(args.host ? store.catalog(args.host) : store.hosts()); }
+    if (args.action === 'inspect') return text(createStore().exemplars(args.host, args.match));
+    if (args.action !== 'call') throw new Error('action must be list, call, endpoints or inspect');
+    return withConn(args, async conn => text(await runRecipe(conn, loadRecipe(args.name), args.params || {}, { raw: Boolean(args.raw) })));
+  },
 
   browser_annotations: async args => {
     if (args.clear) return text({ cleared: annotations.clear() });

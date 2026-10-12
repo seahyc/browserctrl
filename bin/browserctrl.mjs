@@ -20,6 +20,8 @@ import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
+import { listRecipes, loadRecipe, runRecipe } from '../lib/recipes.mjs';
+import { createStore } from '../lib/exemplars.mjs';
 
 const MUTATING = new Set([
   'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act',
@@ -73,6 +75,12 @@ function usage() {
     browserctrl native-group --ids UUIDs --group-id N --browser dia [--dry-run] [--allow-focus]
     browserctrl doctor --browser dia                     read-only connection diagnosis (JSON)
     browserctrl doctor --browser dia --watch-seconds 20   passive OS connection capture
+
+  API recipes: call a site's own API from a tab on that site (see references/recipes.md):
+    browserctrl api list                                  saved recipes
+    browserctrl api call shopee.sg/orders --browser dia   run one; key=value args override params; --raw skips output mapping
+    browserctrl api endpoints [host]                      fetch/XHR endpoints captured from attached tabs
+    browserctrl api inspect <host> [match]                full captured exemplars (headers, tokens, bodies)
 
   Safari 27 on macOS, through Apple's MCP interface:
     browserctrl safari tools --browser safari
@@ -245,6 +253,18 @@ const main = async () => {
   }
 
   if (cmd === 'launch') return out(await launch(positional[1]));
+  if (cmd === 'api' && positional[1] !== 'call') {
+    const sub = positional[1] || 'list';
+    if (sub === 'list') return out(flags.json ? listRecipes() : listRecipes().map(r => `${r.name.padEnd(28)} ${r.error || `${r.kind || 'read'}${r.tab === 'handoff' ? ', handoff tab' : ''}  ${r.description || ''}`}`).join('\n') || '(no recipes yet)');
+    const store = createStore();
+    if (sub === 'endpoints') {
+      if (!positional[2]) return out(store.hosts().join('\n') || '(nothing captured yet)');
+      const rows = store.catalog(positional[2]);
+      return out(flags.json ? rows : rows.map(r => `${String(r.count).padStart(4)}  ${r.lastSeen.slice(0, 16)}  ${r.status ?? '-'}  ${r.template}`).join('\n') || '(nothing captured for this host)');
+    }
+    if (sub === 'inspect') return out(store.exemplars(positional[2], positional[3]));
+    throw new Error('Usage: browserctrl api list | endpoints [host] | inspect <host> [template-substring] | call <site/name> [key=value ...] [--raw] --browser B');
+  }
 
   if (cmd === 'claims') {
     const port = flags.browser || flags.port ? await requireBrowser(flags) : null;
@@ -440,6 +460,12 @@ const main = async () => {
         return out(await ext.evaluate(port, expr));
       }
       throw new Error('Usage: browserctrl ext [info] | apis | api <chrome.path> [jsonArgs] | group --url a,b | outline | undo-close | eval <expr>');
+    }
+    if (cmd === 'api') {
+      const params = Object.fromEntries(positional.slice(3).map(kv => [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)]));
+      const res = await runRecipe(conn, loadRecipe(positional[2]), params, { raw: Boolean(flags.raw) });
+      console.error(`[${res.recipe}] ${res.count} items, ${res.calls} calls, ${res.ms} ms (tab ${res.tab})`);
+      return out(res.items);
     }
     if (cmd === 'open') {
       const res = await ops.newTab(conn, positional[1], { anonymous: Boolean(flags.anonymous) });

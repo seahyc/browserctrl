@@ -198,6 +198,31 @@ screen video, and a frontmost-app sample each second so time spent outside the
 browser is still legible. A mark at 0:42 comes back as "click on button
 'Confirm and apply' [data-testid=wb-confirm]", not as a frame number.
 
+## Use a site's API before its UI
+
+For a data task on a site (order history, inbox, search results), check for a
+recipe before driving the page. A recipe calls the site's own API inside a tab
+on that site and returns structured items in seconds.
+
+```sh
+browserctrl api list                                    # saved recipes
+browserctrl api call shopee.sg/orders --browser dia     # key=value args override params
+```
+
+The daemon records fetch/XHR traffic from tabs you drive. When no recipe fits
+and the task is worth repeating, do it through the UI once, then look at what the
+page called and write a recipe from it:
+
+```sh
+browserctrl api endpoints shopee.sg                     # endpoint templates, counts, last seen
+browserctrl api inspect shopee.sg get_all_order         # full exemplars: headers, tokens, bodies
+```
+
+Before writing or fixing a recipe, read [the recipe format](references/recipes.md).
+Save a recipe only after `api call` returns the same facts the UI showed, and
+record that in its `verified` field. Recipes whose `kind` is `write` change data:
+follow the user's approval rules before calling one.
+
 ## Read before you act
 
 `browserctrl read` snapshots the page into `ref_1..ref_N` with roles, accessible names
