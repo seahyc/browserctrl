@@ -88,7 +88,7 @@ function usage() {
                    [--timeout 15000]
 
   See what happened:
-    browserctrl shot <tab> [file] [--full] [--ref ref_3] [--selector css]
+    browserctrl shot <tab> [file] [--full] [--emulate-focus] [--ref ref_3] [--selector css]
     browserctrl console <tab> [--limit 50] [--clear]
     browserctrl network <tab> [--failed]
     browserctrl cookies <tab>
@@ -518,8 +518,8 @@ const main = async () => {
         return out(await ops.scrollTo(conn, targetId, target));
       case 'shot': {
         const res = await ops.screenshot(conn, targetId, {
-          path: positional[2] || '/tmp/cdp-shot.png',
-          fullPage: Boolean(flags.full),
+          path: positional[2],
+          fullPage: Boolean(flags.full), emulateFocus: Boolean(flags['emulate-focus']),
           ref: flags.ref,
           selector: flags.selector,
         });

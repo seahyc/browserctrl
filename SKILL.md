@@ -467,6 +467,17 @@ before terminating it. Unverifiable ownership fails without killing a process.
 Timed-out or interrupted actions are never replayed. Use `reconnect()` and make a
 fresh observation before deciding whether an action needs repeating.
 
+## Background screenshot frames
+
+Chromium can stop generating frames for background tabs on Windows. If a
+background screenshot stalls, use `browserctrl shot <tab> output.png
+--emulate-focus` or MCP `browser_screenshot emulateFocus=true`. This temporarily
+emulates page focus through CDP, then disables it after capture. It does not
+activate a browser tab or an OS window, but the page can observe focus events.
+Use it only when overriding that tab's focus emulation is acceptable. A cleanup
+failure is reported; inspect the tab before continuing. Safari uses Apple's
+separate screenshot implementation and does not support this option.
+
 ## Tests
 
 ```bash

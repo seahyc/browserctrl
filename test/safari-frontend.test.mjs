@@ -14,3 +14,11 @@ test('Safari batch API requires native interactions rather than pretending CDP c
   assert.throws(()=>safariMCP('browser_act',{tab:'a',steps:[{action:'click'}]}),/Apple interaction objects/);
   assert.throws(()=>safariMCP('browser_wait',{tab:'a'}),/does not support/);
 });
+
+test('Safari refuses unsupported click semantics before executing an action',()=>{
+  for (const options of [{button:'right'},{count:2},{modifiers:['ctrl']},{steal:true}]) {
+    assert.throws(()=>safariCLI('click',['click','tab'],{ref:'42',...options}),/does not support|do not support/);
+  }
+  assert.throws(()=>safariCLI('click',['click','tab'],{}),/requires a node UID/);
+  assert.throws(()=>safariMCP('browser_diagnostics',{tab:'a'}),/does not support/);
+});

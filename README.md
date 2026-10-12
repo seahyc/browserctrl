@@ -77,7 +77,7 @@ The CLI, MCP server, and Python client share a long-lived connection for each br
 
 browserctrl supports Chromium browsers on macOS, Linux and Windows. It recognizes Chrome, Dia, Brave, Edge, Chromium and Arc where installed. Dia also has optional native controls for dormant tabs (tabs not shown in its ordinary tab list) and tab groups. An optional browser extension enables tab groups and other browser-level features that the page-control protocol does not provide; ordinary page control does not require the extension. Loading the extension and granting its requested permissions is a separate setup step.
 
-Platform-specific details and test evidence are in [compatibility](docs/compatibility.md). Windows uses named pipes and a PowerShell lock adapter; it does not require AppleScript. Automatic browser relaunch, screen video, and Dia's native dormant-tab controls remain macOS-only.
+Platform-specific details and test evidence are in [compatibility](docs/compatibility.md). Windows uses named pipes and a PowerShell lock adapter; it does not require AppleScript. An optional screenshot setting can generate background Chromium frames without activating a window. Automatic browser relaunch, screen video, and Dia's native dormant-tab controls remain macOS-only.
 
 ### Safari
 

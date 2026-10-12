@@ -6,6 +6,8 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import fs from 'fs';
+import os from 'node:os';
+import path from 'node:path';
 import { safariMCP } from '../lib/safari-frontend.mjs';
 import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
@@ -41,11 +43,11 @@ const browserProp = {
 const tabProp = {
   tab: {
     type: 'string',
-    description: 'Tab id from browser_tabs (8-char prefix), or a substring of the tab URL or title.',
+    description: 'Chromium: tab id from browser_tabs, its 8-character prefix, or a title/URL substring. Safari: the full native tab handle only.',
   },
 };
 const targetProps = {
-  ref: { type: 'string', description: 'Element ref from browser_read, e.g. "ref_3". Preferred over selectors.' },
+  ref: { type: 'string', description: 'Chromium snapshot ref, e.g. ref_3, or a Safari node UID from its own content read. Never mix the two.' },
   selector: { type: 'string', description: 'CSS selector, when no ref is available.' },
   x: { type: 'number', description: 'CSS pixel x, last resort.' },
   y: { type: 'number', description: 'CSS pixel y, last resort.' },
@@ -67,7 +69,7 @@ const TOOLS = [
   },
   {
     name: 'browser_open',
-    description: 'Open a new tab at a URL and wait for it to load. Optionally use a clean temporary session with no profile cookies or storage. Returns the new tab id.',
+    description: 'Open a new tab at a URL and wait for it to load. Optionally use a clean temporary Chromium session with no profile cookies or storage. Safari uses its separate automation session. Returns the new tab id.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -111,7 +113,7 @@ const TOOLS = [
   {
     name: 'browser_read',
     description:
-      'Snapshot a page: every interactive element as ref_1..ref_N with role, accessible name and test id, plus the visible text. Read before acting, then pass refs to browser_act. Refs are invalidated by navigation and the tools say so rather than clicking the wrong element.',
+      'Safari returns Apple content with node UIDs. Chromium snapshots include every interactive element as ref_1..ref_N with role, accessible name and test id, plus the visible text. Read before acting, then pass refs to browser_act. Refs are invalidated by navigation and the tools say so rather than clicking the wrong element.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -191,13 +193,13 @@ const TOOLS = [
     description: 'Capture the viewport, the full page, or one element by ref or selector. Always writes a PNG and returns its path; inline image data is returned to clients that render it.',
     inputSchema: {
       type: 'object',
-      properties: { ...browserProp, ...tabProp, full: { type: 'boolean' }, ref: { type: 'string' }, selector: { type: 'string' }, path: { type: 'string' } },
+      properties: { ...browserProp, ...tabProp, full: { type: 'boolean' }, ref: { type: 'string' }, selector: { type: 'string' }, path: { type: 'string' }, emulateFocus: { type: 'boolean', description: 'Chromium only: temporarily emulate page focus to generate background frames without activating an OS window. Disabled again after capture.' } },
       required: ['tab'],
     },
   },
   {
     name: 'browser_diagnostics',
-    description: 'Console output, uncaught JS errors, and the network log for a tab, buffered since the daemon attached. Use failedOnly for 4xx/5xx and failed requests.',
+    description: 'Chromium only. For Safari use browser_safari with browser_console_messages and list_network_requests. Console output, uncaught JS errors, and the network log for a tab, buffered since the daemon attached. Use failedOnly for 4xx/5xx and failed requests.',
     inputSchema: {
       type: 'object',
       properties: { ...browserProp, ...tabProp, limit: { type: 'number' }, failedOnly: { type: 'boolean' }, clear: { type: 'boolean' } },
@@ -457,8 +459,8 @@ const handlers = {
     withConn(args, async conn => {
       const tab = await ops.resolveTab(conn, args.tab);
       const shot = await ops.screenshot(conn, tab.targetId, {
-        path: args.path || `/tmp/cdp-shot-${tab.id}.png`,
-        fullPage: Boolean(args.full),
+        path: args.path || path.join(os.tmpdir(), `cdp-shot-${tab.id}.png`),
+        fullPage: Boolean(args.full), emulateFocus: Boolean(args.emulateFocus),
         ref: args.ref,
         selector: args.selector,
       });

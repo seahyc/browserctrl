@@ -139,16 +139,16 @@ t('navigate waits for readiness instead of sleeping', async () => {
 });
 
 t('screenshot writes a real png, and element scope is smaller than the page', async () => {
-  const page = await ops.screenshot(conn, tabId, { path: path.join(os.tmpdir(), 'cdp-test-page.png') });
+  const page = await ops.screenshot(conn, tabId, { emulateFocus: process.platform === 'win32', path: path.join(os.tmpdir(), 'cdp-test-page.png') });
   const header = fs.readFileSync(page.path).subarray(0, 8);
   assert.deepEqual([...header], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 'PNG magic bytes');
-  const el = await ops.screenshot(conn, tabId, { selector: '#intro', path: path.join(os.tmpdir(), 'cdp-test-el.png') });
+  const el = await ops.screenshot(conn, tabId, { emulateFocus: process.platform === 'win32', selector: '#intro', path: path.join(os.tmpdir(), 'cdp-test-el.png') });
   assert.ok(el.bytes < page.bytes, 'element shot should be smaller than the viewport shot');
 });
 
 t('full-page screenshot captures below the fold', async () => {
-  const viewport = await ops.screenshot(conn, tabId, { path: path.join(os.tmpdir(), 'cdp-test-vp.png') });
-  const full = await ops.screenshot(conn, tabId, { fullPage: true, path: path.join(os.tmpdir(), 'cdp-test-full.png') });
+  const viewport = await ops.screenshot(conn, tabId, { emulateFocus: process.platform === 'win32', path: path.join(os.tmpdir(), 'cdp-test-vp.png') });
+  const full = await ops.screenshot(conn, tabId, { emulateFocus: process.platform === 'win32', fullPage: true, path: path.join(os.tmpdir(), 'cdp-test-full.png') });
   assert.ok(full.bytes > viewport.bytes, 'full page should capture more than the viewport');
 });
 
