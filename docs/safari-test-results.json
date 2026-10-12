@@ -4,12 +4,66 @@
   "backend": "Official safaridriver --mcp through browserctrl",
   "scope": "Owned local HTTP fixture in a separate automation session",
   "checks": [
-    { "operation": "create_tab and get_page_content", "result": "passed" },
-    { "operation": "type and click with Finder selected", "result": "passed", "observed": { "input": "background-test", "clickCount": 1, "documentHasFocus": false } },
-    { "operation": "type and click with normal Safari window selected", "result": "passed", "observed": { "input": "other-safari-window", "clickCount": 2, "documentHasFocus": false } },
-    { "operation": "another agent reads an owned tab", "result": "correctly refused before page access" },
-    { "operation": "background screenshot", "result": "file returned but image was dark", "limitation": "Screenshot rendering is not verified" },
-    { "operation": "close owned fixture tab and stop own automation daemon", "result": "passed" }
+    {
+      "operation": "create_tab and get_page_content",
+      "result": "passed"
+    },
+    {
+      "operation": "type and click with Finder selected",
+      "result": "passed",
+      "observed": {
+        "input": "background-test",
+        "clickCount": 1,
+        "documentHasFocus": false
+      }
+    },
+    {
+      "operation": "type and click with normal Safari window selected",
+      "result": "passed",
+      "observed": {
+        "input": "other-safari-window",
+        "clickCount": 2,
+        "documentHasFocus": false
+      }
+    },
+    {
+      "operation": "another agent reads an owned tab",
+      "result": "correctly refused before page access"
+    },
+    {
+      "operation": "shared MCP open, read, fill, click, evaluate, ownership refusal and cleanup",
+      "result": "passed",
+      "observed": {
+        "input": "shared-MCP-test",
+        "clickCount": 1,
+        "documentHasFocus": false
+      }
+    },
+    {
+      "operation": "two agents act on separate Safari tabs concurrently through one MCP server",
+      "result": "passed",
+      "observed": [
+        {
+          "input": "safari-parallel-a",
+          "clickCount": 1,
+          "documentHasFocus": false
+        },
+        {
+          "input": "safari-parallel-b",
+          "clickCount": 1,
+          "documentHasFocus": false
+        }
+      ]
+    },
+    {
+      "operation": "background screenshot",
+      "result": "file returned but image was dark",
+      "limitation": "Screenshot rendering is not verified"
+    },
+    {
+      "operation": "close owned fixture tab and stop own automation daemon",
+      "result": "passed"
+    }
   ],
   "limits": "This verifies the listed operations on this Mac, not all Safari workflows or access to a normal signed-in Safari profile."
 }

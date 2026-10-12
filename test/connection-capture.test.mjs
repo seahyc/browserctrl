@@ -9,9 +9,11 @@ test('bounded capture records safe observer results and identifies unpooled clie
  try {
  const result = await captureConnections(9223, {seconds: 0.01, directory, observe: async () => ({available:true,connections:[{pid:123,sharedDaemon:false},{pid:456,sharedDaemon:true}],warnings:[]})});
  assert.deepEqual(result.unpooledClientPids,[123]);
- assert.equal(result.snapshots,1);
+ assert.ok(result.snapshots >= 1);
  if (process.platform !== 'win32') assert.equal(fs.statSync(result.file).mode & 0o777,0o600);
- assert.equal(JSON.parse(fs.readFileSync(result.file,'utf8')).port,9223);
+ const rows = fs.readFileSync(result.file,'utf8').trim().split('\n').map(line => JSON.parse(line));
+ assert.equal(rows.length,result.snapshots);
+ assert.ok(rows.every(row => row.port === 9223));
  await assert.rejects(captureConnections(9223,{seconds:300,directory}),/at most 60/);
  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
 });
