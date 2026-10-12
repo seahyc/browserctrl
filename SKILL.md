@@ -1,6 +1,6 @@
 ---
 name: browserctrl
-description: Control Chromium browsers (Chrome, Dia, Brave, Edge, Arc) and Safari 27+ on macOS, including dormant Dia tabs on macOS, from the terminal or as MCP tools - list and pick a browser, snapshot a page into stable element refs, click/fill/select/upload by ref, wait for real conditions instead of sleeping, screenshot, and read console and network logs. Use for browser QA, dogfooding a review app, or any task that needs a real logged-in browser session.
+description: Control explicitly selected Chromium browsers or Safari 27+ from the terminal or MCP. Use for page automation, browser QA, or tab organization; macOS Dia supports dormant tabs. Safari uses Apple's separate automation session.
 ---
 
 # browserctrl

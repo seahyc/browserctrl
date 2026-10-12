@@ -13,7 +13,7 @@ browserctrl grew from [Petr Baudis's original `chrome-cdp-skill`](https://github
 
 Copy and paste this request into your coding agent:
 
-> Please set up browserctrl from https://github.com/seahyc/browserctrl so I can use it with a browser I explicitly choose. First check the repository instructions, my operating system, and whether you support a command-line tool, MCP servers, or installable agent skills. Pick the simplest supported option and explain what you chose. Prefer a local checkout and local dependencies. Do not use administrator access or make global configuration changes without asking me first. Do not launch, restart, or connect to a signed-in browser; change browser settings; load an extension; or grant browser permissions without asking first. Show me the exact setup steps and how to undo them. If this agent cannot install or use browser skills, set up the CLI or explain how I can run it myself.
+> Please install browserctrl from https://github.com/seahyc/browserctrl. Read its instructions, check my operating system and Node.js version, and set up whichever interface my agent supports: CLI, MCP or an agent skill. Use a local checkout and tell me what you configured. Ask which browser I want to use, and get my permission before enabling browser access or restarting it. Verify setup on a disposable test page, then show me how to use and uninstall it.
 
 For a manual CLI setup, install [Node.js 22 or newer](https://nodejs.org/), then run:
 

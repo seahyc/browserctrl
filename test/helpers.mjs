@@ -64,6 +64,7 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
     bin,
     [
       '--headless=new',
+      ...(process.platform === 'win32' ? ['--disable-gpu'] : []),
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${userDataDir}`,
       '--no-first-run',
@@ -81,8 +82,7 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
   const signalBrowserGroup = signal => {
     try {
       if (process.platform !== 'win32') process.kill(-child.pid, signal);
-      else if (signal === 'SIGKILL') execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {stdio: 'ignore', windowsHide: true});
-      else child.kill(signal);
+      else execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {stdio: 'ignore', windowsHide: true});
     } catch {
       // The process group may already have exited.
     }
