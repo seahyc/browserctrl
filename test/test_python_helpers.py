@@ -13,6 +13,14 @@ from chrome_cdp.helpers import helpers_for, init_workspace, load_helper
 
 
 class HelperWorkspaceTests(unittest.TestCase):
+    def symlink_or_skip_if_unsupported(self, link, target, **kwargs):
+        try:
+            link.symlink_to(target, **kwargs)
+        except OSError as error:
+            if os.name == "nt" and getattr(error, "winerror", None) == 1314:
+                self.skipTest("Windows did not grant the symlink privilege required by this test")
+            raise
+
     def test_init_workspace_is_the_only_api_that_creates_directories(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "workspace"
@@ -94,7 +102,7 @@ class HelperWorkspaceTests(unittest.TestCase):
             root = init_workspace(Path(temporary) / "workspace")
             outside = Path(temporary) / "outside.py"
             outside.write_text("VALUE = 'outside'\n", encoding="utf-8")
-            (root / "task_helpers" / "linked.py").symlink_to(outside)
+            self.symlink_or_skip_if_unsupported(root / "task_helpers" / "linked.py", outside)
 
             with self.assertRaises(ValueError):
                 load_helper("linked", root)
@@ -107,7 +115,9 @@ class HelperWorkspaceTests(unittest.TestCase):
             outside = base / "outside"
             outside.mkdir()
             (outside / "linked.py").write_text("VALUE = 'outside'\n", encoding="utf-8")
-            (root / "task_helpers").symlink_to(outside, target_is_directory=True)
+            self.symlink_or_skip_if_unsupported(
+                root / "task_helpers", outside, target_is_directory=True
+            )
 
             with self.assertRaises(ValueError):
                 load_helper("linked", root)

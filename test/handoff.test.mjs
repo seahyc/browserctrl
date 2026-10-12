@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 // Human-to-agent handoff: tab identity, marks, annotations, recording and the
 // resolution of video marks back to real events.
 import { test, before, after } from 'node:test';
@@ -196,14 +197,14 @@ t('a mark with nothing near it says so rather than inventing a link', async () =
 // ------------------------------------------------------------ extension -----
 
 test('the extension does not fork the overlay', () => {
-  const here = path.dirname(new URL(import.meta.url).pathname);
+  const here = path.dirname(fileURLToPath(import.meta.url));
   const shared = fs.readFileSync(path.join(here, '..', 'lib', 'overlay', 'annotate.js'), 'utf8');
   const copy = fs.readFileSync(path.join(here, '..', 'extension', 'annotate.js'), 'utf8');
   assert.equal(copy, shared, 'extension/annotate.js is stale: run `npm run sync-extension`');
 });
 
 test('the extension asks for no more permission than it needs', () => {
-  const here = path.dirname(new URL(import.meta.url).pathname);
+  const here = path.dirname(fileURLToPath(import.meta.url));
   const manifest = JSON.parse(fs.readFileSync(path.join(here, '..', 'extension', 'manifest.json'), 'utf8'));
   assert.deepEqual(manifest.host_permissions, ['http://127.0.0.1/*', 'http://localhost/*'],
     'the extension must only be able to reach the local bridge');
@@ -211,7 +212,7 @@ test('the extension asks for no more permission than it needs', () => {
 });
 
 test('the extension makes the handoff discoverable and waits for delivery', () => {
-  const here = path.dirname(new URL(import.meta.url).pathname);
+  const here = path.dirname(fileURLToPath(import.meta.url));
   const popup = fs.readFileSync(path.join(here, '..', 'extension', 'popup.html'), 'utf8');
   const background = fs.readFileSync(path.join(here, '..', 'extension', 'background.js'), 'utf8');
   const manifest = JSON.parse(fs.readFileSync(path.join(here, '..', 'extension', 'manifest.json'), 'utf8'));
@@ -226,7 +227,7 @@ test('the extension makes the handoff discoverable and waits for delivery', () =
 });
 
 test('the agent picker supports finding a task by name', () => {
-  const here = path.dirname(new URL(import.meta.url).pathname);
+  const here = path.dirname(fileURLToPath(import.meta.url));
   const overlay = fs.readFileSync(path.join(here, '..', 'lib', 'overlay', 'annotate.js'), 'utf8');
   assert.match(overlay, /Search agent or task/, 'the picker needs a visible search affordance');
   assert.match(overlay, /forQuery/, 'the search field must filter live sessions');
@@ -386,7 +387,7 @@ test('a client that sends no name in the handshake is not left as unknown', asyn
 });
 
 test('the Codex hook does not relabel a Codex task as Claude Code', () => {
-  const here = path.dirname(new URL(import.meta.url).pathname);
+  const here = path.dirname(fileURLToPath(import.meta.url));
   const hook = fs.readFileSync(path.join(here, '..', 'hooks', 'annotations.mjs'), 'utf8');
   const server = fs.readFileSync(path.join(here, '..', 'mcp', 'server.mjs'), 'utf8');
   assert.match(hook, /process\.env\.CODEX_SESSION_ID \? 'codex' : 'claude-code'/);

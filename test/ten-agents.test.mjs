@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -77,7 +78,7 @@ test('agents sharing one MCP server keep distinct identities across concurrent r
   const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [new URL('../mcp/server.mjs', import.meta.url).pathname],
+    args: [fileURLToPath(new URL('../mcp/server.mjs', import.meta.url))],
     env: { ...process.env },
   });
   const client = new Client({ name: 'ten-agent-test', version: '1' });

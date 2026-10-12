@@ -32,7 +32,10 @@ try {
       request = JSON.parse(line);
       const {op, target, method, params = {}, timeout_ms} = request;
       let result;
-      if (op === 'health') {
+      if (op === 'activity') {
+        const {action = 'list', ...details} = params;
+        result = await conn.activity(action, details);
+      } else if (op === 'health') {
         result = {...await conn.health(), port};
       } else if (op === 'reconnect') {
         // Reconnect only on an explicit caller request. No preceding operation is repeated.
@@ -59,7 +62,7 @@ try {
       } else {
         throw new Error('Unknown operation');
       }
-      process.stdout.write(JSON.stringify({id: request.id, result}) + '\n');
+      process.stdout.write(JSON.stringify({id: request.id, result, warnings: conn.takeWarnings()}) + '\n');
     } catch (error) {
       process.stdout.write(JSON.stringify({id: request?.id, error: String(error.message), replayed: false}) + '\n');
     }

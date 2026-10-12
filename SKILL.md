@@ -1,6 +1,6 @@
 ---
 name: browserctrl
-description: Control Chromium browsers (Chrome, Dia, Brave, Edge, Arc), including dormant Dia tabs on macOS, from the terminal or as MCP tools - list and pick a browser, snapshot a page into stable element refs, click/fill/select/upload by ref, wait for real conditions instead of sleeping, screenshot, and read console and network logs. Use for browser QA, dogfooding a review app, or any task that needs a real logged-in browser session.
+description: Control explicitly selected Chromium browsers or Safari 27+ from the terminal or MCP. Use for page automation, browser QA, or tab organization; macOS Dia supports dormant tabs. Safari uses Apple's separate automation session.
 ---
 
 # browserctrl
@@ -10,6 +10,38 @@ Project source and issues: [seahyc/browserctrl](https://github.com/seahyc/browse
 Invoke this skill as `$browserctrl`. The primary CLI is `browserctrl`; `cdp`
 and `browserctl` remain compatibility commands. Legacy runtime paths under
 `skills/chrome-cdp` have no SKILL.md and are not a second skill.
+
+## Safari and platform selection
+
+Select the browser explicitly. Chromium uses the existing CDP commands on macOS,
+Linux and Windows. Windows uses named pipes and a PowerShell lock adapter, not
+AppleScript. Automatic relaunch and screen video remain macOS-only. See
+[compatibility and test evidence](docs/compatibility.md) before promising support.
+
+For Safari 27+ on macOS, use `--browser safari` and the separate Apple MCP adapter.
+Check `browserctrl safari tools --browser safari` for supported schemas. Safari
+Settings must allow remote automation and external agents; obtain the user's
+permission before granting that access. Do not restart Safari to fix an uncertain
+operation. Read the returned error and re-observe before retrying an action.
+
+```sh
+browserctrl open https://example.com --browser safari
+browserctrl tabs --browser safari
+browserctrl read <full-tab-handle> --browser safari
+browserctrl safari call page_interactions --tab <full-tab-handle> --args '{"interactions":[{"type":"click","node":"42","purpose":"Open details"}]}' --browser safari
+```
+
+Safari calls use full native tab handles and node UIDs from Safari's own content
+read, never Chromium `ref_N` values. Every page call needs an explicit handle;
+the daemon checks the claim and serializes tab selection plus the call. Supply a
+stable `CDP_AGENT_ID` for CLI workflows or `agentId` on every shared MCP call.
+Release your claims at handoff. The MCP `browser_safari` tool supports `tools`,
+`call`, `status` and `stop`; common browser tools also route supported operations
+when `browser="safari"`. Unsupported operations fail explicitly. Python's
+`ChromeCDP` client, tab grouping, dormant Dia tabs, recording, uploads and raw CDP
+remain Chromium-only. Safari creates an automation session; do not assume access
+to the user's existing Safari tabs or signed-in state. Verify background behavior
+against a disposable page before offering an unattended workflow.
 
 ## Start here: reuse the shared connection
 
@@ -23,7 +55,10 @@ and can trigger a fresh debugging approval for each connection.
 2. Choose one unique identity for this agent and keep it across all calls:
    `CDP_AGENT_ID` for CLI/Python, or `agentId` for MCP. Give sibling agents
    different identities, even when they share one MCP server.
-3. Open a background tab per agent and keep its returned tab ID. For an existing
+3. Before bulk browsing, describe the work and its progress with `activity describe`.
+   Read [activity and background readiness](references/activity.md) for status,
+   pause/resume controls, and readiness checks. Open a background tab per agent
+   and keep its returned tab ID. For an existing
    user-designated tab, read it first and respect its claim. See
    [Tabs and claims](#tabs-and-claims) for ownership and handoffs.
 4. Keep the shared daemon running between actions and at task completion.
@@ -193,6 +228,19 @@ MCP tool. Add `--json` for machine-readable results.
 
 ## Wait for conditions, never sleep
 
+For Chromium page readiness, use `ready` after navigation or attachment. It waits
+for the current page without reloading it or selecting its tab. `wake` selects
+the tab and may revive a discarded page; it is not a readiness check. Do not call
+`wake` for every link in a review loop.
+
+```bash
+browserctrl ready <tab> --browser dia --until domcontentloaded --timeout 15000
+browserctrl ready <tab> --browser dia --selector ".results" --text "Results"
+```
+
+MCP `browser_wait` accepts `readyState: "load"` or `"domcontentloaded"`. Existing
+condition waits remain available:
+
 ```bash
 browserctrl nav <tab> https://example.com --until networkidle   # load | domcontentloaded | networkidle | none
 browserctrl wait <tab> --selector ".results"
@@ -321,7 +369,7 @@ browserctrl tabs --browser dia            # shows [claude-code (3m ago)] on clai
 browserctrl claims
 browserctrl release <tab> --browser dia   # or: browserctrl release --mine
 browserctrl close <tab> --browser dia
-browserctrl wake <tab> --browser dia      # revive a tab suspended by memory saver
+browserctrl wake <tab> --browser dia      # select the tab, reviving it if discarded
 browserctrl status --browser dia          # daemon state
 browserctrl stop --browser dia            # stop the daemon for that port
 ```
@@ -360,7 +408,7 @@ Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
 `browser_read`, `browser_navigate`, `browser_wait`, `browser_act`,
 `browser_screenshot`, `browser_diagnostics`, `browser_eval`,
 `browser_annotations`, `browser_marks`, `browser_annotate_mode`,
-`browser_record`, `browser_recording`.
+`browser_record`, `browser_recording`, `browser_activity`.
 
 `browser_act` takes one action or a `steps` array that runs in order and stops
 at the first failure. Screenshots return inline images to clients that render
@@ -434,6 +482,19 @@ connection setup verifies its recorded PID, process start time, and socket owner
 before terminating it. Unverifiable ownership fails without killing a process.
 Timed-out or interrupted actions are never replayed. Use `reconnect()` and make a
 fresh observation before deciding whether an action needs repeating.
+
+## Background screenshot frames
+
+Chromium can stop generating frames for background tabs on Windows. If a
+background screenshot stalls, use `browserctrl shot <tab> output.png
+--emulate-focus` or MCP `browser_screenshot emulateFocus=true`. This temporarily
+emulates page focus through CDP, then disables it after capture. It does not
+activate a browser tab or an OS window, but the page can observe focus events.
+Use it only when overriding that tab's focus emulation is acceptable. A cleanup
+failure is reported; inspect the tab before continuing. Focus emulation is not
+a guarantee: Windows CI needed an active owned target for reliable capture.
+Safari uses Apple's
+separate screenshot implementation and does not support this option.
 
 ## Tests
 

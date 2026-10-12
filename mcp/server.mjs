@@ -6,10 +6,14 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import fs from 'fs';
+import os from 'node:os';
+import path from 'node:path';
+import { safariMCP } from '../lib/safari-frontend.mjs';
 import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
 import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
+import { waitForBackgroundReady } from '../lib/readiness.mjs';
 import * as ext from '../lib/ext.mjs';
 import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
@@ -18,7 +22,7 @@ import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 import * as sessions from '../lib/sessions.mjs';
 
 const SERVER_NAME = 'browser';
-const SERVER_VERSION = '2.1.0';
+const SERVER_VERSION = '2.3.0';
 const TOOL_TIMEOUT_MS = 60000;
 // Guard against a tool result that would blow up the client's context.
 const MAX_TEXT_BYTES = 100000;
@@ -27,7 +31,7 @@ const MAX_TEXT_BYTES = 100000;
 // path, which it can read with its own file tool.
 const IMAGE_CLIENTS = [/claude/i, /cursor/i, /vscode/i, /zed/i];
 
-const BROWSER_ENUM = Object.keys(BROWSERS);
+const BROWSER_ENUM = [...Object.keys(BROWSERS), 'safari'];
 const browserProp = {
   agentId: { type: 'string', description: 'Stable unique identity for this agent. Required when multiple agents share one MCP server; reuse it on every call.' },
   browser: {
@@ -40,17 +44,19 @@ const browserProp = {
 const tabProp = {
   tab: {
     type: 'string',
-    description: 'Tab id from browser_tabs (8-char prefix), or a substring of the tab URL or title.',
+    description: 'Chromium: tab id from browser_tabs, its 8-character prefix, or a title/URL substring. Safari: the full native tab handle only.',
   },
 };
 const targetProps = {
-  ref: { type: 'string', description: 'Element ref from browser_read, e.g. "ref_3". Preferred over selectors.' },
+  ref: { type: 'string', description: 'Chromium snapshot ref, e.g. ref_3, or a Safari node UID from its own content read. Never mix the two.' },
   selector: { type: 'string', description: 'CSS selector, when no ref is available.' },
   x: { type: 'number', description: 'CSS pixel x, last resort.' },
   y: { type: 'number', description: 'CSS pixel y, last resort.' },
 };
 
 const TOOLS = [
+  { name: 'browser_safari', description: "Safari 27+ on macOS via Apple's official MCP server. Use action=tools to discover native tools and schemas, or action=call with tool and arguments. Every page operation requires an explicit full tab handle; node UIDs come from get_page_content. Shared daemon serializes current-tab selection and action. Chromium grouping, recording and raw CDP are unsupported.",
+    inputSchema: { type: 'object', properties: { agentId: browserProp.agentId, action: { type: 'string', enum: ['tools', 'call', 'status', 'stop'] }, tool: { type: 'string' }, arguments: { type: 'object' }, tab: { type: 'string' } }, required: ['action'] } },
   {
     name: 'browser_list',
     description:
@@ -64,7 +70,7 @@ const TOOLS = [
   },
   {
     name: 'browser_open',
-    description: 'Open a new tab at a URL and wait for it to load. Optionally use a clean temporary session with no profile cookies or storage. Returns the new tab id.',
+    description: 'Open a new tab at a URL and wait for it to load. Optionally use a clean temporary Chromium session with no profile cookies or storage. Safari uses its separate automation session. Returns the new tab id.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -108,7 +114,7 @@ const TOOLS = [
   {
     name: 'browser_read',
     description:
-      'Snapshot a page: every interactive element as ref_1..ref_N with role, accessible name and test id, plus the visible text. Read before acting, then pass refs to browser_act. Refs are invalidated by navigation and the tools say so rather than clicking the wrong element.',
+      'Safari returns Apple content with node UIDs. Chromium snapshots include every interactive element as ref_1..ref_N with role, accessible name and test id, plus the visible text. Read before acting, then pass refs to browser_act. Refs are invalidated by navigation and the tools say so rather than clicking the wrong element.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -130,6 +136,22 @@ const TOOLS = [
     },
   },
   {
+    name: 'browser_activity',
+    description: 'List agent activity and rapid navigation warnings, describe your task and progress, or pause/resume an owner. Pause stops subsequent browser requests without closing tabs; already sent actions can finish.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...browserProp,
+        action: {type: 'string', enum: ['list', 'describe', 'pause', 'resume']},
+        owner: {type: 'string', description: 'Owner to pause or resume. Defaults to caller.'},
+        intent: {type: 'string', maxLength: 240},
+        completed: {type: 'integer', minimum: 0},
+        total: {type: 'integer', minimum: 0},
+      },
+      required: ['action'],
+    },
+  },
+  {
     name: 'browser_wait',
     description:
       'Wait for a condition instead of sleeping: a selector appearing, a selector disappearing, text on the page, a URL fragment, network idle, or a JS predicate. Use this after any action that triggers loading.',
@@ -143,6 +165,7 @@ const TOOLS = [
         text: { type: 'string' },
         url: { type: 'string' },
         fn: { type: 'string', description: 'JS expression that must become truthy.' },
+        readyState: {type: 'string', enum: ['load','domcontentloaded'], description: 'Wait for page readiness in the background without navigation or tab activation. May combine with selector/text/url.'},
         networkIdle: { type: 'boolean' },
         present: { type: 'boolean', description: 'Match mere presence in the DOM instead of visibility. Default false: selector waits require a visible element, so a display:none placeholder does not satisfy them.' },
         timeoutMs: { type: 'number' },
@@ -188,13 +211,13 @@ const TOOLS = [
     description: 'Capture the viewport, the full page, or one element by ref or selector. Always writes a PNG and returns its path; inline image data is returned to clients that render it.',
     inputSchema: {
       type: 'object',
-      properties: { ...browserProp, ...tabProp, full: { type: 'boolean' }, ref: { type: 'string' }, selector: { type: 'string' }, path: { type: 'string' } },
+      properties: { ...browserProp, ...tabProp, full: { type: 'boolean' }, ref: { type: 'string' }, selector: { type: 'string' }, path: { type: 'string' }, emulateFocus: { type: 'boolean', description: 'Chromium only: temporarily emulate page focus to generate background frames without activating an OS window. Disabled again after capture.' } },
       required: ['tab'],
     },
   },
   {
     name: 'browser_diagnostics',
-    description: 'Console output, uncaught JS errors, and the network log for a tab, buffered since the daemon attached. Use failedOnly for 4xx/5xx and failed requests.',
+    description: 'Chromium only. For Safari use browser_safari with browser_console_messages and list_network_requests. Console output, uncaught JS errors, and the network log for a tab, buffered since the daemon attached. Use failedOnly for 4xx/5xx and failed requests.',
     inputSchema: {
       type: 'object',
       properties: { ...browserProp, ...tabProp, limit: { type: 'number' }, failedOnly: { type: 'boolean' }, clear: { type: 'boolean' } },
@@ -293,7 +316,10 @@ async function withConn(args, fn) {
   }
   const conn = await connect(port);
   try {
-    return await fn(conn, port);
+    const result = await fn(conn, port);
+    const warnings = conn.takeWarnings();
+    if (warnings.length) result.content.push({type: 'text', text: warnings.map(w => `Warning: ${w}`).join('\n')});
+    return result;
   } finally {
     conn.close();
   }
@@ -331,7 +357,23 @@ async function actOnce(conn, targetId, a) {
   }
 }
 
+async function safariHandler(args, name = 'browser_safari') {
+  if (args.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
+  const safari = await import('../lib/safari.mjs');
+  if (name === 'browser_activity') return text(await safari.safariActivity(args.action, {owner: args.owner, intent: args.intent, completed: args.completed, total: args.total}));
+  if (name === 'browser_safari') {
+    if (args.action === 'tools') return text(await safari.safariTools());
+    if (args.action === 'status') return text(await safari.safariStatus());
+    if (args.action === 'stop') return text(await safari.safariStop());
+    if (args.action !== 'call') throw new Error('Unknown Safari action');
+    return safari.safariCall(args.tool, args.arguments ?? {}, { tab: args.tab });
+  }
+  const request = safariMCP(name, args);
+  return safari.safariCall(request.name, request.args, { tab: request.tab });
+}
+
 const handlers = {
+  browser_safari: safariHandler,
   browser_list: async () => {
     const rows = await listBrowsers();
     return text(
@@ -339,6 +381,7 @@ const handlers = {
         browser: b.key,
         name: b.label,
         port: b.port,
+        ...(b.provider ? {provider:b.provider} : {}),
         running: b.running,
         debuggable: b.debuggable,
         tabs: b.tabs,
@@ -406,9 +449,15 @@ const handlers = {
       return text(await ops.navigate(conn, tab.targetId, args.url, { waitUntil: args.until || 'load' }));
     }),
 
+  browser_activity: args => withConn(args, async conn => text(await conn.activity(args.action, {owner: args.owner, intent: args.intent, completed: args.completed, total: args.total}))),
+
   browser_wait: args =>
     withConn(args, async conn => {
       const tab = await ops.resolveTab(conn, args.tab);
+      if (args.readyState) {
+        if (args.networkIdle || args.gone || args.fn) throw new Error('readyState supports selector, text and url. Use a separate browser_wait for other conditions.');
+        return text(await waitForBackgroundReady(conn, tab.targetId, {waitUntil: args.readyState, timeoutMs: args.timeoutMs ?? 15000, selector: args.selector, text: args.text, url: args.url}));
+      }
       return text(
         await ops.waitFor(conn, tab.targetId, {
           selector: args.selector, gone: args.gone, text: args.text, url: args.url,
@@ -438,8 +487,8 @@ const handlers = {
     withConn(args, async conn => {
       const tab = await ops.resolveTab(conn, args.tab);
       const shot = await ops.screenshot(conn, tab.targetId, {
-        path: args.path || `/tmp/cdp-shot-${tab.id}.png`,
-        fullPage: Boolean(args.full),
+        path: args.path || path.join(os.tmpdir(), `cdp-shot-${tab.id}.png`),
+        fullPage: Boolean(args.full), emulateFocus: Boolean(args.emulateFocus),
         ref: args.ref,
         selector: args.selector,
       });
@@ -545,7 +594,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 
 server.setRequestHandler(CallToolRequestSchema, async request => {
   const { name, arguments: args = {} } = request.params;
-  const handler = handlers[name];
+  const handler = name === 'browser_safari' || args.browser === 'safari' ? () => safariHandler(args, name) : handlers[name];
   if (!handler) return fail(`Unknown tool ${name}`);
   sessions.touch(SESSION_ID);
   try {

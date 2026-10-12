@@ -4,17 +4,22 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         node-version: [22, 24]
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,8 +32,20 @@ jobs:
           chrome-version: stable
       - run: npm ci
       - run: python -m unittest discover -s test -p 'test_*.py' -v
+      - name: Probe Windows screenshot rendering
+        if: runner.os == 'Windows'
+        env:
+          CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
+          CHROME_TEST_NO_SANDBOX: "1"
+        run: node test/windows-screenshot-probe.mjs
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: windows-screenshot-probe-node-${{ matrix.node-version }}
+          path: ${{ runner.temp }}/browserctrl-screenshot-probe
+          retention-days: 3
       - name: Test Node suite against isolated headless Chrome
         env:
           CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
           CHROME_TEST_NO_SANDBOX: "1"
-        run: node --test --test-concurrency=1 test/*.test.mjs
+        run: npm test

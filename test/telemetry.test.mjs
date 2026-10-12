@@ -41,8 +41,8 @@ test('telemetry writes only allowed metadata, hashes identities, and protects pe
   assert.equal(rows[0].method, 'Runtime.evaluate');
   assert.equal(rows[1].method, undefined);
   assert.deepEqual(Object.keys(rows[0]).sort(), ['time', 'event', 'pid', 'parent', 'port', 'clientId', 'requestId', 'durationMs', 'pendingCount', 'attempt', 'reason', 'op', 'codeVersion', 'method', 'ownerHash'].sort());
-  assert.equal(fs.statSync(directory).mode & 0o777, 0o700);
-  assert.equal(fs.statSync(filename).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal(fs.statSync(directory).mode & 0o777, 0o700);
+  if (process.platform !== 'win32') assert.equal(fs.statSync(filename).mode & 0o777, 0o600);
   assert.equal(telemetryDirectory(), directory);
 });
 

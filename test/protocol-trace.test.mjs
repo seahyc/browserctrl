@@ -13,7 +13,7 @@ test('protocol trace excludes payloads and captures lifecycle identifiers',()=>{
   const text=fs.readFileSync(file,'utf8');assert.ok(!text.includes('PRIVATE'));
   const rows=text.trim().split('\n').map(JSON.parse);
   assert.deepEqual(rows[0].params,{targetId:'tab1'});assert.deepEqual(rows[1].result,{browserContextId:'ctx1'});
-  assert.equal(fs.statSync(file).mode & 0o777,0o600);
+  if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777,0o600);
   assert.deepEqual(protocolSummary({targetInfo:{targetId:'t',url:'PRIVATE',title:'PRIVATE'}}),{targetInfo:{targetId:'t'}});
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });

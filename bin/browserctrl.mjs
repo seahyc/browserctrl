@@ -6,10 +6,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, requireBrowser } from '../lib/discovery.mjs';
+import { safariCLI } from '../lib/safari-frontend.mjs';
 import { BROWSERS } from '../lib/env.mjs';
 import { diagnose } from '../lib/diagnostics.mjs';
 import { captureConnections } from '../lib/connection-capture.mjs';
 import * as ops from '../lib/ops.mjs';
+import { waitForBackgroundReady } from '../lib/readiness.mjs';
 import * as ext from '../lib/ext.mjs';
 import {planNativeGroup} from '../lib/tab-control.mjs';
 import {getNativeTabAdapter} from '../lib/adapters/index.mjs';
@@ -42,6 +44,22 @@ function parseArgs(argv) {
 
 const out = v => console.log(typeof v === 'string' ? v : JSON.stringify(v, null, 2));
 
+function activityOutput(report, flags) {
+  if (flags.json) return out(report);
+  return out(report.agents.map(a => {
+    const progress = a.total === null ? '' : ` ${a.completed ?? 0}/${a.total}`;
+    const tabs = a.tabIds.length ? ` tabs: ${a.tabIds.map(id => id.slice(0, 8)).join(', ')}` : '';
+    return `${a.owner} [${a.paused ? 'paused' : 'enabled'}] ${a.intent || '(task not described)'}${progress}${tabs}` +
+      a.warnings.map(w => `\n  Warning: ${w}`).join('');
+  }).join('\n') || '(no agent activity)');
+}
+
+function activityDetails(flags) {
+  return {owner: flags.owner, intent: flags.intent,
+    ...(flags.completed === undefined ? {} : {completed: Number(flags.completed)}),
+    ...(flags.total === undefined ? {} : {total: Number(flags.total)})};
+}
+
 function usage() {
   return `browserctrl — browser control
 
@@ -54,6 +72,20 @@ function usage() {
     browserctrl native-group --ids UUIDs --group-id N --browser dia [--dry-run] [--allow-focus]
     browserctrl doctor --browser dia                     read-only connection diagnosis (JSON)
     browserctrl doctor --browser dia --watch-seconds 20   passive OS connection capture
+
+  Safari 27 on macOS, through Apple's MCP interface:
+    browserctrl safari tools --browser safari
+    browserctrl safari call <tool> --args '{"key":"value"}' --tab <handle> --browser safari
+    browserctrl tabs --browser safari
+    browserctrl open <url> --browser safari
+    browserctrl read <full-handle> --browser safari
+    Safari reads return node UIDs, not Chromium ref_N values.
+
+  Agent activity:
+    browserctrl activity --browser dia [--json]
+    browserctrl activity describe --intent 'Reviewing guide links' --completed 0 --total 91 --browser dia
+    browserctrl activity pause --owner <agent-id> --browser dia
+    browserctrl activity resume --owner <agent-id> --browser dia
 
   Read before you act:
     browserctrl read <tab> --browser dia [--json]        snapshot with ref_1..N + page text
@@ -74,12 +106,14 @@ function usage() {
     browserctrl act <tab> --steps '[{"action":"scroll","dy":800},{"action":"key","key":"Enter"}]'
 
   Navigate and wait (no blind sleeps):
+    browserctrl ready <tab> --browser dia [--until load|domcontentloaded] [--timeout 15000]
+                       [--selector CSS] [--text TEXT] [--url substring] (background, no activation)
     browserctrl nav <tab> <url> [--until load|domcontentloaded|networkidle|none]
     browserctrl wait <tab> --selector ".done" | --text "Saved" | --url /success | --gone ".spinner" | --network-idle
                    [--timeout 15000]
 
   See what happened:
-    browserctrl shot <tab> [file] [--full] [--ref ref_3] [--selector css]
+    browserctrl shot <tab> [file] [--full] [--emulate-focus] [--ref ref_3] [--selector css]
     browserctrl console <tab> [--limit 50] [--clear]
     browserctrl network <tab> [--failed]
     browserctrl cookies <tab>
@@ -93,11 +127,13 @@ function usage() {
     browserctrl claims [--browser dia]       browserctrl release [<tab>|--mine]
     browserctrl status --browser dia         browserctrl stop --browser dia
 
-  Every command takes --browser <${Object.keys(BROWSERS).join('|')}> or --port <n>.
+  Chromium commands take --browser <${Object.keys(BROWSERS).join('|')}> or --port <n>.
+  Safari commands take --browser safari and an explicit full native handle.
   Add --steal to take a tab another agent has claimed.`;
 }
 
 async function launch(name) {
+  if (process.platform !== 'darwin') throw new Error('Automatic relaunch currently requires macOS. Enable debugging in the browser, then use --browser or --port.');
   const meta = BROWSERS[String(name).toLowerCase()];
   if (!meta) throw new Error(`Unknown browser "${name}". Known: ${Object.keys(BROWSERS).join(', ')}`);
   const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, e => (e ? rej(e) : res())));
@@ -129,6 +165,27 @@ const cmd = positional[0];
 
 const main = async () => {
   if (!cmd || cmd === 'help' || flags.help) return out(usage());
+  if (flags.browser === 'safari' || cmd === 'safari') {
+    if (flags.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
+    const safari = await import('../lib/safari.mjs');
+    if (cmd === 'safari') {
+      if (positional[1] === 'tools') return out(await safari.safariTools());
+      if (positional[1] !== 'call') throw new Error('Usage: browserctrl safari tools | call <tool> --args JSON --tab <handle> --browser safari');
+      const args = flags.args ? JSON.parse(flags.args) : {};
+      const result = await safari.safariCall(positional[2], args, { tab: flags.tab });
+      if (result.isError) process.exitCode = 1;
+      return out(result);
+    }
+    if (cmd === 'activity') return activityOutput(await safari.safariActivity(positional[1] || 'list', activityDetails(flags)), flags);
+    if (cmd === 'status' || cmd === 'doctor') return out(await safari.safariStatus());
+    if (cmd === 'stop') return out(await safari.safariStop());
+    if (cmd === 'claims') return out(claims.list(9228));
+    if (cmd === 'release') return out({ released: flags.mine || !positional[1] ? claims.releaseMine() : claims.release(9228, positional[1]) });
+    const request = safariCLI(cmd, positional, flags);
+    const result = await safari.safariCall(request.name, request.args, { tab: request.tab });
+    if (result.isError) process.exitCode = 1;
+    return out(result);
+  }
   if (cmd === 'doctor') {
     const seconds = flags['watch-seconds'] === undefined ? null : Number(flags['watch-seconds']);
     if (seconds !== null && (flags['watch-seconds'] === true || !Number.isFinite(seconds) || seconds <= 0 || seconds > 60)) throw new Error('watch-seconds must be greater than 0 and at most 60.');
@@ -142,6 +199,7 @@ const main = async () => {
     return out(
       rows
         .map(b => {
+          if (b.provider === 'safari-mcp') return `  Safari    --browser safari  Apple MCP adapter; ${b.enable}`;
           if (b.debuggable) {
             const bits = [`:${b.port}`, b.tabs === null ? 'tabs ?' : `${b.tabs} tabs`, b.daemon ? 'daemon up' : 'no daemon'];
             const prof = b.profiles.length ? `  profiles: ${b.profiles.join(', ')}` : '';
@@ -242,6 +300,11 @@ const main = async () => {
   const port = await requireBrowser(flags);
   const conn = await connect(port);
   try {
+    if (cmd === 'activity') return activityOutput(await conn.activity(positional[1] || 'list', activityDetails(flags)), flags);
+    if (cmd === 'ready') {
+      const tab = await ops.resolveTab(conn, positional[1]);
+      return out(await waitForBackgroundReady(conn, tab.targetId, {waitUntil: flags.until || 'load', timeoutMs: Number(flags.timeout || 15000), selector: flags.selector, text: flags.text, url: flags.url}));
+    }
     if (cmd === 'status') return out(await conn.status());
     if (cmd === 'stop') {
       await conn.stop().catch(() => {});
@@ -486,8 +549,8 @@ const main = async () => {
         return out(await ops.scrollTo(conn, targetId, target));
       case 'shot': {
         const res = await ops.screenshot(conn, targetId, {
-          path: positional[2] || '/tmp/cdp-shot.png',
-          fullPage: Boolean(flags.full),
+          path: positional[2],
+          fullPage: Boolean(flags.full), emulateFocus: Boolean(flags['emulate-focus']),
           ref: flags.ref,
           selector: flags.selector,
         });
@@ -539,6 +602,7 @@ const main = async () => {
         return out(usage());
     }
   } finally {
+    for (const warning of conn.takeWarnings()) console.error(`Warning: ${warning}`);
     conn.close();
   }
 };

@@ -4,13 +4,17 @@ import http from 'http';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const TEST_PORT = 9333;
 
 const CHROME_CANDIDATES = [
+  ...[process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean).flatMap(root => [
+    path.join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+  ]),
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
   '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
@@ -60,6 +64,7 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
     bin,
     [
       '--headless=new',
+      ...(process.platform === 'win32' ? ['--disable-gpu'] : []),
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${userDataDir}`,
       '--no-first-run',
@@ -77,7 +82,7 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
   const signalBrowserGroup = signal => {
     try {
       if (process.platform !== 'win32') process.kill(-child.pid, signal);
-      else child.kill(signal);
+      else execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {stdio: 'ignore', windowsHide: true});
     } catch {
       // The process group may already have exited.
     }
