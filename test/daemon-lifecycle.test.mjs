@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../lib/daemon.mjs';
-import { SOCK, runtimePath } from '../lib/env.mjs';
+import { SOCK } from '../lib/env.mjs';
 import { startHeadlessBrowser, chromeBinary } from './helpers.mjs';
 
 const exec = promisify(execFile);

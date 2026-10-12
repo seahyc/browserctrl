@@ -102,7 +102,8 @@ function usage() {
     browserctrl claims [--browser dia]       browserctrl release [<tab>|--mine]
     browserctrl status --browser dia         browserctrl stop --browser dia
 
-  Every command takes --browser <${Object.keys(BROWSERS).join('|')}> or --port <n>.
+  Chromium commands take --browser <${Object.keys(BROWSERS).join('|')}> or --port <n>.
+  Safari commands take --browser safari and an explicit full native handle.
   Add --steal to take a tab another agent has claimed.`;
 }
 
@@ -172,6 +173,7 @@ const main = async () => {
     return out(
       rows
         .map(b => {
+          if (b.provider === 'safari-mcp') return `  Safari    --browser safari  Apple MCP adapter; ${b.enable}`;
           if (b.debuggable) {
             const bits = [`:${b.port}`, b.tabs === null ? 'tabs ?' : `${b.tabs} tabs`, b.daemon ? 'daemon up' : 'no daemon'];
             const prof = b.profiles.length ? `  profiles: ${b.profiles.join(', ')}` : '';

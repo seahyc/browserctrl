@@ -358,6 +358,7 @@ const handlers = {
         browser: b.key,
         name: b.label,
         port: b.port,
+        ...(b.provider ? {provider:b.provider} : {}),
         running: b.running,
         debuggable: b.debuggable,
         tabs: b.tabs,
