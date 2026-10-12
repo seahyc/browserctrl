@@ -21,6 +21,10 @@ Run the relevant checks and include their real output in the pull request descri
 npm test
 ```
 
+The hosted Linux CI runner sets `CHROME_TEST_NO_SANDBOX=1` for its disposable
+Chrome test profile. This flag belongs only to the test harness. Normal browserctrl
+commands do not disable the browser sandbox.
+
 Browser integration checks must use an isolated browser profile and a dedicated debugging port. Do not use a signed-in personal profile or a shared live browser for automated input. Record the browser and OS versions, setup commands, result, and any limitation. A command starting successfully is not proof that the browser workflow works; verify the resulting page state. If you did not run a check, say so.
 
 For changes to claims or browser actions, include evidence that a second client is blocked where appropriate, and that an uncertain in-flight action is observed before any retry. Do not claim that claims isolate cookies or provide a security boundary.

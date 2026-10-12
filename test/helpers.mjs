@@ -66,10 +66,13 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
       '--no-default-browser-check',
       '--disable-background-networking',
       '--disable-extensions',
+      ...(process.env.CHROME_TEST_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
       'about:blank',
     ],
-    { stdio: 'ignore', detached: process.platform !== 'win32' },
+    { stdio: ['ignore','ignore','pipe'], detached: process.platform !== 'win32' },
   );
+  let startupErrors = '';
+  child.stderr.on('data', chunk => { startupErrors = (startupErrors + chunk.toString()).slice(-8192); });
   let endpointReady = false;
   const signalBrowserGroup = signal => {
     try {
@@ -119,7 +122,7 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
   if (!endpointReady) {
     const exit = child.exitCode === null ? '' : ` (exit ${child.exitCode})`;
     await close();
-    throw new Error(`Chrome was found at ${bin} but its debugging endpoint on port ${port} did not become ready${exit}`);
+    throw new Error(`Chrome was found at ${bin} but its debugging endpoint on port ${port} did not become ready${exit}: ${startupErrors.trim()}`);
   }
   let version;
   try {

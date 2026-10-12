@@ -30,4 +30,5 @@ jobs:
       - name: Test Node suite against isolated headless Chrome
         env:
           CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
+          CHROME_TEST_NO_SANDBOX: "1"
         run: node --test --test-concurrency=1 test/*.test.mjs
