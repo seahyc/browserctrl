@@ -37,7 +37,6 @@ const haveBrowser = Boolean(chromeBinary());
 let fixture, browser, conn;
 before(async () => {
   if (!haveBrowser) return;
-  process.env.BROWSERCTRL_EXEMPLARS = path.join(tmp, 'live');
   fixture = await startFixtureServer();
   browser = await startHeadlessBrowser(TEST_PORT);
   conn = await connect(TEST_PORT);

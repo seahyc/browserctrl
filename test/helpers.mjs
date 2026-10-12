@@ -8,6 +8,10 @@ import { spawn, execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+// Test daemons inherit the environment of whichever test file started them, so
+// keep their capture store and recipe tab registry out of the real home dir.
+process.env.BROWSERCTRL_EXEMPLARS ||= path.join(os.tmpdir(), 'browserctrl-test-exemplars');
+process.env.BROWSERCTRL_RECIPE_TABS ||= path.join(os.tmpdir(), 'browserctrl-test-recipe-tabs.json');
 export const TEST_PORT = 9333;
 
 const CHROME_CANDIDATES = [

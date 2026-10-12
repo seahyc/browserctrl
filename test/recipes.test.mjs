@@ -10,8 +10,6 @@ import * as ops from '../lib/ops.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-recipes-'));
-process.env.BROWSERCTRL_RECIPE_TABS = path.join(tmp, 'recipe-tabs.json');
-process.env.BROWSERCTRL_EXEMPLARS = path.join(tmp, 'exemplars');
 
 test('paths read nested values, negative indexes and collections', () => {
   const doc = { data: { offers: [{ at: 'a', tags: ['x'] }, { at: 'b', tags: ['y', 'x'] }] } };
