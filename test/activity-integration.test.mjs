@@ -72,8 +72,11 @@ with ChromeCDP(port=${port}) as c:
   assert.ok(JSON.parse(cli.stdout).agents.some(x=>x.owner==='activity-integration-a'));
   client=new Client({name:'activity-integration',version:'1'});
   await client.connect(new StdioClientTransport({command:process.execPath,args:[path.join(root,'mcp/server.mjs')],env,stderr:'pipe'}));
+  await a.send(first.targetId, 'Emulation.setFocusEmulationEnabled', {enabled:true});
   const result=await client.callTool({name:'browser_activity',arguments:{port,agentId:'activity-integration-controller',action:'pause',owner:'activity-integration-a'}});
   assert.ok(!result.isError,JSON.stringify(result));
+  await a.send(first.targetId, 'Emulation.setFocusEmulationEnabled', {enabled:false});
+  await assert.rejects(a.send(first.targetId, 'Emulation.setFocusEmulationEnabled', {enabled:true}), /paused/);
   await assert.rejects(a.send(first.targetId,'Runtime.evaluate',{expression:'document.title',returnByValue:true}),/paused/);
   await assert.rejects(a.browser('Target.activateTarget',{targetId:first.targetId}),/paused/);
   assert.ok((await b.send(second.targetId,'Runtime.evaluate',{expression:'document.title',returnByValue:true})).result.value);
@@ -84,5 +87,5 @@ with ChromeCDP(port=${port}) as c:
   const observation=JSON.parse(waited.content[0].text);
   assert.equal(observation.ready,true);
   assert.equal(observation.focused,false);
-  console.log(JSON.stringify({backgroundReady:true,rapidNavigationWarning:true,cliActivity:true,pythonActivity:true,mcpPause:true,otherOwnerContinues:true,claimsPreserved:true,resumeWithoutReplay:true}));
+  console.log(JSON.stringify({backgroundReady:true,rapidNavigationWarning:true,cliActivity:true,pythonActivity:true,mcpPause:true,otherOwnerContinues:true,claimsPreserved:true,resumeWithoutReplay:true,focusCleanupWhilePaused:true}));
 });

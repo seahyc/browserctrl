@@ -60,7 +60,8 @@ These activity controls also support `--browser safari` and MCP `browser: "safar
 Pause rejects subsequent browserctrl actions from that owner, including queued
 inputs that have not been sent. It does not cancel an action already sent to
 the browser, release claims, or close tabs. Resume permits new actions; it does
-not replay rejected actions. After resume, the agent should inspect the page
+not replay rejected actions. Disabling temporary CDP focus emulation remains
+allowed for the same owner so a pause cannot prevent cleanup. After resume, the agent should inspect the page
 and continue from the observed state.
 
 ## Python calls
