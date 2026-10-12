@@ -1,4 +1,4 @@
-# cdp handoff extension
+# browserctrl handoff extension
 
 Wraps the same `annotate.js` the daemon injects. It exists for the three things
 injection cannot do:
@@ -16,7 +16,7 @@ injection cannot do:
 
 Chrome or Dia: `chrome://extensions` → Developer mode → Load unpacked → choose
 this folder. The bridge starts automatically when an agent uses `cdp`; run
-`cdp bridge` once if you want the extension ready before the agent arrives.
+`browserctrl bridge` once if you want the extension ready before the agent arrives.
 
 To hand off a precise problem: click the toolbar icon → click the element →
 write the note → Save. The confirmation tells you the exact Codex message to

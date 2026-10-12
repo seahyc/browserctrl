@@ -108,6 +108,7 @@ t('the overlay captures an element the way an agent can act on it', async () => 
 
 t('a captured annotation reaches the queue with tab identity and a screenshot', async () => {
   annotations.clear();
+  await conn.browser('Target.activateTarget', { targetId: tabId });
   await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#go', 'this button should say Start')");
   // The daemon receives it over the binding, then screenshots it.
   await new Promise(r => setTimeout(r, 1500));
@@ -264,6 +265,7 @@ t('past annotations show as pins anchored to their elements', async () => {
 
 t('a pin for an element that no longer exists still shows, flagged', async () => {
   annotations.clear();
+  await conn.browser('Target.activateTarget', { targetId: tabId });
   await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#go', 'about to vanish')");
   await new Promise(r => setTimeout(r, 1000));
   const rows = annotations.pending();

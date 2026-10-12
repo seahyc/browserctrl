@@ -1,14 +1,18 @@
 // Unit tests that need no browser: claims, discovery errors, and the doc/CLI
 // parity check that v1 lacked (SKILL.md documented commands that did not exist).
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
+import os from 'node:os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
-import { CLAIMS_FILE } from '../lib/env.mjs';
-import * as claims from '../lib/claims.mjs';
-import { requireBrowser, resolveBrowserArg } from '../lib/discovery.mjs';
+const claimsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-unit-claims-'));
+process.env.CDP_CLAIMS_FILE = path.join(claimsDir, 'claims.json');
+const { CLAIMS_FILE } = await import('../lib/env.mjs');
+const claims = await import('../lib/claims.mjs');
+after(() => fs.rmSync(claimsDir, { recursive: true, force: true }));
+const { requireBrowser, resolveBrowserArg } = await import('../lib/discovery.mjs');
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -61,9 +65,9 @@ test('browser names resolve to their ports', () => {
 
 test('every command documented in SKILL.md exists in the CLI', () => {
   const skill = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
-  const cli = fs.readFileSync(path.join(ROOT, 'bin', 'cdp.mjs'), 'utf8');
+  const cli = fs.readFileSync(path.join(ROOT, 'bin', 'browserctrl.mjs'), 'utf8');
   const documented = new Set(
-    [...skill.matchAll(/^\s*(?:\$\s*)?cdp\s+([a-z-]+)/gm)].map(m => m[1]).filter(c => c !== 'help'),
+    [...skill.matchAll(/^\s*(?:\$\s*)?(?:browserctrl|cdp)\s+([a-z-]+)/gm)].map(m => m[1]).filter(c => c !== 'help'),
   );
   assert.ok(documented.size > 5, 'SKILL.md should document commands');
   const missing = [...documented].filter(c => !cli.includes(`'${c}'`) && !cli.includes(`case '${c}'`));
@@ -110,8 +114,8 @@ test('the MCP server starts and lists its tools over stdio', () => {
 });
 
 test('CLI help documents isolated anonymous tabs', () => {
-  const help = execFileSync(process.execPath, [path.join(ROOT, 'bin', 'cdp.mjs'), 'help'], { encoding: 'utf8' });
-  assert.match(help, /cdp open <url> --browser dia --anonymous/);
+  const help = execFileSync(process.execPath, [path.join(ROOT, 'bin', 'browserctrl.mjs'), 'help'], { encoding: 'utf8' });
+  assert.match(help, /browserctrl open <url> --browser dia --anonymous/);
 });
 
 test('a stale DevToolsActivePort file does not report a dead browser as debuggable', async () => {

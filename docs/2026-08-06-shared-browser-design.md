@@ -1,6 +1,6 @@
 # Shared browser: human and agent on the same tabs
 
-Design, 2026-08-06. Builds on chrome-cdp v2.
+Design, 2026-08-06. Builds on browserctrl v2.
 
 ## Problem
 
@@ -31,12 +31,12 @@ The human's focused tab is already discoverable: exactly one tab reports
 `document.hasFocus() === true` with `visibilityState === 'visible'`. No UI is
 needed to answer "the tab I am looking at".
 
-- `cdp tabs` marks it `←you`.
+- `browserctrl tabs` marks it `←you`.
 - `--tab active` resolves to it. `browser_tabs` returns `focused: true` on it.
-- `cdp name <tab> <alias>` records a human-readable alias in the same store as
+- `browserctrl name <tab> <alias>` records a human-readable alias in the same store as
   claims. `--tab checkout` then works for both sides, and the annotation
   overlay offers naming so the human can christen a tab without the terminal.
-- A tab that errors on evaluate is discarded by memory saver; `cdp wake` fixes
+- A tab that errors on evaluate is discarded by memory saver; `browserctrl wake` fixes
   it, and `tabs` labels it `(suspended)` rather than hiding the reason.
 
 Taking over a human-opened tab already works in v2 and needs nothing new: tabs
@@ -54,10 +54,10 @@ instruction to an agent. Marks live beside claims and carry an optional note.
 
 Ways to mark, all writing the same store, in order of availability:
 
-- **CLI, no install, any tab:** `cdp mark <tab|url-substring> [--note "…"]`,
-  `cdp unmark`, `cdp marks`. Marking by URL substring means you never have to
+- **CLI, no install, any tab:** `browserctrl mark <tab|url-substring> [--note "…"]`,
+  `browserctrl unmark`, `browserctrl marks`. Marking by URL substring means you never have to
   switch to the tab or learn its id.
-- **Tray page, no install:** `cdp tray` opens a local page listing every tab
+- **Tray page, no install:** `browserctrl tray` opens a local page listing every tab
   with title, URL and favicon, each with a checkbox. Tick the tabs you are
   handing over, add a note, done. This is the answer for marking tabs you are
   not on before the extension exists, and it works in any browser with the
@@ -69,13 +69,13 @@ Ways to mark, all writing the same store, in order of availability:
   its keep.
 
 Agent side: `--tab marked` resolves when exactly one tab is marked and lists
-them when several are, `cdp marks` and `browser_marks` return the set with
+them when several are, `browserctrl marks` and `browser_marks` return the set with
 notes, and the piggyback line reports marked tabs the same way it reports
 pending annotations. Annotating a tab marks it implicitly, since annotating is
 already a handover.
 
 Marks expire after 8 hours so a forgotten mark does not silently steer a later
-session, and `cdp marks` shows the age.
+session, and `browserctrl marks` shows the age.
 
 ## 2. Annotation
 
@@ -133,7 +133,7 @@ are readable by an agent that was not running when they were made.
 Ordered by portability:
 
 1. **`browser_annotations` MCP tool** (`peek`, `consume`, `clear`), plus
-   `cdp annotations`. Works in every MCP client: Claude Code, Codex, opencode,
+   `browserctrl annotations`. Works in every MCP client: Claude Code, Codex, opencode,
    Cursor. This is the contract.
 2. **Result piggyback.** Any `browser_*` tool result appends
    `[3 pending annotations: call browser_annotations]` when the queue is
@@ -149,7 +149,7 @@ deliberately not depended on: client handling varies too much to build on.
 
 ## 3. Recording
 
-`cdp record start --browser dia [--video] [--apps]` … `cdp record stop`,
+`browserctrl record start --browser dia [--video] [--apps]` … `browserctrl record stop`,
 writing `~/.cdp/recordings/<id>/`.
 
 ### Layers, one clock
@@ -176,7 +176,7 @@ makes a video mark resolvable to an element.
 
 ## 4. Video annotation
 
-`cdp annotate <recording-id>` opens a local page with the video, a mark button,
+`browserctrl annotate <recording-id>` opens a local page with the video, a mark button,
 and a note field. Each mark stores `{ t, note }`.
 
 Resolution turns marks into agent-actionable context. For each mark:
@@ -186,7 +186,7 @@ Resolution turns marks into agent-actionable context. For each mark:
 - If no browser event is near, the frontmost window at that second is attached
   from `windows.jsonl`, plus a frame grab.
 
-The agent reads resolved marks through `browser_recording` / `cdp recording
+The agent reads resolved marks through `browser_recording` / `browserctrl recording
 <id>`, receiving, for example:
 
 > at 0:42, "this should be disabled until preview runs" — nearest event: click
@@ -200,11 +200,11 @@ which is directly actionable, unlike a frame number.
 Each phase is independently useful and independently shippable.
 
 1. **Tab identity and marks.** `--tab active`, `←you`, aliases, suspended
-   labelling, `cdp mark/unmark/marks`, the `cdp tray` page, `--tab marked`.
+   labelling, `browserctrl mark/unmark/marks`, the `browserctrl tray` page, `--tab marked`.
 2. **Annotation, injected.** Overlay, queue, `browser_annotations`, piggyback,
    Claude Code hook.
 3. **Recording, browser only.** `events.jsonl`, `steps.md`.
-4. **Video and window timeline.** ffmpeg, osascript sampling, `cdp annotate`,
+4. **Video and window timeline.** ffmpeg, osascript sampling, `browserctrl annotate`,
    mark resolution.
 5. **Extension.** Wraps the same overlay and recorder, adds toolbar and
    browser-level shortcut, covers tabs with no debug port.

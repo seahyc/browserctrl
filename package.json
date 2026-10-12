@@ -1,21 +1,32 @@
 {
-  "name": "chrome-cdp",
-  "version": "2.1.0",
+  "name": "browserctrl",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "description": "Cross-browser CDP control for coding agents: CLI + MCP server over one core.",
   "bin": {
-    "cdp": "bin/cdp.mjs"
+    "browserctrl": "bin/browserctrl.mjs",
+    "cdp": "bin/cdp.mjs",
+    "browserctl": "bin/cdp.mjs"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
     "mcp": "node mcp/server.mjs",
     "sync-extension": "cp lib/overlay/annotate.js extension/annotate.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.29.0"
+    "@modelcontextprotocol/sdk": "1.32.1"
   },
   "engines": {
     "node": ">=22"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seahyc/browserctrl.git"
+  },
+  "homepage": "https://github.com/seahyc/browserctrl",
+  "bugs": {
+    "url": "https://github.com/seahyc/browserctrl/issues"
   }
 }

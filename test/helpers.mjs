@@ -15,10 +15,18 @@ const CHROME_CANDIDATES = [
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
   '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
   '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
 ];
 
 export function chromeBinary() {
-  return CHROME_CANDIDATES.find(p => fs.existsSync(p)) || null;
+  const configured = process.env.CHROME_BIN;
+  if (configured && path.isAbsolute(configured) && fs.existsSync(configured) && fs.statSync(configured).isFile()) {
+    return configured;
+  }
+  return CHROME_CANDIDATES.find(p => fs.existsSync(p) && fs.statSync(p).isFile()) || null;
 }
 
 export async function startFixtureServer() {
@@ -60,11 +68,40 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
       '--disable-extensions',
       'about:blank',
     ],
-    { stdio: 'ignore', detached: false },
+    { stdio: 'ignore', detached: process.platform !== 'win32' },
   );
+  let endpointReady = false;
+  const signalBrowserGroup = signal => {
+    try {
+      if (process.platform !== 'win32') process.kill(-child.pid, signal);
+      else child.kill(signal);
+    } catch {
+      // The process group may already have exited.
+    }
+  };
+  const close = async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      signalBrowserGroup('SIGTERM');
+      await Promise.race([
+        new Promise(resolve => child.once('exit', resolve)),
+        new Promise(resolve => setTimeout(resolve, 800)),
+      ]);
+      // Chrome owns helper subprocesses; terminate the complete private group
+      // even when the browser parent exits before those helpers do.
+      signalBrowserGroup('SIGKILL');
+      if (child.exitCode === null && child.signalCode === null) {
+        await Promise.race([
+          new Promise(resolve => child.once('exit', resolve)),
+          new Promise(resolve => setTimeout(resolve, 500)),
+        ]);
+      }
+    }
+    try { fs.rmSync(userDataDir, { recursive: true, force: true }); } catch {}
+  };
   // Wait for the debug endpoint to answer.
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) break;
     const ok = await new Promise(resolve => {
       const req = http.get({ host: '127.0.0.1', port, path: '/json/version', timeout: 500 }, r => {
         r.resume();
@@ -76,20 +113,39 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
         resolve(false);
       });
     });
-    if (ok) break;
+    if (ok) { endpointReady = true; break; }
     await new Promise(r => setTimeout(r, 200));
   }
+  if (!endpointReady) {
+    const exit = child.exitCode === null ? '' : ` (exit ${child.exitCode})`;
+    await close();
+    throw new Error(`Chrome was found at ${bin} but its debugging endpoint on port ${port} did not become ready${exit}`);
+  }
+  let version;
+  try {
+    version = await new Promise((resolve, reject) => {
+      const req = http.get({ host: '127.0.0.1', port, path: '/json/version', timeout: 5000 }, response => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', chunk => { body += chunk; });
+        response.on('end', () => {
+          try { resolve(JSON.parse(body).Browser || null); } catch (error) { reject(error); }
+        });
+      });
+      req.on('error', reject);
+      req.on('timeout', () => req.destroy(new Error('Chrome version discovery timed out')));
+    });
+  } catch (error) {
+    await close();
+    throw error;
+  }
+
   return {
     child,
     port,
     userDataDir,
-    close: () => {
-      try {
-        child.kill('SIGKILL');
-      } catch {}
-      try {
-        fs.rmSync(userDataDir, { recursive: true, force: true });
-      } catch {}
-    },
+    binary: bin,
+    version,
+    close,
   };
 }

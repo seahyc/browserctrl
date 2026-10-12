@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "cdp handoff",
+  "name": "browserctrl handoff",
   "version": "3.0.0",
   "description": "Hand tabs and page elements to a coding agent, and let the agent drive browser-level chrome.* APIs the DevTools Protocol cannot reach.",
   "icons": {

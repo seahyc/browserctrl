@@ -8,7 +8,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import fs from 'fs';
 import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
-import { BROWSERS } from '../lib/env.mjs';
+import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as ext from '../lib/ext.mjs';
 import * as claims from '../lib/claims.mjs';
@@ -29,6 +29,7 @@ const IMAGE_CLIENTS = [/claude/i, /cursor/i, /vscode/i, /zed/i];
 
 const BROWSER_ENUM = Object.keys(BROWSERS);
 const browserProp = {
+  agentId: { type: 'string', description: 'Stable unique identity for this agent. Required when multiple agents share one MCP server; reuse it on every call.' },
   browser: {
     type: 'string',
     enum: BROWSER_ENUM,
@@ -548,7 +549,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
   if (!handler) return fail(`Unknown tool ${name}`);
   sessions.touch(SESSION_ID);
   try {
-    const result = await withTimeout(handler(args), TOOL_TIMEOUT_MS, name);
+    const result = await withTimeout(withAgentIdentity(args.agentId ?? agentId(), () => handler(args)), TOOL_TIMEOUT_MS, name);
     // The only handoff path that needs nothing from the harness: if the human
     // has left annotations or marked tabs, say so on the way out.
     if (name !== 'browser_annotations' && name !== 'browser_marks' && !result.isError) {
