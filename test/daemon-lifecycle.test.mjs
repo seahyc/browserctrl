@@ -217,7 +217,13 @@ test('a live legacy daemon is upgraded using its IPC status without a browser pr
       for(const line of data.toString().trim().split('\\n')) {
         const req=JSON.parse(line);
         if(req.op==='status') sock.write(JSON.stringify({reqId:req.reqId,result:{pid:process.pid,port:${port},attached:[]}})+'\\n');
-        else if(req.op==='stop') {console.log('stopped');fs.unlinkSync(socketPath);fs.unlinkSync(socketPath+'.owner.json');process.exit(0);}
+        else if(req.op==='stop') {
+          if(req.owner!=='handover-test' || req.label!=='Handover test') {
+            sock.write(JSON.stringify({reqId:req.reqId,error:'This client has no agent identity.'})+'\\n');
+            continue;
+          }
+          console.log('stopped');fs.unlinkSync(socketPath);fs.unlinkSync(socketPath+'.owner.json');process.exit(0);
+        }
         else {console.log('unexpected browser health');process.exit(2);}
       }
     }));
@@ -229,7 +235,7 @@ test('a live legacy daemon is upgraded using its IPC status without a browser pr
   t.after(()=>legacy.kill('SIGTERM'));
   let output=''; legacy.stdout.on('data',data=>output+=data);
   await new Promise(resolve=>legacy.stdout.once('data',resolve));
-  const client=await connect(port); t.after(()=>client.close());
+  const client=await connect(port,{owner:'handover-test',label:'Handover test'}); t.after(()=>client.close());
   assert.notEqual((await client.status()).pid,legacy.pid);
   assert.match(output,/stopped/);
   assert.doesNotMatch(output,/unexpected browser health/);
