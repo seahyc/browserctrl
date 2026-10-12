@@ -112,7 +112,7 @@ class ChromeCDP:
             self._buffer.extend(chunk)
         line, _, rest = self._buffer.partition(b"\n")
         self._buffer = bytearray(rest)
-        return bytes(line)
+        return bytes(line).removesuffix(b"\r")
 
     def health(self):
         return self.request("health")
