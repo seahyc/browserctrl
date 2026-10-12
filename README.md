@@ -5,7 +5,7 @@
 
 Control a running Chromium browser from the terminal or an MCP client. `browserctrl` connects to browser sessions you already have open, snapshots pages into readable element references, and sends actions through the Chrome DevTools Protocol (CDP).
 
-The project is developed and tested on macOS. Chrome, Dia, Brave, Edge, Chromium, and Arc are recognized there; Dia's native dormant-tab and tab-group controls are macOS-specific. Linux CDP use with an explicitly configured debugging port is possible, but is not yet presented as a tested platform. Windows and Safari are not supported by browserctrl. Safari 27's separate official MCP integration is outside this project.
+The project is developed and tested on macOS. Chrome, Dia, Brave, Edge, Chromium, and Arc are recognized there; Dia's native dormant-tab and tab-group controls are macOS-specific. The full CDP test suite passes on Linux with Node 22/24 and an explicitly configured debugging port. Automatic browser discovery and launch still use macOS app paths. Windows and Safari are not supported by browserctrl. Safari 27's separate official MCP integration is outside this project.
 
 ## Install
 
@@ -75,9 +75,9 @@ flowchart LR
 | Coordination | Target selection by tab ID | Per-tab claims, snapshot refs, and named workflows |
 | Interfaces | CLI skill | CLI, MCP server, and persistent Python client over the same core |
 | Browser-level workflows | CDP page control | Optional unpacked extension for extension APIs and tab groups; Dia native tab controls on macOS |
-| Platform status | Upstream documents Chrome-family detection on macOS, Linux, and Windows | Developed and tested on macOS; Linux with an explicit port is possible, with compatibility results tracked separately |
+| Platform status | Upstream documents Chrome-family detection on macOS, Linux, and Windows | macOS live testing plus Linux CDP tests on Node 22/24; Linux uses an explicit port, while Windows remains unsupported |
 
-This comparison describes documented scope, not a performance benchmark. See [compatibility results](docs/compatibility.md) for platform-specific evidence as it becomes available.
+This comparison describes documented scope, not a performance benchmark. The [CI matrix](https://github.com/seahyc/browserctrl/actions/runs/38212070928) passed 183 Node tests and 13 Python tests on each Node version; one optional legacy-installation check was skipped. See [compatibility results](docs/compatibility.md) for the exact scope and limitations.
 
 The optional extension must be loaded as an unpacked extension from `extension/` in a supported Chromium browser. Extension-backed operations are unavailable without it. CDP page control continues to work without the extension.
 

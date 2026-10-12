@@ -6,7 +6,7 @@ Evidence collected on 2026-10-12. These are capability checks, not a comparative
 | --- | --- | --- |
 | Dia, macOS | Live session tested | Native inventory includes dormant tabs. Live extension inspection, group collapse, duplicate-tab closure, and refusal to move a claimed tab were verified. A browser restart restored a group expanded, so its collapse state needed restoring. |
 | Chrome, macOS | Integration tests run; see [raw summary](chrome-test-results.json) | Owned headless profile only. The first run passed 18 of 22 tests and hit timeouts plus subsequent isolation failures on a heavily loaded host. No claim of seamless reliability from this run. |
-| Chrome, Linux | CI configured; result pending | Full Node suite and Python tests on Ubuntu with Node 22/24 and an isolated Chrome profile. See GitHub Actions for the actual run status. |
+| Chrome-family Chromium, Linux | [Full CI passed](https://github.com/seahyc/browserctrl/actions/runs/38212070928) | Ubuntu, Node 22 and 24: each job passed 183 Node tests and 13 Python tests. One optional legacy-installation test was skipped. The suite includes real isolated-browser page input, screenshots, waits, and ten-agent concurrency. |
 | Safari 27.0.1, macOS | browserctrl unsupported; Apple's MCP discovery tested | `/usr/bin/safaridriver --mcp` connected and exposed its tools. Creating a fixture tab was refused because Safari's Allow remote automation setting is disabled. No Safari page-action or browserctrl integration pass is claimed. |
 | Windows | Unsupported | The daemon currently uses Unix sockets and macOS/Linux kernel file locking. A Windows adapter is needed. |
 
@@ -29,3 +29,9 @@ Sources: [Chrome debugging changes](https://developer.chrome.com/blog/remote-deb
 Compared with `pasky/chrome-cdp-skill` main at `ffea76a24b0471663ddd9d9f24335bbc442b6266`, browserctrl adds one shared connection per browser port, cooperating-agent claims, richer snapshots and actions, a typed MCP frontend, a persistent Python client, bounded batches/workflows, optional browser-level extension APIs, and Dia native adapters.
 
 Upstream is smaller, requires no npm dependencies for its CLI, and documents Chrome-family discovery on macOS, Linux, and Windows. browserctrl has broader workflow and coordination features, but does not currently match upstream's Windows support. We have not run an equivalent upstream-vs-browserctrl latency or reliability benchmark, so there is no defensible percentage improvement.
+
+## Latest verified implementation
+
+[Commit 5a857fb](https://github.com/seahyc/browserctrl/commit/5a857fb9667d9c9409c0036f841a338d83141706) passed the complete [Node 22/24 CI matrix](https://github.com/seahyc/browserctrl/actions/runs/38212070928). Linux tests use an owned disposable browser profile and an explicit test-only sandbox setting for the hosted runner. Normal browserctrl commands do not change the browser sandbox.
+
+The tested implementation also passed a dependency audit with zero reported vulnerabilities. Local Google Chrome testing encountered timeouts on a heavily overloaded host, so the CI result does not prove that every signed-in desktop profile will behave seamlessly under that load.

@@ -12,18 +12,35 @@
     {
       "command": "python3 -m unittest discover -s test -p 'test_*.py' -v",
       "result": "passed",
-      "counts": { "tests": 13, "passed": 13, "failed": 0, "skipped": 0 }
+      "counts": {
+        "tests": 13,
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
     },
     {
       "command": "node --test test/rename.test.mjs",
       "result": "passed",
-      "counts": { "tests": 3, "passed": 2, "failed": 0, "skipped": 1 },
-      "limitations": ["The optional sibling ../chrome-cdp runtime directory was absent, so its compatibility check was skipped."]
+      "counts": {
+        "tests": 3,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 1
+      },
+      "limitations": [
+        "The optional sibling ../chrome-cdp runtime directory was absent, so its compatibility check was skipped."
+      ]
     },
     {
       "command": "CHROME_BIN='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node --test --test-concurrency=1 test/e2e.test.mjs test/ten-agents.test.mjs",
       "result": "completed_with_failures",
-      "counts": { "tests": 22, "passed": 18, "failed": 4, "skipped": 0 },
+      "counts": {
+        "tests": 22,
+        "passed": 18,
+        "failed": 4,
+        "skipped": 0
+      },
       "failures": [
         {
           "test": "stale refs are refused rather than clicking the wrong element",
@@ -39,27 +56,42 @@
         },
         {
           "test": "browser-wide worker actions reserve the browser until they finish",
-          "observed_error": "Browser-wide control is blocked by another agent’s in-flight action."
+          "observed_error": "Browser-wide control is blocked by another agent\u2019s in-flight action."
         }
       ]
     },
     {
       "command": "CHROME_BIN='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node --test --test-concurrency=1 --test-name-pattern='tabs lists|anonymous tabs|read returns refs|click by ref|fill fires|select picks an option|navigate waits|diagnostics buffer|scroll moves|a missing element' test/e2e.test.mjs",
       "result": "failed_during_setup",
-      "counts": { "tests": 10, "passed": 0, "failed": 10, "skipped": 0 },
+      "counts": {
+        "tests": 10,
+        "passed": 0,
+        "failed": 10,
+        "skipped": 0
+      },
       "observed_error": "Chrome was found but the debugging endpoint on port 9333 did not become ready within 20 seconds."
     },
     {
       "command": "node --input-type=module -e 'import {startHeadlessBrowser} from \"./test/helpers.mjs\"; const b=await startHeadlessBrowser(PORT); console.log(JSON.stringify({version:b.version,profile:b.userDataDir,pid:b.child.pid})); await b.close(); console.log(\"closed\")' (PORT=9544 and PORT=9333)",
       "result": "passed",
-      "counts": { "launches": 2, "closed": 2 },
+      "counts": {
+        "launches": 2,
+        "closed": 2
+      },
       "observed_chrome": "Chrome/154.0.8037.98"
     },
     {
       "command": "CHROME_BIN='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node --test --test-concurrency=1 test/e2e.test.mjs test/ten-agents.test.mjs",
       "result": "interrupted_for_host_load",
-      "counts": { "reported_tests": 8, "passed": 6, "failed": 1, "cancelled": 1 },
-      "limitations": ["Stopped at the parent agent’s request to reduce host browser load. The E2E file did not finish and the ten-agent suite did not run."]
+      "counts": {
+        "reported_tests": 8,
+        "passed": 6,
+        "failed": 1,
+        "cancelled": 1
+      },
+      "limitations": [
+        "Stopped at the parent agent\u2019s request to reduce host browser load. The E2E file did not finish and the ten-agent suite did not run."
+      ]
     }
   ],
   "cleanup": {
@@ -68,7 +100,26 @@
     "verification": "Subsequent process and directory searches returned no matching process or profile. No normal user Chrome profile was targeted."
   },
   "limitations": [
-    "No Linux run or GitHub Actions result is recorded here. Linux CI must pass before claiming Linux compatibility.",
+    "Linux CI passed at the commit linked above. Automatic browser discovery/launch still use macOS app paths; Linux uses an explicit debugging port.",
     "The complete local browser run exposed four runtime failures listed above. The later retry was interrupted before completion."
-  ]
+  ],
+  "ci": {
+    "url": "https://github.com/seahyc/browserctrl/actions/runs/38212070928",
+    "commit": "5a857fb9667d9c9409c0036f841a338d83141706",
+    "platform": "Ubuntu Linux",
+    "node_versions": [
+      22,
+      24
+    ],
+    "status": "success",
+    "each_job": {
+      "node_tests": 184,
+      "node_passed": 183,
+      "node_failed": 0,
+      "node_skipped": 1,
+      "python_tests": 13,
+      "python_passed": 13
+    },
+    "scope": "Owned isolated Chrome-family Chromium profiles. Full page-control, daemon recovery, MCP, Python, claims, and ten-agent concurrency coverage."
+  }
 }
