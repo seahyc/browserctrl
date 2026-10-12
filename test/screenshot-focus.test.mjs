@@ -36,3 +36,15 @@ test('screenshot reports failure to clear focus emulation',async t=>{
   }};
   await assert.rejects(screenshot(conn,'owned-tab',{path:path.join(directory,'shot.png'),emulateFocus:true}),/could not be disabled/);
 });
+
+test('uncertain focus enable still attempts cleanup without capturing or replaying',async()=>{
+  const calls=[];
+  const conn={async send(target,method,params){
+    calls.push({method,params});
+    if(method==='Emulation.setFocusEmulationEnabled' && params.enabled) throw new Error('enable reply lost');
+    return {};
+  }};
+  await assert.rejects(screenshot(conn,'owned-tab',{emulateFocus:true}),/enable reply lost/);
+  assert.deepEqual(calls.map(row=>row.params.enabled),[true,false]);
+  assert.ok(calls.every(row=>row.method==='Emulation.setFocusEmulationEnabled'));
+});
