@@ -40,13 +40,40 @@ Existing `wait` commands still handle visible elements, text, URL changes and
 network idle. Observe the page after a timeout before deciding whether to retry
 an action.
 
-`wake` selects a tab and can revive a page discarded by memory saver. Use it
-when that selection or revival is needed. Calling it after every navigation
+Selecting a discarded tab can cause the browser to load it automatically.
+`focus` selects a tab without reloading and can revive a page discarded by
+memory saver. Use it when that selection or revival is needed. Calling it after every navigation
 makes background work visible to the user.
 
-Safari uses Apple's separate automation session. The Chromium `ready` helper
-does not establish Safari readiness support. Use the supported Safari native
-operations and verify their results before promising the same wait behavior.
+To reload the current URL while keeping the tab in the background, use:
+
+```sh
+browserctrl reload <tab> --browser dia --until load --timeout 30000
+```
+
+Reload waits for the actual new document. `--until` accepts `load`,
+`domcontentloaded`, `networkidle` or `none`. The timeout defaults to 30000
+milliseconds. Choose `none` only when a later observation will verify the result.
+`ready` observes the existing page; `focus` selects it; `reload` reloads it.
+`wake` remains a compatibility alias for `focus`, and `refresh` aliases `reload`.
+Focus requires no additional approval flag.
+
+The MCP tools are `browser_focus` and `browser_reload`; `browser_wake` and
+`browser_refresh` are compatibility aliases. The SDK provides `ops.focus` and
+`ops.reload`, with `ops.wake` and `ops.refresh` as aliases. The persistent
+Chromium Python client provides `client.focus(tab)` and `client.reload(tab,
+wait_until='load', timeout=None)`, with `client.wake` and `client.refresh` as
+aliases.
+
+Safari uses the same `reload` and `refresh` commands in Apple's separate
+automation session. The adapter schedules one `location.reload()` through
+Safari's JavaScript evaluation tool, then waits for the old document marker to
+disappear and for the requested ready state. For `networkidle`, it also waits
+for resource counts to remain quiet for 500 milliseconds. Safari has no direct
+native MCP reload operation. `focus` and `wake` use native `switch_tab` to select
+the automation context; they do not guarantee that a normal Safari window comes
+to the foreground. The Chromium `ready` helper does not establish Safari
+readiness support.
 
 ## Pause and resume an owner
 

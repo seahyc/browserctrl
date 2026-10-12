@@ -91,6 +91,23 @@ class ClientTests(unittest.TestCase):
         finally:
             fake.finish()
 
+    def test_focus_reload_and_compatibility_aliases(self):
+        fake = FakeProcess([{'id': 1, 'result': {'ok': True}}] +
+                           [{'id': i, 'result': {}} for i in range(2, 6)])
+        try:
+            with patch.object(client.subprocess, 'Popen', return_value=fake):
+                sdk = client.ChromeCDP(browser='dia')
+                sdk.focus('tab')
+                sdk.wake('tab')
+                sdk.reload('tab', wait_until='domcontentloaded')
+                sdk.refresh('tab')
+                rows = [json.loads(row) for row in fake.stdin.getvalue().splitlines()]
+                self.assertEqual([row['op'] for row in rows[1:]], ['focus', 'focus', 'reload', 'reload'])
+                self.assertEqual(rows[3]['params']['waitUntil'], 'domcontentloaded')
+                sdk.close()
+        finally:
+            fake.finish()
+
     def test_timeout_does_not_replay(self):
         fake = FakeProcess([{'id': 1, 'result': {'ok': True}}])
         try:

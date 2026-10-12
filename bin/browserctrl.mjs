@@ -21,7 +21,7 @@ import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 
 const MUTATING = new Set([
-  'nav', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act',
+  'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act',
 ]);
 
 function parseArgs(argv) {
@@ -108,6 +108,7 @@ function usage() {
   Navigate and wait (no blind sleeps):
     browserctrl ready <tab> --browser dia [--until load|domcontentloaded] [--timeout 15000]
                        [--selector CSS] [--text TEXT] [--url substring] (background, no activation)
+    browserctrl reload <tab> [--until load|domcontentloaded|networkidle|none] [--timeout 30000]  (refresh is an alias)
     browserctrl nav <tab> <url> [--until load|domcontentloaded|networkidle|none]
     browserctrl wait <tab> --selector ".done" | --text "Saved" | --url /success | --gone ".spinner" | --network-idle
                    [--timeout 15000]
@@ -121,7 +122,7 @@ function usage() {
   Tabs and claims:
     browserctrl open <url> --browser dia [--anonymous]          open a tab
     browserctrl open <url> --browser dia --anonymous            clean temporary session
-    browserctrl close <tab>                    browserctrl wake <tab>
+    browserctrl close <tab>                    browserctrl focus <tab>  (wake is an alias)
     browserctrl group --url <substr>[,<substr>...] [--title T] [--color blue]
     browserctrl ungroup --url <substr>[,<substr>...]
     browserctrl claims [--browser dia]       browserctrl release [<tab>|--mine]
@@ -175,6 +176,10 @@ const main = async () => {
       const result = await safari.safariCall(positional[2], args, { tab: flags.tab });
       if (result.isError) process.exitCode = 1;
       return out(result);
+    }
+    if (cmd === 'reload' || cmd === 'refresh') {
+      const {safariReload} = await import('../lib/safari-reload.mjs');
+      return out(await safariReload(positional[1], {waitUntil: flags.until || 'load', timeoutMs: Number(flags.timeout || 30000)}));
     }
     if (cmd === 'activity') return activityOutput(await safari.safariActivity(positional[1] || 'list', activityDetails(flags)), flags);
     if (cmd === 'status' || cmd === 'doctor') return out(await safari.safariStatus());
@@ -571,8 +576,12 @@ const main = async () => {
         return out(await ops.cookies(conn, targetId));
       case 'close':
         return out(await ops.closeTab(conn, targetId));
+      case 'focus':
       case 'wake':
-        return out(await ops.wake(conn, targetId));
+        return out(await ops.focus(conn, targetId));
+      case 'reload':
+      case 'refresh':
+        return out(await ops.reload(conn, targetId, {waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000}));
       case 'release':
         claims.release(port, targetId);
         return out({ released: tab.id });

@@ -63,7 +63,7 @@ class ChromeCDP:
                         raise OSError("Pipe closed")
                     payload = payload[count:]
                 wait_duration = max(duration, 31) if op in ("health", "reconnect") else duration
-                if op == "send":
+                if op in ("send", "focus", "reload"):
                     wait_duration += 60
                 if self._id == 1 or op == "reconnect":
                     wait_duration += 305
@@ -138,6 +138,16 @@ class ChromeCDP:
 
     def send(self, target, method, *, timeout=None, **params):
         return self.request("send", target=target, method=method, params=params, timeout=timeout)
+
+    def focus(self, target):
+        return self.request("focus", target=target)
+
+    wake = focus
+
+    def reload(self, target, *, wait_until="load", timeout=None):
+        return self.request("reload", target=target, params={"waitUntil": wait_until}, timeout=timeout)
+
+    refresh = reload
 
     def release(self, target):
         return self.request("release", target=target)

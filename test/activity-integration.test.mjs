@@ -57,8 +57,19 @@ test('shared daemon exposes activity and pause across SDK, CLI and MCP without t
   await waitForBackgroundReady(b,second.targetId);
   const trace=fs.readFileSync(path.join(directory,'protocol.jsonl'),'utf8');
   assert.doesNotMatch(trace,/Target.activateTarget|Page.bringToFront|Page.navigate|Page.reload/);
+  t.diagnostic('Checking CLI reload and refresh');
+  for (const command of ['reload','refresh']) {
+    await a.send(first.targetId,'Runtime.evaluate',{expression:'globalThis.__reloadProof = 1'});
+    const commandResult = await exec(process.execPath,[path.join(root,'bin/browserctrl.mjs'),command,first.targetId,'--port',String(port)],{env:{...process.env,CDP_AGENT_ID:'activity-integration-a'}});
+    assert.equal(JSON.parse(commandResult.stdout).focused,false);
+    const marker = await a.send(first.targetId,'Runtime.evaluate',{expression:'typeof globalThis.__reloadProof',returnByValue:true});
+    assert.equal(marker.result.value,'undefined');
+  }
   await a.activity('describe',{intent:'Reviewing guide links',completed:0,total:91});
-  for(let i=0;i<5;i++) await a.send(first.targetId,'Page.navigate',{url:fixture.url});
+  for(let i=0;i<5;i++) {
+    await a.send(first.targetId,'Page.navigate',{url:fixture.url});
+    await waitForBackgroundReady(a,first.targetId);
+  }
   assert.match(a.takeWarnings().join('\n'),/activity-integration-a.*navigation/);
   const listed=await controller.activity();
   assert.equal(listed.agents.find(x=>x.owner==='activity-integration-a').intent,'Reviewing guide links');
@@ -87,5 +98,28 @@ with ChromeCDP(port=${port}) as c:
   const observation=JSON.parse(waited.content[0].text);
   assert.equal(observation.ready,true);
   assert.equal(observation.focused,false);
+  t.diagnostic('Checking MCP reload and refresh');
+  for (const name of ['browser_reload','browser_refresh']) {
+    const reloaded=await client.callTool({name,arguments:{port,agentId:'activity-integration-a',tab:first.targetId}});
+    assert.ok(!reloaded.isError,JSON.stringify(reloaded));
+    assert.equal(JSON.parse(reloaded.content[0].text).focused,false);
+  }
+  t.diagnostic('Checking Python focus/reload aliases');
+  await exec(process.platform === 'win32' ? 'python' : 'python3', ['-c', `from chrome_cdp import ChromeCDP
+with ChromeCDP(port=${port}) as c:
+ t=c.attach('${first.targetId}')
+ assert c.reload(t)['reloaded']
+ assert c.refresh(t)['reloaded']
+ assert c.focus(t)['activated']
+ assert c.wake(t)['activated']`], {env: {...process.env,CDP_AGENT_ID:'activity-integration-a',PYTHONPATH:path.join(root,'python')}});
+  for (const name of ['browser_focus','browser_wake']) {
+    const focused=await client.callTool({name,arguments:{port,agentId:'activity-integration-a',tab:first.targetId}});
+    assert.ok(!focused.isError,JSON.stringify(focused));
+    assert.equal(JSON.parse(focused.content[0].text).activated,first.targetId.slice(0,8));
+  }
+  for (const command of ['focus','wake']) {
+    const selected=await exec(process.execPath,[path.join(root,'bin/browserctrl.mjs'),command,first.targetId,'--port',String(port)],{env:{...process.env,CDP_AGENT_ID:'activity-integration-a'}});
+    assert.equal(JSON.parse(selected.stdout).activated,first.targetId.slice(0,8));
+  }
   console.log(JSON.stringify({backgroundReady:true,rapidNavigationWarning:true,cliActivity:true,pythonActivity:true,mcpPause:true,otherOwnerContinues:true,claimsPreserved:true,resumeWithoutReplay:true,focusCleanupWhilePaused:true}));
 });
