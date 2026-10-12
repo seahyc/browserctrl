@@ -91,6 +91,17 @@ t('an owned tab that drifted off the site is navigated back and reused', async (
   assert.equal(again.items.length, 5);
 });
 
+t('a recipe waits for a challenge on its tab to clear before calling', async () => {
+  process.env.BROWSERCTRL_NOTIFY = '0';
+  const recipe = { ...ordersRecipe(), name: 'fixture/challenged', tab: 'handoff', handoff_match: `^${origin}/verify/captcha`, captcha_wait_ms: 8000 };
+  const human = await ops.newTab(conn, `${origin}/verify/captcha?y=1`);
+  await ops.waitForReady(conn, human.targetId, { waitUntil: 'load' });
+  await ops.evaluate(conn, human.targetId, "setTimeout(() => history.replaceState(null, '', '/shop'), 500), 1");
+  const res = await runRecipe(conn, recipe);
+  assert.deepEqual(res.challenge, { captcha: 'shopee-verify', solvedBy: 'human' });
+  assert.equal(res.items.length, 5);
+});
+
 t('a page hook returns items and the next cursor', async () => {
   const recipe = {
     name: 'fixture/hook', origin, warm_path: '/shop', settle_ms: 0, paginate: { start: 0 },
