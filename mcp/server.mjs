@@ -23,6 +23,7 @@ import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 import * as sessions from '../lib/sessions.mjs';
+import * as profiles from '../lib/profiles.mjs';
 
 const SERVER_NAME = 'browser';
 const SERVER_VERSION = '2.3.0';
@@ -68,7 +69,12 @@ const TOOLS = [
   },
   {
     name: 'browser_tabs',
-    description: 'List open tabs in one browser, with their ids and any claims held by other agents.',
+    description: 'List open tabs in one browser, with their ids, browser profile names, and any claims held by other agents.',
+    inputSchema: { type: 'object', properties: { ...browserProp, profile: { type: 'string', description: 'Only tabs in this browser profile: directory, display name, or unique name prefix (see browser_profiles).' } } },
+  },
+  {
+    name: 'browser_profiles',
+    description: 'List the browser profiles (Chromium user profiles, e.g. Work and Personal): directory, display name, open tab count, and which is the default for new tabs.',
     inputSchema: { type: 'object', properties: { ...browserProp } },
   },
   {
@@ -81,6 +87,7 @@ const TOOLS = [
         url: { type: 'string' },
         until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle', 'none'] },
         anonymous: { type: 'boolean', description: 'Use a temporary isolated browser context with no profile cookies or storage. Closing the tab disposes the entire context.' },
+        profile: { type: 'string', description: 'Open in this browser profile (directory, display name, or unique prefix; see browser_profiles). Opens a window in the profile if it has none.' },
       },
       required: ['url'],
     },
@@ -442,11 +449,22 @@ const handlers = {
     );
   },
 
-  browser_tabs: args => withConn(args, async conn => text(await ops.tabs(conn))),
+  browser_tabs: args => withConn(args, async conn => {
+    const rows = await ops.tabs(conn);
+    return text(args.profile ? await profiles.filterByProfile(conn, rows, args.profile) : await profiles.labelTabs(conn, rows));
+  }),
+
+  browser_profiles: args => withConn(args, async conn => {
+    const info = await profiles.inspect(conn);
+    return text({ userDataDir: info.userDataDir, profiles: info.profiles });
+  }),
 
   browser_open: args =>
     withConn(args, async conn => {
-      const res = await ops.newTab(conn, args.url, { anonymous: Boolean(args.anonymous) });
+      if (args.profile && args.anonymous) throw new Error('profile and anonymous are exclusive: an anonymous tab belongs to no profile.');
+      const res = args.profile
+        ? await profiles.openInProfile(conn, args.url, args.profile)
+        : await ops.newTab(conn, args.url, { anonymous: Boolean(args.anonymous) });
       if (args.until !== 'none') await ops.waitForReady(conn, res.targetId, { waitUntil: args.until || 'load' }).catch(() => {});
       return withHint(text(res), args.url);
     }),

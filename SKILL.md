@@ -448,6 +448,34 @@ close that private window normally. Local native-window cleanup does not apply
 to forwarded/custom endpoints. After updating this code, existing MCP server
 processes must be reloaded to pick up operation changes, or use a fresh CLI process.
 
+### Browser profiles
+
+One debug port serves every profile of that browser (Work, Personal, ...).
+Profile names come from the browser's `Local State`, found from the running
+process, so `--user-data-dir` instances and explicit `--port`s work too.
+
+```bash
+browserctrl profiles --browser chrome
+# Default      Work                     12 tabs  [default: new tabs land here]
+# Profile 1    Personal                 no window
+browserctrl tabs --browser chrome                       # profile column per tab
+browserctrl tabs --profile work --browser chrome        # only that profile's tabs
+browserctrl open https://example.com --profile Personal --browser chrome
+```
+
+`--profile` takes the directory, the display name, or a unique name prefix; an
+ambiguous or unknown one fails with the list. MCP: `browser_profiles`, and a
+`profile` argument on `browser_tabs` and `browser_open`.
+
+CDP names no profile, so each one is identified once per browser launch by
+loading `chrome://version` in a brief background tab inside it and reading its
+Profile Path (cached per port). Expect that tab to flash in each profile's tab
+strip on the first `tabs`/`profiles` call; single-profile browsers skip it.
+`open` in a profile with tabs opens a background tab there; this makes it the
+browser's last-used profile. A profile with no window is opened by launching
+the browser app with `--profile-directory` (macOS `open -na`), which raises a
+new window in it; this needs a local browser process, not a forwarded port.
+
 
 ## MCP tools
 
@@ -485,6 +513,7 @@ lib/discovery.mjs   which browsers are debuggable, and how to enable the rest
 lib/daemon.mjs      one master daemon per port: browser WS, sessions, event buffers
 lib/claims.mjs      atomic tab ownership leases across agents
 lib/anonymous.mjs   contexts created by --anonymous, for safe whole-context cleanup
+lib/profiles.mjs    browser profiles: Local State names, context -> profile probes, open in a profile
 lib/state.mjs       human-set state: tab aliases and marks
 lib/refs.mjs        the page snapshot and ref resolution
 lib/ops.mjs         every operation, one function each

@@ -23,6 +23,7 @@ import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint, listTaps, tapAdd, tapUpdate, tapRemove } from '../lib/recipes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
+import * as profiles from '../lib/profiles.mjs';
 
 const MUTATING = new Set([
   'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha',
@@ -144,6 +145,9 @@ function usage() {
   Tabs and claims:
     browserctrl open <url> --browser dia [--anonymous]          open a tab
     browserctrl open <url> --browser dia --anonymous            clean temporary session
+    browserctrl profiles --browser chrome [--json]              profiles, their tabs, which is the default
+    browserctrl open <url> --profile <name|dir|prefix> --browser chrome   open in that profile (opens its window if needed)
+    browserctrl tabs --profile <name> --browser chrome          only that profile's tabs
     browserctrl close <tab>                    browserctrl focus <tab>  (wake is an alias)
     browserctrl group --url <substr>[,<substr>...] [--title T] [--color blue]
     browserctrl ungroup --url <substr>[,<substr>...]
@@ -376,8 +380,17 @@ const main = async () => {
       await conn.stop().catch(() => {});
       return out(`Daemon stopped for port ${port}`);
     }
+    if (cmd === 'profiles') {
+      const info = await profiles.inspect(conn);
+      if (flags.json) return out({ userDataDir: info.userDataDir, profiles: info.profiles });
+      return out([`user data: ${info.userDataDir}`, ...info.profiles.map(p =>
+        `${p.dir.padEnd(12)} ${p.name.slice(0, 24).padEnd(24)} ${p.tabs ? `${p.tabs} tab${p.tabs === 1 ? '' : 's'}` : p.contexts.length ? 'open, no tabs' : 'no window'}` +
+        `${p.default ? '  [default: new tabs land here]' : ''}${p.email ? `  ${p.email}` : ''}`)].join('\n'));
+    }
     if (cmd === 'tabs') {
-      const rows = await ops.tabs(conn, { focus: !flags['no-focus'] });
+      let rows = await ops.tabs(conn, { focus: !flags['no-focus'] });
+      // Profile names cost a one-time probe per profile; see lib/profiles.mjs.
+      rows = flags.profile ? await profiles.filterByProfile(conn, rows, flags.profile) : await profiles.labelTabs(conn, rows);
       if (flags.json) return out(rows);
       return out(
         rows
@@ -389,7 +402,8 @@ const main = async () => {
             if (t.suspended) tags.push('suspended');
             if (t.claimedBy) tags.push(t.claimedBy);
             const name = t.alias ? `${t.alias} (${t.id})` : t.id;
-            return `${name.padEnd(22)} ${(t.title || '').slice(0, 38).padEnd(38)}  ${t.url.slice(0, 52)}${tags.length ? `  [${tags.join(' | ')}]` : ''}`;
+            const profile = rows.some(r => r.profile && r.profile !== '?') ? `${(t.profile || '-').slice(0, 14).padEnd(14)} ` : '';
+            return `${name.padEnd(22)} ${profile}${(t.title || '').slice(0, 38).padEnd(38)}  ${t.url.slice(0, 52)}${tags.length ? `  [${tags.join(' | ')}]` : ''}`;
           })
           .join('\n') || '(no tabs)',
       );
@@ -494,7 +508,10 @@ const main = async () => {
       return out(res.items);
     }
     if (cmd === 'open') {
-      const res = await ops.newTab(conn, positional[1], { anonymous: Boolean(flags.anonymous) });
+      if (flags.profile && flags.anonymous) throw new Error('--profile and --anonymous are exclusive: an anonymous tab belongs to no profile.');
+      const res = flags.profile
+        ? await profiles.openInProfile(conn, positional[1], flags.profile)
+        : await ops.newTab(conn, positional[1], { anonymous: Boolean(flags.anonymous) });
       if (flags.until !== 'none' && positional[1]) {
         await ops.waitForReady(conn, res.targetId, { waitUntil: flags.until || 'load' }).catch(() => {});
       }
