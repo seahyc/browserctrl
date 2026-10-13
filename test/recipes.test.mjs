@@ -148,6 +148,17 @@ t('a recipe waits for a challenge on its tab to clear before calling', async () 
   assert.equal(res.items.length, 5);
 });
 
+t('a ws auth source reads a session key that only ever appeared in a WebSocket frame', async () => {
+  const recipe = {
+    name: 'fixture/chat-messages', origin, warm_path: '/chat', settle_ms: 0,
+    auth: { sk: { from: 'ws', frame: 'LOGI', path: 'key' } },
+    request: { method: 'GET', url: '/api/chat-messages', headers: { 'session-key': '{{auth.sk}}' } },
+    paginate: { items: 'messages' }, output: { text: 'text' },
+  };
+  const res = await runRecipe(conn, recipe);
+  assert.deepEqual(res.items.map(m => m.text), ['Yup still possible', 'Deal']);
+});
+
 t('a page hook returns items and the next cursor', async () => {
   const recipe = {
     name: 'fixture/hook', origin, warm_path: '/shop', settle_ms: 0, paginate: { start: 0 },

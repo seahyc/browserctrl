@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { endpointOf, createStore } from '../lib/exemplars.mjs';
+import { endpointOf, createStore, frameKind, frameJson } from '../lib/exemplars.mjs';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
@@ -31,6 +31,15 @@ test('the store keeps the last three exemplars per endpoint in a private gzip fi
   assert.equal(ep.count, 5);
   assert.deepEqual(ep.exemplars.map(e => e.responseBody), ['{"i":2}', '{"i":3}', '{"i":4}']);
   if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(dir, 'shop.example.json.gz')).mode & 0o777, 0o600);
+});
+
+test('WebSocket frames are classified by prefix or JSON type, and parsed', () => {
+  assert.equal(frameKind('LOGI{"key":"k"}'), 'LOGI');
+  assert.equal(frameKind('{"type":"message","x":1}'), 'type=message');
+  assert.equal(frameKind('{"op":2}'), 'op=2');
+  assert.equal(frameKind('hello'), 'text');
+  assert.deepEqual(frameJson('MESG{"message":"hi"}'), { message: 'hi' });
+  assert.equal(frameJson('not json'), null);
 });
 
 const haveBrowser = Boolean(chromeBinary());
@@ -66,4 +75,19 @@ test('a page fetch in an attached tab is captured with its headers and JSON body
   assert.equal(ex.requestHeaders['x-csrf'], 'tok-123');
   assert.equal(JSON.parse(ex.responseBody).data.orders.length, 2);
   assert.match(ex.page, /\/shop$/);
+});
+
+test('a page WebSocket frame in an attached tab is captured by kind', { skip: haveBrowser ? false : 'no Chromium-family browser installed' }, async () => {
+  const { targetId } = await ops.newTab(conn, 'about:blank');
+  await ops.evaluate(conn, targetId, '1');
+  await ops.navigate(conn, targetId, `${fixture.url}chat`);
+  await ops.waitFor(conn, targetId, { selector: 'body[data-logi="1"]', present: true, timeoutMs: 10000 });
+  const host = new URL(fixture.url).host;
+  let ep;
+  for (let i = 0; i < 40 && !ep; i++) {
+    await new Promise(r => setTimeout(r, 250));
+    ep = createStore(process.env.BROWSERCTRL_EXEMPLARS).exemplars(host, 'WS recv LOGI ').at(0);
+  }
+  assert.ok(ep, 'the LOGI frame should be in the store');
+  assert.equal(frameJson(ep.exemplars.at(-1).frame).key, fixture.wsKey);
 });

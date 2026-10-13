@@ -6,6 +6,7 @@ import os from 'os';
 import path from 'path';
 import { spawn, execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Test daemons inherit the environment of whichever test file started them, so
@@ -78,6 +79,19 @@ document.addEventListener('mouseup', () => { if (!down) return; down = false;
       res.end('<html><body><canvas width="280" height="160"></canvas><p>Drag the piece into place</p></body></html>');
       return;
     }
+    // A chat page whose session key arrives only in a WebSocket LOGI frame, as
+    // with Sendbird; the messages API wants it back as a header.
+    if (req.url.startsWith('/chat')) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<html><body><h1>chat</h1><script>const ws = new WebSocket('ws://' + location.host + '/ws'); ws.onmessage = e => { document.body.dataset.logi = '1'; };</script></body></html>`);
+      return;
+    }
+    if (req.url.startsWith('/api/chat-messages')) {
+      if (req.headers['session-key'] !== wsKey) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"session"}'); return; }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ messages: [{ id: 1, text: 'Yup still possible' }, { id: 2, text: 'Deal' }] }));
+      return;
+    }
     if (req.url.startsWith('/api/orders/')) {
       if (req.headers['x-csrf'] !== 'tok-123') { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end('{"error":"csrf"}'); return; }
       const q = new URL(req.url, 'http://x').searchParams;
@@ -95,9 +109,23 @@ document.addEventListener('mouseup', () => { if (!down) return; down = false;
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
   });
+  // Minimal WebSocket endpoint: handshake, then one text frame with the key.
+  const wsKey = `k-${crypto.randomUUID()}`;
+  const sockets = new Set();
+  server.on('upgrade', (req, socket) => {
+    if (!req.url.startsWith('/ws')) return socket.destroy();
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+    socket.on('error', () => {});
+    const accept = crypto.createHash('sha1').update(req.headers['sec-websocket-key'] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    const payload = Buffer.from(`LOGI{"user_id":"1","key":"${wsKey}"}`);
+    socket.write(Buffer.concat([Buffer.from([0x81, payload.length]), payload]));
+  });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();
-  return { server, url: `http://127.0.0.1:${port}/`, close: () => new Promise(r => server.close(r)) };
+  const close = () => { for (const s of sockets) s.destroy(); return new Promise(r => server.close(r)); };
+  return { server, url: `http://127.0.0.1:${port}/`, wsKey, close };
 }
 
 export async function startHeadlessBrowser(port = TEST_PORT) {
