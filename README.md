@@ -65,6 +65,22 @@ node bin/browserctrl.mjs wait <tab-id> --text "Saved" --browser chrome
 
 Take a new snapshot after navigation or page changes. References are invalidated by navigation and by the next snapshot. If a command times out or the connection drops during an action, check the page before trying again: browserctrl does not replay actions whose result is uncertain.
 
+## Recipes, profiles and captchas
+
+**Recipes** call a site's own API from a tab on that site instead of driving its UI. A recipe is a small JSON file; it runs inside your logged-in tab, so the site's cookies and request signing apply, and it holds no credentials. For data tasks such as an order history this returns structured results in seconds where driving the page takes minutes. Shared recipes come from git repositories called taps, such as [browserctrl-recipes](https://github.com/seahyc/browserctrl-recipes):
+
+```sh
+node bin/browserctrl.mjs recipe tap add https://github.com/seahyc/browserctrl-recipes
+node bin/browserctrl.mjs recipe find "shopee orders"
+node bin/browserctrl.mjs recipe run shopee.sg/orders --browser chrome
+```
+
+`open`, `nav` and `read` print a `hint:` line when the page's site has a recipe. To write one, browserctrl records the fetch/XHR traffic of tabs it drives (`recipe endpoints <host>`, `recipe inspect <host>`; set `BROWSERCTRL_CAPTURE=0` to turn this off). Recipes use sites' internal APIs, which can change without notice; you are responsible for using them within each site's terms. The format is in [references/recipes.md](references/recipes.md).
+
+**Profiles:** `profiles --browser chrome` lists a Chromium browser's profiles, `tabs --profile <name>` shows one profile's tabs, and `open <url> --profile <name>` opens a tab in that profile, opening a window for it if needed. `--profile` accepts the profile directory, account email, display name or a unique prefix.
+
+**Captchas:** `captcha <tab>` makes one attempt at a plain drag-to-the-end slider. For any other challenge, or if that attempt fails, it shows a desktop notification on macOS and waits for you to clear the challenge.
+
 ## How this differs from the original
 
 [Petr Baudis's chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill) is the foundation. It is a smaller, dependency-light way to control Chromium, with Windows, Linux and macOS support. Choose it if its focused CLI does what you need.
