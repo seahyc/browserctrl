@@ -38,7 +38,8 @@ test('profile resolution: directory, exact name, unique prefix, case-insensitive
 
 test('profile resolution: ambiguous prefix and unknown names list the profiles', () => {
   const profiles = parseLocalState(LOCAL_STATE);
-  assert.throws(() => resolveProfile(profiles, 'be'), /Ambiguous profile "be": matches Beta \(Profile 1\), Beta Work \(Profile 2\)/);
+  assert.throws(() => resolveProfile(profiles, 'be'), /Ambiguous profile "be": matches Beta \(Profile 1\), Beta Work \(Profile 2, beta@example\.com\)\. Use the directory name or account email/);
+  assert.equal(resolveProfile(profiles, 'BETA@example.com').dir, 'Profile 2');
   assert.throws(() => resolveProfile(profiles, 'gamma'), /Unknown profile "gamma"\. Profiles: Alpha \(Default\), Beta \(Profile 1\)/);
   assert.throws(() => resolveProfile(profiles, ''), /No profile given/);
 });

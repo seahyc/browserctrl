@@ -463,7 +463,7 @@ browserctrl tabs --profile work --browser chrome        # only that profile's ta
 browserctrl open https://example.com --profile Personal --browser chrome
 ```
 
-`--profile` takes the directory, the display name, or a unique name prefix; an
+`--profile` takes the directory, the account email, the display name, or a unique name prefix; an
 ambiguous or unknown one fails with the list. MCP: `browser_profiles`, and a
 `profile` argument on `browser_tabs` and `browser_open`.
 
