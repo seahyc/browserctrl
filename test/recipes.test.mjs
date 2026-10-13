@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { get, fill, coerce, shape, runRecipe, listRecipes, loadRecipe, findRecipes, recipeHint, recipeMatches, tapAdd, tapUpdate, tapRemove, listTaps } from '../lib/recipes.mjs';
+import { get, fill, coerce, shape, freshFrameValue, runRecipe, listRecipes, loadRecipe, findRecipes, recipeHint, recipeMatches, tapAdd, tapUpdate, tapRemove, listTaps } from '../lib/recipes.mjs';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
@@ -83,6 +83,18 @@ test('taps are cloned from git, updated fast-forward and removed', async () => {
   assert.deepEqual(await tapUpdate('shared', taps), [{ tap: 'shared', recipes: 2 }]);
   assert.deepEqual(tapRemove('shared', taps), { removed: 'shared' });
   assert.deepEqual(listTaps(taps), []);
+});
+
+test('a captured frame is used only while it is recent and not about to expire', () => {
+  const now = Date.parse('2026-10-13T13:30:00Z');
+  const frame = (at, key, expires) => ({ at, frame: `LOGI{"key":"${key}","expires_at":${expires}}` });
+  const src = { path: 'key', expires_path: 'expires_at' };
+  const frames = [frame('2026-10-13T13:20:00Z', 'old', 1791898000), frame('2026-10-13T13:26:00Z', 'new', 1791898560)];
+  assert.equal(freshFrameValue(frames, src, now), 'new', 'newest frame, expiring in 6 minutes (seconds)');
+  assert.equal(freshFrameValue(frames, src, Date.parse('2026-10-13T13:35:45Z')), null, 'within 30s of expiry');
+  assert.equal(freshFrameValue([frame('2026-10-13T13:26:00Z', 'ms', 1791898560000)], src, now), 'ms', 'milliseconds work too');
+  assert.equal(freshFrameValue(frames, { path: 'key', max_age_s: 60 }, now), null, 'older than max_age_s');
+  assert.equal(freshFrameValue([], src, now), null);
 });
 
 const haveBrowser = Boolean(chromeBinary());
