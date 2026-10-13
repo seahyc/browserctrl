@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { get, fill, coerce, shape, runRecipe, listRecipes } from '../lib/recipes.mjs';
+import { execFileSync } from 'node:child_process';
+import { get, fill, coerce, shape, runRecipe, listRecipes, loadRecipe, findRecipes, recipeHint, recipeMatches, tapAdd, tapUpdate, tapRemove, listTaps } from '../lib/recipes.mjs';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
@@ -37,6 +38,51 @@ test('listRecipes reads site/name files and reports unreadable ones', () => {
   assert.deepEqual(rows.map(r => r.name), ['shop.example/broken', 'shop.example/orders']);
   assert.match(rows[0].error, /unreadable/);
   assert.equal(rows[1].tab, 'handoff');
+});
+
+test('local recipes override tapped ones, and taps may keep recipes under recipes/', () => {
+  const local = path.join(tmp, 'local'), taps = path.join(tmp, 'taps');
+  const put = (root, name, body) => { fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); fs.writeFileSync(path.join(root, name), JSON.stringify(body)); };
+  put(path.join(taps, 'community', 'recipes'), 'shopee.sg/orders.json', { description: 'tapped orders', origin: 'https://shopee.sg' });
+  put(path.join(taps, 'community', 'recipes'), 'taobao.com/orders.json', { description: 'tapped taobao', origin: 'https://buyertrade.taobao.com', keywords: ['purchases'] });
+  put(local, 'shopee.sg/orders.json', { description: 'my orders', origin: 'https://shopee.sg' });
+  const rows = listRecipes(local, taps);
+  assert.deepEqual(rows.map(r => [r.name, r.source]), [['shopee.sg/orders', 'local'], ['taobao.com/orders', 'community']]);
+  assert.equal(loadRecipe('taobao.com/orders', local, taps).description, 'tapped taobao');
+  assert.deepEqual(listTaps(taps), ['community']);
+});
+
+test('recipes are found by URL (site, origin host and subdomains, or match) and by words', () => {
+  const rows = [
+    { name: 'taobao.com/orders', origin: 'https://buyertrade.taobao.com', description: 'Full Taobao purchase history', keywords: ['orders'] },
+    { name: 'shopee.sg/orders', origin: 'https://shopee.sg', description: 'Shopee purchase history' },
+    { name: 'x.com/search', origin: 'https://x.com', match: ['^https://x\\.com/search'], description: 'Search posts' },
+  ];
+  assert.ok(recipeMatches(rows[0], 'https://world.taobao.com/cart'));
+  assert.ok(!recipeMatches(rows[0], 'https://nottaobao.com/'));
+  assert.ok(recipeMatches(rows[2], 'https://x.com/search?q=a') && !recipeMatches(rows[2], 'https://x.com/home'));
+  assert.deepEqual(findRecipes('https://shopee.sg/user/purchase', rows).map(r => r.name), ['shopee.sg/orders']);
+  assert.deepEqual(findRecipes('purchase history', rows).map(r => r.name), ['taobao.com/orders', 'shopee.sg/orders']);
+  assert.deepEqual(findRecipes('taobao orders', rows).map(r => r.name), ['taobao.com/orders']);
+  assert.match(recipeHint('https://shopee.sg/', rows), /shopee\.sg\/orders \(Shopee purchase history\).*recipe run/);
+  assert.equal(recipeHint('https://example.com/', rows), null);
+  assert.equal(recipeHint('about:blank', rows), null);
+});
+
+test('taps are cloned from git, updated fast-forward and removed', async () => {
+  const repo = path.join(tmp, 'tap-src');
+  fs.mkdirSync(path.join(repo, 'shop.example'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'shop.example', 'orders.json'), '{"description":"one"}');
+  const g = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'ignore' });
+  g('init', '-q'); g('add', '.'); g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'one');
+  const taps = path.join(tmp, 'tapdir');
+  assert.deepEqual(await tapAdd(repo, 'shared', taps), { tap: 'shared', recipes: 1 });
+  await assert.rejects(tapAdd(repo, 'shared', taps), /already exists/);
+  fs.writeFileSync(path.join(repo, 'shop.example', 'returns.json'), '{}');
+  g('add', '.'); g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'two');
+  assert.deepEqual(await tapUpdate('shared', taps), [{ tap: 'shared', recipes: 2 }]);
+  assert.deepEqual(tapRemove('shared', taps), { removed: 'shared' });
+  assert.deepEqual(listTaps(taps), []);
 });
 
 const haveBrowser = Boolean(chromeBinary());

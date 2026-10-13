@@ -198,30 +198,34 @@ screen video, and a frontmost-app sample each second so time spent outside the
 browser is still legible. A mark at 0:42 comes back as "click on button
 'Confirm and apply' [data-testid=wb-confirm]", not as a frame number.
 
-## Use a site's API before its UI
+## Use a recipe before driving a site's UI
 
-For a data task on a site (order history, inbox, search results), check for a
-recipe before driving the page. A recipe calls the site's own API inside a tab
-on that site and returns structured items in seconds.
+A recipe calls a site's own API inside a tab on that site and returns structured
+items in seconds. For a data task on a site (order history, inbox, search
+results), look for one first; `open`, `nav` and `read` also print a `hint:` line
+when the page's site has recipes.
 
 ```sh
-browserctrl api list                                    # saved recipes
-browserctrl api call shopee.sg/orders --browser dia     # key=value args override params
+browserctrl recipe find "shopee orders"                 # or a URL; matches local and tapped recipes
+browserctrl recipe run shopee.sg/orders --browser dia   # key=value args override params
 ```
+
+Shared recipes come from taps, git repos of recipes:
+`browserctrl recipe tap add https://github.com/seahyc/browserctrl-recipes`.
 
 The daemon records fetch/XHR traffic from tabs you drive. When no recipe fits
 and the task is worth repeating, do it through the UI once, then look at what the
 page called and write a recipe from it:
 
 ```sh
-browserctrl api endpoints shopee.sg                     # endpoint templates, counts, last seen
-browserctrl api inspect shopee.sg get_all_order         # full exemplars: headers, tokens, bodies
+browserctrl recipe endpoints shopee.sg                  # endpoint templates, counts, last seen
+browserctrl recipe inspect shopee.sg get_all_order      # full exemplars: headers, tokens, bodies
 ```
 
 Before writing or fixing a recipe, read [the recipe format](references/recipes.md).
-Save a recipe only after `api call` returns the same facts the UI showed, and
+Save a recipe only after `recipe run` returns the same facts the UI showed, and
 record that in its `verified` field. Recipes whose `kind` is `write` change data:
-follow the user's approval rules before calling one.
+follow the user's approval rules before running one.
 
 ## Captchas and verification pages
 

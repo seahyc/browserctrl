@@ -20,7 +20,7 @@ import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
-import { listRecipes, loadRecipe, runRecipe } from '../lib/recipes.mjs';
+import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint, listTaps, tapAdd, tapUpdate, tapRemove } from '../lib/recipes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
 
@@ -47,6 +47,13 @@ function parseArgs(argv) {
 }
 
 const out = v => console.log(typeof v === 'string' ? v : JSON.stringify(v, null, 2));
+
+// A matching recipe is usually much faster than the UI the agent is about to
+// drive. Hints go to stderr so stdout stays parseable.
+function hint(url) {
+  const line = recipeHint(url);
+  if (line) console.error(`hint: ${line}`);
+}
 
 function activityOutput(report, flags) {
   if (flags.json) return out(report);
@@ -80,11 +87,13 @@ function usage() {
   Captchas: browserctrl captcha <tab> --browser dia [--timeout ms] [--no-attempt]
     tries a drag-to-end slider once, otherwise notifies you and waits until the challenge clears
 
-  API recipes: call a site's own API from a tab on that site (see references/recipes.md):
-    browserctrl api list                                  saved recipes
-    browserctrl api call shopee.sg/orders --browser dia   run one; key=value args override params; --raw skips output mapping
-    browserctrl api endpoints [host]                      fetch/XHR endpoints captured from attached tabs
-    browserctrl api inspect <host> [match]                full captured exemplars (headers, tokens, bodies)
+  Recipes: a site's own API call, faster than its UI (see references/recipes.md):
+    browserctrl recipe find <url or words>                recipes for a page or task; open/nav/read also hint at them
+    browserctrl recipe run shopee.sg/orders --browser dia run one; key=value args override params; --raw skips output mapping
+    browserctrl recipe list                               all recipes, local and tapped
+    browserctrl recipe tap add <git-url> [name]           add a shared recipe repo; tap list | update [name] | remove <name>
+    browserctrl recipe endpoints [host]                   fetch/XHR endpoints captured from attached tabs
+    browserctrl recipe inspect <host> [match]             full captured exemplars (headers, tokens, bodies)
 
   Safari 27 on macOS, through Apple's MCP interface:
     browserctrl safari tools --browser safari
@@ -257,9 +266,22 @@ const main = async () => {
   }
 
   if (cmd === 'launch') return out(await launch(positional[1]));
-  if (cmd === 'api' && positional[1] !== 'call') {
+  if (cmd === 'recipe' && positional[1] !== 'run') {
     const sub = positional[1] || 'list';
-    if (sub === 'list') return out(flags.json ? listRecipes() : listRecipes().map(r => `${r.name.padEnd(28)} ${r.error || `${r.kind || 'read'}${r.tab === 'handoff' ? ', handoff tab' : ''}  ${r.description || ''}`}`).join('\n') || '(no recipes yet)');
+    const row = r => `${r.name.padEnd(28)} ${r.error || `${r.kind}${r.tab === 'handoff' ? ', handoff tab' : ''}${r.source !== 'local' ? `, tap ${r.source}` : ''}  ${r.description || ''}`}`;
+    if (sub === 'list') return out(flags.json ? listRecipes() : listRecipes().map(row).join('\n') || '(no recipes yet; add a tap: browserctrl recipe tap add <git-url>)');
+    if (sub === 'find') {
+      const found = findRecipes(positional.slice(2).join(' '));
+      return out(flags.json ? found : found.map(row).join('\n') || '(no matching recipe)');
+    }
+    if (sub === 'tap') {
+      const action = positional[2] || 'list';
+      if (action === 'list') return out(listTaps().join('\n') || '(no taps)');
+      if (action === 'add') return out(await tapAdd(positional[3], positional[4]));
+      if (action === 'update') return out(await tapUpdate(positional[3]));
+      if (action === 'remove') return out(tapRemove(positional[3]));
+      throw new Error('Usage: browserctrl recipe tap list | add <git-url> [name] | update [name] | remove <name>');
+    }
     const store = createStore();
     if (sub === 'endpoints') {
       if (!positional[2]) return out(store.hosts().join('\n') || '(nothing captured yet)');
@@ -267,7 +289,7 @@ const main = async () => {
       return out(flags.json ? rows : rows.map(r => `${String(r.count).padStart(4)}  ${r.lastSeen.slice(0, 16)}  ${r.status ?? '-'}  ${r.template}`).join('\n') || '(nothing captured for this host)');
     }
     if (sub === 'inspect') return out(store.exemplars(positional[2], positional[3]));
-    throw new Error('Usage: browserctrl api list | endpoints [host] | inspect <host> [template-substring] | call <site/name> [key=value ...] [--raw] --browser B');
+    throw new Error('Usage: browserctrl recipe list | find <url or words> | run <site/name> [key=value ...] [--raw] --browser B | endpoints [host] | inspect <host> [match] | tap ...');
   }
 
   if (cmd === 'claims') {
@@ -465,7 +487,7 @@ const main = async () => {
       }
       throw new Error('Usage: browserctrl ext [info] | apis | api <chrome.path> [jsonArgs] | group --url a,b | outline | undo-close | eval <expr>');
     }
-    if (cmd === 'api') {
+    if (cmd === 'recipe') {
       const params = Object.fromEntries(positional.slice(3).map(kv => [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)]));
       const res = await runRecipe(conn, loadRecipe(positional[2]), params, { raw: Boolean(flags.raw) });
       console.error(`[${res.recipe}] ${res.count} items, ${res.calls} calls, ${res.ms} ms (tab ${res.tab})`);
@@ -476,6 +498,7 @@ const main = async () => {
       if (flags.until !== 'none' && positional[1]) {
         await ops.waitForReady(conn, res.targetId, { waitUntil: flags.until || 'load' }).catch(() => {});
       }
+      hint(positional[1]);
       return out(res);
     }
 
@@ -499,6 +522,7 @@ const main = async () => {
           max: Number(flags.max || 400),
           includeHidden: Boolean(flags['include-hidden']),
         });
+        hint(snap.url);
         if (flags.json) return out(snap);
         const lines = snap.elements.map(
           e => `${e.ref.padEnd(8)} ${e.role.padEnd(10)} ${(e.name || '').slice(0, 60).padEnd(60)}${e.testid ? ` [${e.testid}]` : ''}${e.disabled ? ' (disabled)' : ''}`,
@@ -561,8 +585,11 @@ const main = async () => {
         }
         return out(flags.json ? { results } : results.map(r => JSON.stringify(r)).join('\n'));
       }
-      case 'nav':
-        return out(await ops.navigate(conn, targetId, positional[2], { waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000 }));
+      case 'nav': {
+        const res = await ops.navigate(conn, targetId, positional[2], { waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000 });
+        hint(res.url);
+        return out(res);
+      }
       case 'wait':
         return out(
           await ops.waitFor(conn, targetId, {

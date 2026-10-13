@@ -13,7 +13,7 @@ import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
 import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
-import { listRecipes, loadRecipe, runRecipe } from '../lib/recipes.mjs';
+import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint } from '../lib/recipes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
 import { waitForBackgroundReady } from '../lib/readiness.mjs';
@@ -245,15 +245,16 @@ const TOOLS = [
     },
   },
   {
-    name: 'browser_api',
+    name: 'browser_recipe',
     description:
-      "Chromium only. Call a site's own API instead of driving its UI. action=list shows saved recipes; action=call runs one (name like shopee.sg/orders, params override its defaults) inside a tab on that site and returns structured items in seconds. Recipes with tab=handoff (e.g. Taobao) need a tab the human opened. action=endpoints lists fetch/XHR endpoints captured from tabs you drove (host optional); action=inspect returns full captured exemplars (headers, tokens, bodies) to write a new recipe from. Recipes live in ~/.config/browserctrl/recipes; see references/recipes.md.",
+      "Chromium only. Get a site's data through its own API instead of its UI: seconds instead of minutes. action=find with query (a URL or words, e.g. 'shopee orders') lists matching recipes; browser_open/navigate/read also hint when a page has one. action=run runs one (name like shopee.sg/orders; params override its defaults) inside a tab on that site and returns structured items. Recipes with tab=handoff (e.g. Taobao) need a tab the human opened. action=list shows every recipe, local and tapped. action=endpoints lists fetch/XHR endpoints captured from tabs you drove (host optional); action=inspect returns full captured exemplars to write a new recipe from. See references/recipes.md.",
     inputSchema: {
       type: 'object',
       properties: {
         ...browserProp,
-        action: { type: 'string', enum: ['list', 'call', 'endpoints', 'inspect'] },
-        name: { type: 'string', description: 'Recipe for action=call, e.g. shopee.sg/orders' },
+        action: { type: 'string', enum: ['find', 'run', 'list', 'endpoints', 'inspect'] },
+        query: { type: 'string', description: 'For find: a URL or words' },
+        name: { type: 'string', description: 'For run: a recipe such as shopee.sg/orders' },
         params: { type: 'object', description: 'Overrides for the recipe params' },
         raw: { type: 'boolean', description: 'Return unmapped items' },
         host: { type: 'string', description: 'Host for endpoints/inspect, e.g. shopee.sg' },
@@ -336,6 +337,14 @@ function text(value) {
   const s = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
   const clipped = s.length > MAX_TEXT_BYTES ? `${s.slice(0, MAX_TEXT_BYTES)}\n\n[truncated ${s.length - MAX_TEXT_BYTES} more characters]` : s;
   return { content: [{ type: 'text', text: clipped }] };
+}
+
+// Appends a line about matching recipes: a faster path than the UI the agent is
+// about to drive.
+function withHint(result, url) {
+  const line = url && recipeHint(url);
+  if (line) result.content.push({ type: 'text', text: `hint: ${line}` });
+  return result;
 }
 
 function fail(message) {
@@ -439,7 +448,7 @@ const handlers = {
     withConn(args, async conn => {
       const res = await ops.newTab(conn, args.url, { anonymous: Boolean(args.anonymous) });
       if (args.until !== 'none') await ops.waitForReady(conn, res.targetId, { waitUntil: args.until || 'load' }).catch(() => {});
-      return text(res);
+      return withHint(text(res), args.url);
     }),
 
   browser_close: args =>
@@ -477,11 +486,11 @@ const handlers = {
         if (e.value) bits.push(`value=${e.value}`);
         return bits.join('  ');
       });
-      return text(
+      return withHint(text(
         `${snap.title}\n${snap.url}\nscroll ${snap.scroll.y}/${snap.scroll.h}\n\n` +
           `ELEMENTS (${elements.length})\n${elements.join('\n')}\n\n` +
           `TEXT${snap.textTruncated ? ` (truncated from ${snap.textLength} chars)` : ''}\n${snap.text}`,
-      );
+      ), snap.url);
     }),
 
   browser_focus: args => withConn(args, async conn => {
@@ -499,7 +508,7 @@ const handlers = {
     withConn(args, async (conn, port) => {
       const tab = await ops.resolveTab(conn, args.tab);
       claims.claim(port, tab.targetId, { steal: Boolean(args.steal) });
-      return text(await ops.navigate(conn, tab.targetId, args.url, { waitUntil: args.until || 'load' }));
+      return withHint(text(await ops.navigate(conn, tab.targetId, args.url, { waitUntil: args.until || 'load' })), args.url);
     }),
 
   browser_activity: args => withConn(args, async conn => text(await conn.activity(args.action, {owner: args.owner, intent: args.intent, completed: args.completed, total: args.total}))),
@@ -569,11 +578,12 @@ const handlers = {
       return text(await captcha.solve(conn, tab.targetId, { timeoutMs: args.timeoutMs ?? 300000, attempt: args.attempt !== false }));
     }),
 
-  browser_api: async args => {
+  browser_recipe: async args => {
     if (args.action === 'list') return text(listRecipes());
+    if (args.action === 'find') return text(findRecipes(args.query || ''));
     if (args.action === 'endpoints') { const store = createStore(); return text(args.host ? store.catalog(args.host) : store.hosts()); }
     if (args.action === 'inspect') return text(createStore().exemplars(args.host, args.match));
-    if (args.action !== 'call') throw new Error('action must be list, call, endpoints or inspect');
+    if (args.action !== 'run') throw new Error('action must be find, run, list, endpoints or inspect');
     return withConn(args, async conn => text(await runRecipe(conn, loadRecipe(args.name), args.params || {}, { raw: Boolean(args.raw) })));
   },
 
