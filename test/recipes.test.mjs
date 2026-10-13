@@ -153,7 +153,7 @@ t('a ws auth source reads a session key that only ever appeared in a WebSocket f
   const recipe = {
     name: 'fixture/chat-messages', origin, warm_path: '/chat', settle_ms: 0,
     auth: { sk: { from: 'ws', frame: 'LOGI', path: 'key' } },
-    request: { method: 'GET', url: '/api/chat-messages', headers: { 'session-key': '{{auth.sk}}' } },
+    request: { method: 'GET', url: '/api/chat-messages', credentials: 'omit', headers: { 'session-key': '{{auth.sk}}' } },
     paginate: { items: 'messages' }, output: { text: 'text' },
   };
   const res = await runRecipe(conn, recipe);

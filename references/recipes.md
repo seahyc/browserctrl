@@ -28,8 +28,8 @@ Captured exemplars, which do contain tokens, stay in
 | `tab` | Omit for a background tab browserctrl opens and reuses. `handoff` uses a tab the human opened (marked tabs first, matched by `handoff_match`); it is never opened, navigated or reloaded. Use it for sites that drop the session on automation-started page loads. |
 | `settle_ms` | Wait after a newly created tab loads (default 1500). Some anti-fraud SDKs sign requests only once they finish starting. |
 | `pace_ms` | Delay between paginated calls. |
-| `auth` | Named values: `{"from": "html", "path": "/", "regex": "..."}` takes the first capture group from that page's HTML, `{"from": "cookie", "name": "..."}` reads a cookie. Use them as `{{auth.<name>}}`. |
-| `request` | `method`, `url` (relative to the origin), `headers`, `body` (object becomes JSON; string is sent as is). |
+| `auth` | Named values: `{"from": "html", "path": "/", "regex": "..."}` takes the first capture group from that page's HTML, `{"from": "cookie", "name": "..."}` reads a cookie, `{"from": "ws", "host": "...", "frame": "LOGI", "path": "key", "max_age_s": 3000}` reads a field from the latest captured WebSocket frame of that kind (the recipe's own tab is reloaded when none is fresh). Use them as `{{auth.<name>}}`. |
+| `request` | `method`, `url` (relative to the origin, or absolute for another host), `headers`, `body` (object becomes JSON; string is sent as is), `credentials` (`include` by default; `omit` for a third-party API that rejects cookies on cross-origin requests). |
 | `params` | Defaults. `key=value` arguments override them and keep the default's type. `{{now_iso}}` is the current time. |
 | `paginate` | `{"type": "offset", "param", "step", "items", "stop_when_fewer_than"}` or `{"type": "cursor", "param", "items", "next", "dedupe"}`. `items` is the path to the result list; `max_pages` caps calls (default 100). |
 | `js` | Instead of `request`: an async function source `(cursor, params) => ({ items, next })` evaluated in the page. Use it when the page's own client must sign requests or the response is not a plain list. Return `{error}` to fail. `paginate.start` is the first cursor. |
