@@ -494,7 +494,8 @@ Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
 `browser_reload`, `browser_act`,
 `browser_screenshot`, `browser_diagnostics`, `browser_eval`,
 `browser_annotations`, `browser_marks`, `browser_annotate_mode`,
-`browser_record`, `browser_recording`, `browser_activity`.
+`browser_record`, `browser_recording`, `browser_activity`,
+`browser_recipe`, `browser_captcha`, `browser_profiles`.
 
 `browser_wake` and `browser_refresh` remain aliases for `browser_focus` and
 `browser_reload`. The SDK uses `ops.focus` and `ops.reload`, with `ops.wake` and
