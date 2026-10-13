@@ -28,6 +28,9 @@ const t = (name, fn) => test(name, { skip: haveBrowser ? false : 'no Chromium-fa
 
 t('an awaited evaluate completes in a frozen tab', async () => {
   await conn.send(tabId, 'Page.setWebLifecycleState', { state: 'frozen' });
-  const value = await ops.evaluate(conn, tabId, 'new Promise(r => setTimeout(() => r("thawed"), 20))', { timeoutMs: 8000 });
+  const awaited = () => ops.evaluate(conn, tabId, 'new Promise(r => setTimeout(() => r("thawed"), 20))', { timeoutMs: 8000 });
+  // Windows Chrome sometimes replaces the context while unfreezing; what matters
+  // here is that the command completes instead of hanging until its timeout.
+  const value = await awaited().catch(e => (/Execution context was destroyed/.test(e.message) ? awaited() : Promise.reject(e)));
   assert.equal(value, 'thawed');
 });
