@@ -80,8 +80,10 @@ import { planLaunch } from '../lib/launch.mjs';
 import { BROWSERS } from '../lib/env.mjs';
 
 test('Chrome real profile is refused before anything is quit, with both ways out', () => {
+  // Off macOS the enable hint is the generic one (automatic relaunch is macOS-only).
+  const enable = process.platform === 'darwin' ? 'chrome:\\/\\/inspect' : 'Enable browser debugging';
   assert.throws(() => planLaunch({ name: 'chrome', meta: BROWSERS.chrome }),
-    /refuses --remote-debugging-port on your real profile, so nothing was quit.*chrome:\/\/inspect.*--user-data-dir/);
+    new RegExp(`refuses --remote-debugging-port on your real profile, so nothing was quit.*${enable}.*--user-data-dir`));
 });
 
 test('every browser can launch a separate instance with --user-data-dir', () => {
