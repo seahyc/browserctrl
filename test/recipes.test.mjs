@@ -34,7 +34,7 @@ test('listRecipes reads site/name files and reports unreadable ones', () => {
   fs.mkdirSync(path.join(dir, 'shop.example'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'shop.example', 'orders.json'), JSON.stringify({ kind: 'read', description: 'd', tab: 'handoff' }));
   fs.writeFileSync(path.join(dir, 'shop.example', 'broken.json'), '{');
-  const rows = listRecipes(dir);
+  const rows = listRecipes(dir, path.join(tmp, 'no-taps'));
   assert.deepEqual(rows.map(r => r.name), ['shop.example/broken', 'shop.example/orders']);
   assert.match(rows[0].error, /unreadable/);
   assert.equal(rows[1].tab, 'handoff');

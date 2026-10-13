@@ -12,6 +12,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // keep their capture store and recipe tab registry out of the real home dir.
 process.env.BROWSERCTRL_EXEMPLARS ||= path.join(os.tmpdir(), 'browserctrl-test-exemplars');
 process.env.BROWSERCTRL_RECIPE_TABS ||= path.join(os.tmpdir(), 'browserctrl-test-recipe-tabs.json');
+process.env.BROWSERCTRL_RECIPES ||= path.join(os.tmpdir(), 'browserctrl-test-recipes');
+process.env.BROWSERCTRL_TAPS ||= path.join(os.tmpdir(), 'browserctrl-test-taps');
 export const TEST_PORT = Number(process.env.BROWSERCTRL_TEST_PORT || 9333); // override to run suites side by side
 
 const CHROME_CANDIDATES = [
