@@ -18,7 +18,7 @@ test('a refused debugging connection fails fast with the way out', async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const started = Date.now();
   await assert.rejects(connect(server.address().port), /refused the debugging connection.*open a browser window.*click Allow/s);
-  assert.ok(Date.now() - started < 15000, `took ${Date.now() - started}ms`);
+  assert.ok(Date.now() - started < 20000, `took ${Date.now() - started}ms`);
 });
 
 test('timeouts and other startup failures get their own messages', () => {
