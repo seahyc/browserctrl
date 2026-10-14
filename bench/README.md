@@ -13,8 +13,9 @@ must need the site's UI.
 
 Each run is a fresh Sonnet subagent with the prompt `run.mjs start` prints; the
 approaches differ only in the Method paragraph. Every run starts from a tab the
-harness opened, except `taobao-sku`, which starts from a tab the user opened
-because Taobao logs out pages that automation loads.
+harness opened and rendered. A task may instead start from a tab the user opened
+(`HANDOFF:` start URL, `--tab ID`); Taobao would need this, since it logs out
+pages that automation loads, but it was left out to keep runs hands-off.
 
 ## Decision rule (fixed before any results)
 
@@ -43,6 +44,6 @@ personal data and are not committed.
 ## Tasks
 
 `tasks.json` holds goals and answer shapes; `fixtures.json` the fixed item and chat.
-The write tasks never check out or send: the cart task adds one fixed item, which
-`finish` deletes; the reply task types into the box, and `finish` clears it and
-checks that no message was sent.
+The one write task never checks out: it adds one fixed item to the cart, and
+`finish` deletes it. Chat tasks only read, so nothing is ever sent to another
+person.

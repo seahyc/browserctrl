@@ -81,22 +81,14 @@ const checks = {
       { name: 'agent reports added', ok: a.added === true },
     ];
   },
-  async 'carousell-reply-draft'(a, run) {
-    const box = bc('eval', run.tab, 'document.querySelector("textarea")?.value ?? null').trim();
-    const sentNow = sentCount();
+  async 'carousell-chat'(a) {
+    const msgs = recipe('carousell.sg/messages', `offer_id=${fixtures.carousell_offer_id}`).filter((m) => m.text);
+    const chat = recipe('carousell.sg/chats').find((c) => String(c.offer_id) === fixtures.carousell_offer_id);
+    const got = a.messages ?? [];
     return [
-      { name: 'draft typed', ok: box === 'Thank you!', detail: box },
-      { name: 'nothing sent', ok: sentNow === run.pre.sent, detail: { before: run.pre.sent, after: sentNow } },
-      { name: 'right chat', ok: bc('eval', run.tab, 'location.href').includes(fixtures.carousell_offer_id) },
+      { name: 'offer price', ok: Number(a.price_sgd) === Number(chat?.price), detail: { truth: chat?.price } },
+      { name: 'last 3 messages', ok: got.length === 3 && got.every((m, i) => norm(m.text) === norm(msgs[i]?.text) && norm(m.from) === norm(msgs[i]?.from)), detail: msgs.slice(0, 3).map((m) => [m.from, m.text]) },
     ];
-  },
-  async 'taobao-sku'(a) {
-    const out = [{ name: 'has sku groups', ok: a.sku_groups?.length > 0 }];
-    let text = '';
-    try { text = bc('text', a.tab, '--max-text', '80000'); } catch (e) { return [...out, { name: 'reported tab readable', ok: false, detail: String(e).slice(0, 200) }]; }
-    out.push({ name: 'title on page', ok: norm(text).includes(norm(a.title).slice(0, 20)) });
-    for (const g of a.sku_groups ?? []) out.push({ name: `sku ${g.name}`, ok: g.values.every((v) => text.includes(v)), detail: g.values.filter((v) => !text.includes(v)) });
-    return out;
   },
   async 'shopee-refund'(a) {
     const orders = recipe('shopee.sg/orders', 'limit=20', '--max-pages', '1');
@@ -133,11 +125,6 @@ const checks = {
   },
 };
 
-function sentCount() {
-  const items = recipe('carousell.sg/messages', `offer_id=${fixtures.carousell_offer_id}`);
-  return items.filter((m) => norm(m.from) === norm(fixtures.carousell_me)).length;
-}
-
 async function cartRows() {
   const text = await pageText('https://shopee.sg/cart', 8000);
   return norm(text).split(/delete/).map((r) => r);
@@ -146,7 +133,6 @@ async function cartRows() {
 // Run before the agent, so checks and undo have a baseline.
 const prepare = {
   async 'shopee-cart'() { const rows = await cartRows(); return { inCart: rows.some((r) => r.includes(norm(fixtures.shopee_cart_title)) && r.includes(norm(fixtures.shopee_cart_variation_text))) }; },
-  async 'carousell-reply-draft'() { return { sent: sentCount() }; },
 };
 
 const undo = {
@@ -165,10 +151,6 @@ const undo = {
       }
       return 'still in cart after 3 deletes';
     } finally { try { bc('close', id); } catch {} }
-  },
-  async 'carousell-reply-draft'(run) {
-    bc('eval', run.tab, `(() => { const t = document.querySelector('textarea'); if (!t) return 'no box'; t.focus(); document.execCommand('selectAll'); document.execCommand('delete'); return t.value; })()`);
-    return 'cleared';
   },
 };
 

@@ -40,19 +40,11 @@
     ]
   },
   {
-    "id": "carousell-reply-draft",
-    "kind": "write",
-    "start_url": "https://www.carousell.sg/inbox/",
-    "goal": "In Carousell's inbox, open the chat with user FIXTURE:carousell_chat_user about \"FIXTURE:carousell_chat_title\" and type the reply \"Thank you!\" into the message box. Do NOT send it: never press Enter in the box and never click Send.",
-    "answer": "{\"chat_url\": str, \"typed\": str, \"sent\": false}",
-    "jev_allow_controls": []
-  },
-  {
-    "id": "taobao-sku",
+    "id": "carousell-chat",
     "kind": "messy",
-    "start_url": "HANDOFF:taobao",
-    "goal": "In this Taobao search results tab, open the first result that is not an ad (广告) and report its title, shop, price range and every SKU option group with all of its values.",
-    "answer": "{\"title\": str, \"shop\": str, \"price_min\": number, \"price_max\": number, \"sku_groups\": [{\"name\": str, \"values\": [str]}], \"url\": str, \"tab\": str}",
+    "start_url": "https://www.carousell.sg/inbox/",
+    "goal": "In Carousell's inbox, open the chat with user FIXTURE:carousell_chat_user about \"FIXTURE:carousell_chat_title\". Report the offer price, and the last 3 messages (newest first) with who sent each. Do not type anything into the chat.",
+    "answer": "{\"price_sgd\": number, \"messages\": [{\"from\": str, \"text\": str}] (3, newest first)}",
     "jev_allow_controls": []
   },
   {
