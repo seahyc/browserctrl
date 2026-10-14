@@ -239,7 +239,7 @@ if (cmd === 'start') {
   console.log(JSON.stringify({ run: runId, pass: row.pass, failed: results.filter((r) => !r.ok), undo: undone }, null, 2));
 } else if (cmd === 'report') {
   const rows = fs.existsSync(resultsFile) ? fs.readFileSync(resultsFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
-  const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor((s.length - 1) / 2)] : NaN; };
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b), m = s.length >> 1; return !s.length ? NaN : s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
   const lines = ['| task | arm | runs | pass | median s (passing) | median tokens | median tools | verdict |', '| --- | --- | --- | --- | --- | --- | --- | --- |'];
   for (const t of tasks) {
     const stat = {};
