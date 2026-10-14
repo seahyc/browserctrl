@@ -36,8 +36,7 @@ node bench/run.mjs report
 ```
 
 `finish` checks the answer against live truth (gh, glab, recipes, or a fresh read
-of each reported page), undoes write tasks (removes the cart item, clears the
-draft reply), closes the run's tabs and appends a row to `results.jsonl`. Run 0
+of each reported page), undoes the cart task (removes the item), closes the run's tabs and appends a row to `results.jsonl`. Run 0
 is a pilot and is left out of the report. `runs/` and `results.jsonl` hold
 personal data and are not committed.
 
