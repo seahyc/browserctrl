@@ -53,6 +53,8 @@ async function readyTab(url) {
 }
 
 // Each check returns [{name, ok, detail}]. Truth is read live, before and after the run when it can drift.
+const CARDS = `JSON.stringify([...document.querySelectorAll('a[href*="/products/"]')].map(x => { const c = x.closest('[data-qa-locator=product-item]') || x.parentElement.parentElement; return { href: x.href.split('?')[0], text: (c || x).innerText }; }))`;
+
 const checks = {
   async 'carousell-search'(a) {
     const out = [{ name: 'five listings', ok: a.listings?.length === 5 }];
@@ -148,8 +150,18 @@ const checks = {
   },
   async 'lazada-cheapest'(a, run) {
     // Judge against the run's own results tab: the same page the agent saw.
-    let cards = [];
-    try { cards = JSON.parse(bc('eval', run.tab, `JSON.stringify([...document.querySelectorAll('a[href*="/products/"]')].map(x => { const c = x.closest('[data-qa-locator=product-item]') || x.parentElement.parentElement; return { href: x.href.split('?')[0], text: (c || x).innerText }; }))`)); } catch {}
+    // If the agent left its tab on a product page, reload the sorted search there.
+    // A regrade after the run's tab was closed opens a fresh tab.
+    const search = 'https://www.lazada.sg/catalog/?q=27+inch+4k+monitor&sort=priceasc';
+    let tab = run.tab;
+    const read = () => { try { return JSON.parse(bc('eval', tab, CARDS)); } catch { return []; } };
+    let cards = read();
+    if (!cards.length) {
+      try { bc('nav', tab, search); } catch { tab = await readyTab(search); }
+      try { bc('wake', tab); } catch {}
+      await sleep(6000);
+      cards = read();
+    }
     const price = (t) => Number((String(t).match(/\$\s*([\d,]+(?:\.\d+)?)/) || [])[1]?.replace(/,/g, ''));
     const fourK = cards.filter(c => /4k/i.test(c.text) && price(c.text) > 0).map(c => ({ ...c, p: price(c.text) })).sort((x, y) => x.p - y.p);
     const got = a.listings ?? [];

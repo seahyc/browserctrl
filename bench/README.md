@@ -55,6 +55,7 @@ history: gitlab-author (a paginated list), lazada-cheapest (search, custom sort,
 cna-singapore (navigate a news site), stripe-failed (filter a dashboard). A is re-run in
 the same round. Same decision rule. One pilot per task (run 0) runs with --show so the
 user can watch; counted runs do not, since --show adds pauses.
+Result: `do` won 4 of 6, tied 1, lost GitLab-author (see RESULTS.md).
 
 ## Running
 

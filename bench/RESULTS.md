@@ -1,5 +1,38 @@
 # Jev benchmark results, 2026-10-14
 
+## Round 4: `do` v2 on more sites
+
+Six tasks, three runs per approach (runs 31-33), plain browserctrl (A) re-run
+alongside. Medians of passing runs; tool calls are the agent's.
+
+| Task | A: agent drives | D: `do` plans | D passed | D vs A |
+| --- | --- | --- | --- | --- |
+| Stripe: filter to failed payments | 66 s, 9 calls | 20 s, 6 calls | 3/3 | −70% |
+| GitHub merged PRs for a month | 59 s, 8 calls | 22 s, 5 calls | 3/3 | −63% |
+| Lazada search, sort by price, pick 5 | 51 s, 13 calls | 22 s, 4 calls | 3/3 | −56% |
+| CNA: open Singapore, first 5 headlines | 26 s, 5 calls | 18 s, 3 calls | 3/3 | −30% |
+| GitLab closed MRs + one branch | 47 s, 6 calls | 46 s, 5 calls | 3/3 | −2% |
+| GitLab merged MRs by one author (3 pages) | 80 s, 10 calls | 120 s, 19 calls | 3/3 | +50% |
+
+All 36 runs passed. **Verdict under the pre-registered rule:** `do` wins four tasks,
+including GitHub, a round-3 tie, and ties GitLab closed MRs. It loses GitLab-author:
+in all three D runs `do` could not drive GitLab's author filter (a token search box), so
+the agent read all 147 merged MRs over 8 pages. Two A runs put
+`author_username=yjwong` in the URL and paged 3 pages instead.
+
+Defects seen in passing D runs, to fix before the next round:
+
+- `items` truncated long links (CNA, 2 runs) and dropped one listing's price (Lazada).
+- `items` skipped CNA's lead story, which has no list link (1 run).
+- On Stripe, `--then items` read the list before the Failed filter applied (1 run).
+- `do` has no answer for a filter box it cannot drive; it should report the filter
+  URL or the control's state so the agent can re-plan.
+
+Conditions: up to four runs at once, plus three unrelated Codex sessions driving Dia
+during runs 32-33. One A run lost time stealing back its own tab claim. The
+lazada-cheapest checker was fixed mid-round to reload the sorted search when the run's
+tab no longer shows results; A-31 was regraded with it (the answer matched D-31's).
+
 ## Round 3: the agent plans, `do` runs the plan with Jev finding elements
 
 Same seven tasks, three runs per approach (runs 21-23), plain browserctrl (A) re-run
