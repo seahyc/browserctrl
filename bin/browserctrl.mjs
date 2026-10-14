@@ -26,9 +26,10 @@ import * as captcha from '../lib/captcha.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
+import { runSteps, formatSteps } from '../lib/steps.mjs';
 
 const MUTATING = new Set([
-  'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha',
+  'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha', 'do',
 ]);
 
 function parseArgs(argv) {
@@ -121,6 +122,8 @@ function usage() {
 
   Act (all accept --ref ref_3, --selector <css>, or --x/--y):
     browserctrl click <tab> --intent "the Grey option" [--expect "…"]   Jev picks the element (also fill/select/hover); never clicks Buy/Send/Pay/Delete
+    browserctrl do <tab> 'fill "search" = "aeron"' 'key Enter' 'click "More filters"' [--then items|text]
+                                                   run a plan in one call; stops at the first uncertain or committing step
     browserctrl check <tab> [--expect "…"]               Jev yes/no checks: challenge, login, error, dialog, empty
     browserctrl click <tab> --ref ref_3 [--button right] [--count 2] [--mod cmd,shift]
     browserctrl hover <tab> --selector ".menu"
@@ -569,6 +572,13 @@ const main = async () => {
     }
 
     switch (cmd) {
+      case 'do': {
+        const lines = positional.slice(2);
+        if (!lines.length) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'fill "max price" = 600\' ... [--then items|text]');
+        const r = await runSteps(conn, targetId, lines, { then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined });
+        if (!r.done) process.exitCode = 3;
+        return out(flags.json ? r : formatSteps(r));
+      }
       case 'items': {
         const r = await ops.evaluate(conn, targetId, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }));
         if (flags.group) r.groups = r.groups.filter(g => g.id === flags.group);

@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Shop</title></head><body><main>
+<label>Search <input id="q"></label><button id="go">Search</button>
+<button id="more">More filters</button>
+<div id="panel" hidden><label>Maximum <input id="max"></label><button id="apply">Apply</button></div>
+<ul id="list"></ul><button>Buy now</button>
+<script>
+const all = [{t:'Aeron A', p:380},{t:'Aeron B', p:580},{t:'Aeron C', p:900},{t:'Chair D', p:100}];
+function show() {
+  const q = document.getElementById('q').value.toLowerCase(), max = Number(document.getElementById('max').value) || Infinity;
+  setTimeout(() => { // results arrive a little later, as from a fetch
+    document.getElementById('list').innerHTML = all.filter(x => x.t.toLowerCase().includes(q) && x.p <= max).map(x => `<li>${x.t} · S$${x.p}</li>`).join('');
+  }, 250);
+}
+document.getElementById('go').onclick = show;
+document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') show(); });
+document.getElementById('more').onclick = () => { document.getElementById('panel').hidden = false; };
+document.getElementById('apply').onclick = show;
+</script></main></body></html>

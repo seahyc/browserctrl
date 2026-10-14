@@ -167,6 +167,11 @@ Use the website's UI only. Do not use browserctrl recipes, gh, glab, curl, or fe
 
 Your final message must be only a JSON object of this shape: ${task.answer}
 Add "notes": a one-line string on anything that went wrong.`;
+  if (arm === 'D') return `${common}
+
+Method: plan with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md, sections "Plan several steps in one call with do" and "Read lists, cards and messages with items"). Send the steps you can foresee in ONE call instead of reading the page before each click:
+  browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --browser dia
+It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3, with candidate refs); re-plan from its report. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. Do not use jev-tool.`;
   if (arm === 'C') return `${common}
 
 Method: drive the page yourself with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md), using its Jev intent commands instead of reading the page to find refs:
@@ -191,7 +196,7 @@ const flag = (name) => { const i = rest.indexOf(name); return i < 0 ? undefined 
 if (cmd === 'start') {
   const [taskId, arm, n] = rest;
   const task = tasks.find((t) => t.id === taskId);
-  if (!task || !['A', 'B', 'C'].includes(arm)) throw new Error('usage: start <task> <A|B|C> <n> [--tab ID]');
+  if (!task || !['A', 'B', 'C', 'D'].includes(arm)) throw new Error('usage: start <task> <A|B|C|D> <n> [--tab ID]');
   const runId = `${taskId}-${arm}-${n}`;
   const pre = (await prepare[taskId]?.()) ?? {};
   let tab = flag('--tab');
@@ -237,7 +242,7 @@ if (cmd === 'start') {
   const lines = ['| task | arm | runs | pass | median s (passing) | median tokens | median tools | verdict |', '| --- | --- | --- | --- | --- | --- | --- | --- |'];
   for (const t of tasks) {
     const stat = {};
-    for (const arm of ['A', 'B', 'C']) {
+    for (const arm of ['A', 'B', 'C', 'D']) {
       const rs = rows.filter((r) => r.task === t.id && r.arm === arm && r.n >= from && r.n <= to);
       const ok = rs.filter((r) => r.pass);
       stat[arm] = { n: rs.length, pass: ok.length, ms: median(ok.map((r) => r.agent_ms)), tokens: median(rs.map((r) => r.agent_tokens)), tools: median(rs.map((r) => r.tool_uses)) };
@@ -245,7 +250,7 @@ if (cmd === 'start') {
     const A = stat.A;
     // Pre-registered rule: an arm wins a task if it is >=30% faster to a verified answer and no less successful than A.
     const verdict = (X) => A.n < 3 || X.n < 3 ? 'incomplete' : X.pass >= A.pass && X.pass > 0 && X.ms <= 0.7 * A.ms ? 'Jev wins' : 'agent';
-    for (const arm of ['A', 'B', 'C']) {
+    for (const arm of ['A', 'B', 'C', 'D']) {
       const s = stat[arm];
       if (!s.n) continue;
       lines.push(`| ${t.id} | ${arm} | ${s.n} | ${s.pass}/${s.n} | ${(s.ms / 1000).toFixed(0)} | ${s.tokens} | ${s.tools} | ${arm === 'A' ? '' : verdict(s)} |`);

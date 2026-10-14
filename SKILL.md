@@ -286,7 +286,37 @@ browserctrl items a1b2c3d4 --browser dia
 
 ## Acting
 
-Every action takes `--ref ref_3`, `--selector <css>`, or `--x/--y`.
+### Plan several steps in one call with `do`
+
+When you know the next few steps, send them together instead of reading the page
+before each click. Name elements as they appear; `do` matches exact names without a
+model and asks Jev (about 0.35 s) for the rest, waits for each step's result to
+render, and stops at the first step it cannot do with confidence:
+
+```bash
+browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter' \
+  'click "More filters"' 'fill "maximum price" = 600' 'click Apply' \
+  'expect "search results for herman miller aeron"' --then items --browser dia
+```
+
+- Steps: `click <element>`, `fill <element> = <value>`, `select <element> = <option>`,
+  `hover`, `key Enter`, `scroll down|up`, `nav <url>`, `wait <ms>`, and
+  `expect <what the page shows>`, which stops the plan when Jev judges it untrue.
+  Write expectations about visible text, not inferences.
+- `--then items` or `--then text` returns the resulting page in the same call.
+- Exit 3 means the plan stopped: the report names the step, the reason and Jev's
+  candidates with refs. Re-plan from there; the steps before it already happened.
+- `do` never clicks a control that can commit something (Buy, Send, Pay, Delete,
+  Submit, Confirm…), even when named exactly. Click it by ref only if the user
+  authorized that action. You supply every typed value.
+- Steps that need Jev require `TYPESAFE_API_KEY` (see [Jev](#jev)); exact names work
+  without it.
+
+### Single actions
+
+Every action takes `--ref ref_3`, `--selector <css>`, or `--x/--y`. A click on a ref
+waits until the element stops moving and lands where it is on top; if another element
+covers it, the click is refused with what covers it.
 
 ```bash
 browserctrl click <tab> --ref ref_3 --browser dia
@@ -749,7 +779,7 @@ cloud parity. Existing CLI/MCP APIs, recording and diagnostics remain available.
 
 ## Jev
 
-Drive browserctrl yourself; do not hand a task to Jev to make it faster. On seven
+Use Jev through `do` and `--intent`, where you plan and Jev only finds elements. Do not hand a whole task to Jev (`jev-tool`) to make it faster. On seven
 real tasks (marketplace search, cart, chat, order lookup, GitHub and GitLab lists),
 handing Jev the task first was never 30% faster to a verified answer, and Jev
 finished none of its 21 runs: it paused at the first control outside its policy

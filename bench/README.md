@@ -36,10 +36,20 @@ machine conditions. The decision rule is unchanged: C wins a task if it is at le
 30% faster to a verified answer than A and passes at least as many runs. Agent
 tokens and tool calls are reported alongside.
 
+## Round 3: plans with `do` (approach D)
+
+Round 2 (runs 11-13) was stopped after one run per task: single-element intents saved
+about 10% of tokens but not time, because the agent still took a turn per action.
+Round 3 (runs 21-23) tests approach D: the agent sends the steps it can foresee in one
+`browserctrl do` call, which finds each element (exact name, else Jev), waits for each
+result and can return `items` in the same call. A is re-run in the same round. The
+decision rule is unchanged: D wins a task if it is at least 30% faster to a verified
+answer than A and passes at least as many runs.
+
 ## Running
 
 ```sh
-node bench/run.mjs start <task> <A|B|C> <n> [--tab ID]   # prints the agent prompt
+node bench/run.mjs start <task> <A|B|C|D> <n> [--tab ID]   # prints the agent prompt
 # run the prompt in a fresh subagent; save its final message to a file
 node bench/run.mjs finish <task>-<arm>-<n> answer.txt --ms <agent ms> --tokens <agent tokens> --tools <tool uses>
 node bench/run.mjs report [--from 11]
