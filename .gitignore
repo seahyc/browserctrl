@@ -7,3 +7,5 @@ __pycache__/
 artifacts/
 test-results/
 .worktrees/
+bench/runs/
+bench/results.jsonl

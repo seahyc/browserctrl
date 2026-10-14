@@ -1,0 +1,72 @@
+[
+  {
+    "id": "carousell-search",
+    "kind": "messy",
+    "start_url": "https://www.carousell.sg/",
+    "goal": "On Carousell Singapore, search for \"herman miller aeron\" and limit results to a price of at most S$600. Report the first 5 listings in the filtered results, skipping promoted ones (Spotlight or ads).",
+    "answer": "{\"listings\": [{\"title\": str, \"price_sgd\": number, \"condition\": str, \"seller\": str, \"url\": str}] (exactly 5, in page order)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "shopee-compare",
+    "kind": "messy",
+    "start_url": "https://shopee.sg/",
+    "goal": "On Shopee Singapore, search for \"anker 30w charger\" and sort by Top Sales. Among the results whose title contains \"Anker\", skipping ads, report the first 3: title, lowest price shown and number sold as shown on the search card.",
+    "answer": "{\"listings\": [{\"title\": str, \"price_sgd\": number, \"sold\": str, \"url\": str}] (exactly 3, in page order)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "shopee-cart",
+    "kind": "write",
+    "start_url": "FIXTURE:shopee_cart_item_url",
+    "goal": "On this Shopee product page, choose the variation FIXTURE:shopee_cart_variation, quantity 1, and add it to the cart. Do not check out or buy.",
+    "answer": "{\"added\": bool, \"variation\": str, \"cart_count_after\": number}",
+    "jev_allow_controls": [
+      {
+        "kind": "click",
+        "role": "button",
+        "label": "add to cart"
+      }
+    ]
+  },
+  {
+    "id": "carousell-reply-draft",
+    "kind": "write",
+    "start_url": "https://www.carousell.sg/inbox/",
+    "goal": "In Carousell's inbox, open the chat with user FIXTURE:carousell_chat_user about \"FIXTURE:carousell_chat_title\" and type the reply \"Thank you!\" into the message box. Do NOT send it: never press Enter in the box and never click Send.",
+    "answer": "{\"chat_url\": str, \"typed\": str, \"sent\": false}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "taobao-sku",
+    "kind": "messy",
+    "start_url": "HANDOFF:taobao",
+    "goal": "In this Taobao search results tab, open the first result that is not an ad (广告) and report its title, shop, price range and every SKU option group with all of its values.",
+    "answer": "{\"title\": str, \"shop\": str, \"price_min\": number, \"price_max\": number, \"sku_groups\": [{\"name\": str, \"values\": [str]}], \"url\": str, \"tab\": str}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "shopee-refund",
+    "kind": "messy",
+    "start_url": "https://shopee.sg/user/purchase",
+    "goal": "In Shopee's My Purchase page, find the most recent order in the Completed tab. Report its order ID, shop name, order total, and whether a Return/Refund can still be requested (and the deadline if one is shown).",
+    "answer": "{\"order_id\": str, \"shop\": str, \"total_sgd\": number, \"refund_available\": bool, \"refund_deadline\": str|null}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "github-prs",
+    "kind": "messy",
+    "start_url": "https://github.com/ModelMonkeys/modelmonkey/pulls",
+    "goal": "Using the GitHub web UI for ModelMonkeys/modelmonkey, list every pull request merged between 2025-12-01 and 2025-12-31 inclusive, in UTC.",
+    "answer": "{\"prs\": [{\"number\": number, \"title\": str, \"merged_date\": \"YYYY-MM-DD\"}]}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "gitlab-mrs",
+    "kind": "messy",
+    "start_url": "https://gitlab.glints.com/glints/glints-dashboard/-/merge_requests",
+    "goal": "Using the GitLab web UI for glints/glints-dashboard, list every merge request that was closed without being merged (not the merged ones). Report each one's IID, title and author username. Then open the one with the highest IID and report its source branch.",
+    "answer": "{\"mrs\": [{\"iid\": number, \"title\": str, \"author\": str}], \"highest_iid_source_branch\": str}",
+    "jev_allow_controls": []
+  }
+]
