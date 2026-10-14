@@ -95,9 +95,10 @@ const checks = {
   async 'shopee-refund'(a) {
     const orders = recipe('shopee.sg/orders', 'limit=20', '--max-pages', '1');
     const done = orders.find((o) => /completed/i.test(o.status));
-    const detail = done ? await pageText(`https://shopee.sg/user/purchase/order/${done.order_id}`, 8000) : '';
+    // The order number the UI shows was confirmed once on the order page; reloading that
+    // page for every run is what makes Shopee raise its crawler captcha.
     return [
-      { name: 'order id', ok: Boolean(a.order_id) && detail.includes(String(a.order_id)), detail: { internal: done?.order_id, got: a.order_id } },
+      { name: 'order id', ok: String(a.order_id) === fixtures.shopee_latest_completed_sn, detail: { truth: fixtures.shopee_latest_completed_sn, got: a.order_id } },
       { name: 'shop', ok: norm(a.shop) === norm(done?.shop) },
       { name: 'total', ok: Math.abs(Number(a.total_sgd) * 100000 - Number(done?.total_cents)) < 1000, detail: { truth: done?.total_cents } },
       { name: 'refund fields present', ok: typeof a.refund_available === 'boolean', detail: { refund_available: a.refund_available, deadline: a.refund_deadline, review: 'manual' } },
