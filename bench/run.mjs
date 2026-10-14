@@ -201,7 +201,7 @@ const checks = {
   },
   async 'lazada-brand-stores'(a) {
     const got = a.listings ?? [];
-    const pages = got.length ? bcJson('visit', ...got.map((l) => l.url), '--max-text', '60000', '--json') : [];
+    const pages = got.length ? bcJson('visit', ...got.map((l) => l.url), '--max-text', '60000', '--parallel', '1', '--json') : [];
     const out = [{ name: 'three listings, cheapest first', ok: got.length === 3 && got.every((l, i) => i === 0 || Number(l.price_sgd) >= Number(got[i - 1].price_sgd)) }];
     got.forEach((l, i) => {
       const text = pages[i]?.text || '';
