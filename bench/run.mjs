@@ -220,6 +220,9 @@ const checks = {
     return out;
   },
   async 'stripe-failed-details'(a) {
+    // A reason counts when its phrase or its decline code is on the page (codes use underscores).
+    const flat = (x) => norm(String(x).replace(/_/g, ' '));
+    const reasonShown = (text, reason) => String(reason).split(/[()]/).map(flat).filter((r) => r.length > 3).some((r) => flat(text).includes(r));
     // The failed list's own links are the truth for ids; each payment page for the rest.
     const id = await readyTab('https://dashboard.stripe.com/payments');
     let links = [];
@@ -230,7 +233,7 @@ const checks = {
     const out = [{ name: 'the 3 newest failed payment ids, in order', ok: JSON.stringify(got.map((p) => p.id)) === JSON.stringify(links.slice(0, 3)), detail: links.slice(0, 3) }];
     got.forEach((p, i) => {
       const text = pages[i]?.text || '';
-      out.push({ name: `payment ${i + 1}: last 4 and reason on its page`, ok: text.includes(String(p.last4)) && norm(text).includes(norm(p.reason)), detail: { last4: p.last4, reason: p.reason, chars: text.length } });
+      out.push({ name: `payment ${i + 1}: last 4 and reason on its page`, ok: text.includes(String(p.last4)) && reasonShown(text, p.reason), detail: { last4: p.last4, reason: p.reason, chars: text.length } });
     });
     return out;
   },

@@ -631,7 +631,9 @@ const main = async () => {
       await show.bringToFront(conn, targetId);
       const what = flags.intent ? `"${flags.intent}"` : target.ref || target.selector || positional.slice(2).join(' ');
       await show.panel(conn, targetId, { title: 'browserctrl', append: `▶ ${cmd} ${String(what).slice(0, 70)}${flags.value !== undefined ? ` = ${String(flags.value).slice(0, 30)}` : ''}` });
-      if (target.ref) await show.flash(conn, targetId, target.ref);
+      const label = cmd === 'fill' ? `type "${String(flags.value ?? positional[2] ?? '').slice(0, 40)}"` : cmd === 'type' ? `type "${String(positional[2] ?? '').slice(0, 40)}"` : cmd === 'key' ? `⌨ ${positional[2]}` : cmd === 'nav' ? `go to ${String(positional[2] || '').slice(0, 60)}` : `${cmd} ${String(what).slice(0, 50)}`;
+      if (!flags.intent) await show.act(conn, targetId, { ref: target.ref, kind: cmd, label });
+      await show.busy(conn, targetId, false); // the idle timer runs from here until the next command
     }
 
     // --intent: Jev picks the target from the page instead of the caller naming a ref.
