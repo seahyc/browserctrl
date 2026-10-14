@@ -31,6 +31,8 @@ const tabIds = () => bcJson('tabs', '--json').map((t) => (t.targetId || t.id).sl
 async function pageText(url, waitMs = 6000) {
   const { id } = bcJson('open', url);
   try {
+    await sleep(1500);
+    try { bc('wake', id); } catch {} // Shopee leaves hidden tabs as skeletons
     await sleep(waitMs);
     return bc('text', id, '--max-text', '60000');
   } finally {
@@ -42,6 +44,7 @@ async function pageText(url, waitMs = 6000) {
 async function readyTab(url) {
   const { id } = bcJson('open', url);
   for (let i = 0; i < 20; i++) {
+    if (i === 1) try { bc('wake', id); } catch {}
     await sleep(1000);
     try { if (Number(bc('eval', id, 'document.readyState === "complete" ? document.body.innerText.length : 0')) > 300) break; } catch {}
   }
