@@ -833,14 +833,12 @@ cloud parity. Existing CLI/MCP APIs, recording and diagnostics remain available.
 
 ## Jev
 
-Use Jev through `do` and `--intent`, where you plan and Jev only finds elements. Do not hand a whole task to Jev (`jev-tool`) to make it faster. On seven
-real tasks (marketplace search, cart, chat, order lookup, GitHub and GitLab lists),
-handing Jev the task first was never 30% faster to a verified answer, and Jev
-finished none of its 21 runs: it paused at the first control outside its policy
-(a chat, a sort menu, Add To Cart) and the agent finished the work. Results are in
-[bench/RESULTS.md](bench/RESULTS.md). Use Jev only when the user asks for it. After
-a Jev pause or failure, read the page and its completed actions before continuing;
-never replay the failed action blindly.
+Use Jev through `do`, `--intent` and `check`: you plan, Jev only finds elements and
+judges page state. On seven real tasks, plans run with `do` were 30-68% faster to a
+verified answer on every task with a chain of clicks or fills (chat, search and filter,
+cart, order lookup) and tied on tasks that only read a list. Handing a whole task to
+Jev (`jev-tool`) was never faster and finished none of 21 runs. Results:
+[bench/RESULTS.md](bench/RESULTS.md).
 
 ### Intent targets and page checks (experimental)
 

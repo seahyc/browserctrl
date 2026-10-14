@@ -1,5 +1,28 @@
 # Jev benchmark results, 2026-10-14
 
+## Round 3: the agent plans, `do` runs the plan with Jev finding elements
+
+Same seven tasks, three runs per approach (runs 21-23), plain browserctrl (A) re-run
+alongside. Medians of passing runs; tool calls are the agent's.
+
+| Task | A: agent drives | D: `do` plans | D passed | D vs A |
+| --- | --- | --- | --- | --- |
+| Carousell chat: price and last messages | 41 s, 11 calls | 13 s, 3 calls | 3/3 | −68% |
+| Shopee add a variation to the cart | 26 s, 6 calls | 17 s, 3 calls | 3/3 | −35% |
+| Shopee search, sort, compare | 45 s, 8 calls (2/3) | 31 s, 5 calls | 3/3 | −31% |
+| Carousell search with price filter | 74 s, 14 calls | 51 s, 8 calls | 3/3 | −31% |
+| Shopee latest completed order | 50 s, 12 calls | 35 s, 8 calls | 3/3 | −30% |
+| GitLab closed MRs + one branch | 34 s | 32 s | 3/3 | −6% |
+| GitHub merged PRs for a month | 31 s | 39 s | 3/3 | +26% |
+
+**Verdict under the same pre-registered rule:** `do` wins five tasks, every one with a
+chain of clicks and fills, and ties the two that are mostly reading one list. The gain
+is fewer agent turns, not faster clicks: Jev's 0.3 s choices let one call carry a plan
+that took the agent a turn per step. Shopee raised its crawler captcha several times
+during the round (blocked runs were discarded and re-run one at a time).
+
+## Round 1: Jev drives the whole task
+
 Seven tasks, three runs per approach, 42 runs. A Sonnet subagent drove each run in
 the user's Dia; answers were checked against live truth (see [README](README.md)).
 Times are medians of passing runs, in seconds.
