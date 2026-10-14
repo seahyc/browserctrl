@@ -280,7 +280,7 @@ const checks = {
   },
   async 'cna-top-bylines'(a) {
     // A byline may list several people; each name must be on the article.
-    const names = (s) => String(s || '').replace(/^.*\bby\b/i, '').split(/,|\band\b|&/).map(norm).filter(Boolean);
+    const names = (s) => String(s || '').replace(/^.*\bby\b/i, '').replace(/['"()]/g, '').split(/,|\band\b|&/).map(norm).filter(Boolean);
     const got = a.articles ?? [];
     const section = await pageText('https://www.channelnewsasia.com/singapore', 6000);
     const pages = got.length ? visitTexts(got.map((x) => x.url)) : [];
