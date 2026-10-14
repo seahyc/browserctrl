@@ -111,15 +111,16 @@ with ChromeCDP(port=${port}) as c:
  assert c.reload(t)['reloaded']
  assert c.refresh(t)['reloaded']
  assert c.focus(t)['activated']
- assert c.wake(t)['activated']`], {env: {...process.env,CDP_AGENT_ID:'activity-integration-a',PYTHONPATH:path.join(root,'python')}});
-  for (const name of ['browser_focus','browser_wake']) {
-    const focused=await client.callTool({name,arguments:{port,agentId:'activity-integration-a',tab:first.targetId}});
-    assert.ok(!focused.isError,JSON.stringify(focused));
-    assert.equal(JSON.parse(focused.content[0].text).activated,first.targetId.slice(0,8));
-  }
-  for (const command of ['focus','wake']) {
-    const selected=await exec(process.execPath,[path.join(root,'bin/browserctrl.mjs'),command,first.targetId,'--port',String(port)],{env:{...process.env,CDP_AGENT_ID:'activity-integration-a'}});
-    assert.equal(JSON.parse(selected.stdout).activated,first.targetId.slice(0,8));
-  }
+ assert c.wake(t)['rendering']`], {env: {...process.env,CDP_AGENT_ID:'activity-integration-a',PYTHONPATH:path.join(root,'python')}});
+  const focused=await client.callTool({name:'browser_focus',arguments:{port,agentId:'activity-integration-a',tab:first.targetId}});
+  assert.ok(!focused.isError,JSON.stringify(focused));
+  assert.equal(JSON.parse(focused.content[0].text).activated,first.targetId.slice(0,8));
+  const woken=await client.callTool({name:'browser_wake',arguments:{port,agentId:'activity-integration-a',tab:first.targetId}});
+  assert.ok(!woken.isError,JSON.stringify(woken));
+  assert.equal(JSON.parse(woken.content[0].text).rendering,true);
+  const selected=await exec(process.execPath,[path.join(root,'bin/browserctrl.mjs'),'focus',first.targetId,'--port',String(port)],{env:{...process.env,CDP_AGENT_ID:'activity-integration-a'}});
+  assert.equal(JSON.parse(selected.stdout).activated,first.targetId.slice(0,8));
+  const awake=await exec(process.execPath,[path.join(root,'bin/browserctrl.mjs'),'wake',first.targetId,'--port',String(port)],{env:{...process.env,CDP_AGENT_ID:'activity-integration-a'}});
+  assert.equal(JSON.parse(awake.stdout).visibilityState,'visible');
   console.log(JSON.stringify({backgroundReady:true,rapidNavigationWarning:true,cliActivity:true,pythonActivity:true,mcpPause:true,otherOwnerContinues:true,claimsPreserved:true,resumeWithoutReplay:true,focusCleanupWhilePaused:true}));
 });

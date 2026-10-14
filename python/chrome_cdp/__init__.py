@@ -142,7 +142,9 @@ class ChromeCDP:
     def focus(self, target):
         return self.request("focus", target=target)
 
-    wake = focus
+    def wake(self, target, *, off=False):
+        """Keep a background tab rendering without selecting it."""
+        return self.request("wake", target=target, params={"enabled": not off})
 
     def reload(self, target, *, wait_until="load", timeout=None):
         return self.request("reload", target=target, params={"waitUntil": wait_until}, timeout=timeout)

@@ -148,7 +148,8 @@ function usage() {
     browserctrl profiles --browser chrome [--json]              profiles, their tabs, which is the default
     browserctrl open <url> --profile <name|dir|prefix> --browser chrome   open in that profile (opens its window if needed)
     browserctrl tabs --profile <name> --browser chrome          only that profile's tabs
-    browserctrl close <tab>                    browserctrl focus <tab>  (wake is an alias)
+    browserctrl close <tab>                    browserctrl focus <tab>  (selects it)
+    browserctrl wake <tab> [--off]             render in the background without selecting it
     browserctrl group --url <substr>[,<substr>...] [--title T] [--color blue]
     browserctrl ungroup --url <substr>[,<substr>...]
     browserctrl claims [--browser dia]       browserctrl release [<tab>|--mine]
@@ -397,6 +398,7 @@ const main = async () => {
           .map(t => {
             const tags = [];
             if (t.focused) tags.push('←you');
+            if (t.rendering) tags.push('rendering');
             if (t.anonymous) tags.push('anonymous');
             if (t.marked) tags.push(`marked${t.marked.note ? `: ${t.marked.note}` : ''}`);
             if (t.suspended) tags.push('suspended');
@@ -505,6 +507,7 @@ const main = async () => {
       const params = Object.fromEntries(positional.slice(3).map(kv => [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)]));
       const res = await runRecipe(conn, loadRecipe(positional[2]), params, { raw: Boolean(flags.raw) });
       console.error(`[${res.recipe}] ${res.count} items, ${res.calls} calls, ${res.ms} ms (tab ${res.tab})`);
+      for (const r of res.retried || []) console.error(`  retried after: ${r}`);
       return out(res.items);
     }
     if (cmd === 'open') {
@@ -668,8 +671,9 @@ const main = async () => {
       case 'close':
         return out(await ops.closeTab(conn, targetId));
       case 'focus':
-      case 'wake':
         return out(await ops.focus(conn, targetId));
+      case 'wake':
+        return out(await ops.wake(conn, targetId, { enabled: !flags.off }));
       case 'reload':
       case 'refresh':
         return out(await ops.reload(conn, targetId, {waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000}));

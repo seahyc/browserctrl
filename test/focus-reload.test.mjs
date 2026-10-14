@@ -4,11 +4,11 @@ import * as ops from '../lib/ops.mjs';
 import {safariReload} from '../lib/safari-reload.mjs';
 import {safariCLI,safariMCP} from '../lib/safari-frontend.mjs';
 
-test('focus and wake select only; refresh is the same reload function', async () => {
+test('focus selects; wake renders without selecting; refresh is the same reload function', async () => {
   const calls=[];
-  const conn={browser:async (...args)=>calls.push(args)};
-  await ops.focus(conn,'tab');await ops.wake(conn,'tab');
-  assert.deepEqual(calls,[['Target.activateTarget',{targetId:'tab'}],['Target.activateTarget',{targetId:'tab'}]]);
+  const conn={browser:async (...args)=>calls.push(args),render:async (...args)=>calls.push(['render',...args])};
+  await ops.focus(conn,'tab');await ops.wake(conn,'tab');await ops.wake(conn,'tab',{enabled:false});
+  assert.deepEqual(calls,[['Target.activateTarget',{targetId:'tab'}],['render','tab',{enabled:true}],['render','tab',{enabled:false}]]);
   assert.equal(ops.refresh,ops.reload);
   assert.deepEqual(safariCLI('focus',['focus','native'],{}),safariCLI('wake',['wake','native'],{}));
   assert.deepEqual(safariMCP('browser_focus',{tab:'native'}),safariMCP('browser_wake',{tab:'native'}));

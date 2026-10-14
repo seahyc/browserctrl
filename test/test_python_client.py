@@ -102,7 +102,8 @@ class ClientTests(unittest.TestCase):
                 sdk.reload('tab', wait_until='domcontentloaded')
                 sdk.refresh('tab')
                 rows = [json.loads(row) for row in fake.stdin.getvalue().splitlines()]
-                self.assertEqual([row['op'] for row in rows[1:]], ['focus', 'focus', 'reload', 'reload'])
+                self.assertEqual([row['op'] for row in rows[1:]], ['focus', 'wake', 'reload', 'reload'])
+                self.assertEqual(rows[2]['params'], {'enabled': True})
                 self.assertEqual(rows[3]['params']['waitUntil'], 'domcontentloaded')
                 sdk.close()
         finally:

@@ -137,8 +137,10 @@ const TOOLS = [
     },
   },
   ...['browser_focus', 'browser_wake'].map(name => ({
-    name, description: name === 'browser_wake' ? 'Compatibility alias for browser_focus.' : 'Select a tab without reloading it. Use browser_wait readyState for background readiness.',
-    inputSchema: {type: 'object', properties: {...browserProp, ...tabProp}, required: ['tab']},
+    name, description: name === 'browser_wake'
+      ? 'Keep a background tab rendering (lazy lists, animations) without selecting it or taking focus. The page sees itself visible and focused. off=true stops it.'
+      : 'Select a tab without reloading it. Use browser_wait readyState for background readiness.',
+    inputSchema: {type: 'object', properties: {...browserProp, ...tabProp, ...(name === 'browser_wake' ? {off: {type: 'boolean'}} : {})}, required: ['tab']},
   })),
   ...['browser_reload', 'browser_refresh'].map(name => ({
     name, description: name === 'browser_refresh' ? 'Compatibility alias for browser_reload.' : 'Reload the current page without selecting its tab, then wait for the new document. The reload is never automatically replayed.',
@@ -515,7 +517,10 @@ const handlers = {
     const tab = await ops.resolveTab(conn, args.tab);
     return text(await ops.focus(conn, tab.targetId));
   }),
-  browser_wake: args => handlers.browser_focus(args),
+  browser_wake: args => withConn(args, async conn => {
+    const tab = await ops.resolveTab(conn, args.tab);
+    return text(await ops.wake(conn, tab.targetId, {enabled: args.off !== true}));
+  }),
   browser_reload: args => withConn(args, async conn => {
     const tab = await ops.resolveTab(conn, args.tab);
     return text(await ops.reload(conn, tab.targetId, {waitUntil: args.until || 'load', timeoutMs: args.timeoutMs ?? 30000}));

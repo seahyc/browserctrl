@@ -25,9 +25,10 @@ Captured exemplars, which do contain tokens, stay in
 | `match` | Optional URL regexes for the pages this recipe serves, used by `recipe find <url>` and the `hint:` line. Default: any page on the recipe's site or origin host, including subdomains. |
 | `keywords` | Optional words for `recipe find`, e.g. `["orders", "purchases", "history"]`. |
 | `warm_path` | Page to open when browserctrl creates the tab. |
-| `tab` | Omit for a background tab browserctrl opens and reuses. `handoff` uses a tab the human opened (marked tabs first, matched by `handoff_match`); it is never opened, navigated or reloaded. Use it for sites that drop the session on automation-started page loads. |
+| `tab` | Omit for a background tab browserctrl opens, reuses and keeps rendering (`wake` in SKILL.md). `handoff` uses a tab the human opened (marked tabs first, matched by `handoff_match`); it is never opened, navigated or reloaded. Use it for sites that drop the session on automation-started page loads. |
 | `settle_ms` | Wait after a newly created tab loads (default 1500). Some anti-fraud SDKs sign requests only once they finish starting. |
 | `pace_ms` | Delay between paginated calls. |
+| `timeout_ms` | Deadline for each in-page call (default 20000). A call that does not finish is aborted in the page. A `read` recipe that stalls is retried once; a `write` is never retried. |
 | `auth` | Named values: `{"from": "html", "path": "/", "regex": "..."}` takes the first capture group from that page's HTML, `{"from": "cookie", "name": "..."}` reads a cookie, `{"from": "ws", "host": "...", "frame": "LOGI", "path": "key", "expires_path": "expires_at", "max_age_s": 3000}` reads a field from the latest captured WebSocket frame of that kind, unless the frame's own expiry (seconds or milliseconds) is within 30 seconds (the recipe's own tab is reloaded when none is fresh). Use them as `{{auth.<name>}}`. |
 | `request` | `method`, `url` (relative to the origin, or absolute for another host), `headers`, `body` (object becomes JSON; string is sent as is), `credentials` (`include` by default; `omit` for a third-party API that rejects cookies on cross-origin requests). |
 | `params` | Defaults. `key=value` arguments override them and keep the default's type. `{{now_iso}}` is the current time. |

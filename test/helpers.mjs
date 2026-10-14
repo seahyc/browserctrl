@@ -42,6 +42,7 @@ export function chromeBinary() {
 
 export async function startFixtureServer() {
   const html = fs.readFileSync(path.join(HERE, 'fixtures', 'page.html'), 'utf8');
+  const hits = new Map();
   const server = http.createServer((req, res) => {
     if (req.url.startsWith('/slow')) {
       setTimeout(() => {
@@ -99,6 +100,21 @@ document.addEventListener('mouseup', () => { if (!down) return; down = false;
       const all = Array.from({ length: 5 }, (_, i) => ({ id: 100 + i, title: `Item ${i}`, price: { cents: 250 * (i + 1) } }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ data: { orders: all.slice(offset, offset + limit) } }));
+      return;
+    }
+    // Never answers the first request for each ?k=, then answers normally:
+    // a stalled call that a read recipe may retry. /api/hits?k= counts them.
+    if (req.url.startsWith('/api/hang-once')) {
+      const k = new URL(req.url, 'http://x').searchParams.get('k');
+      hits.set(k, (hits.get(k) || 0) + 1);
+      if (hits.get(k) === 1) return;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ items: [{ id: 1 }, { id: 2 }] }));
+      return;
+    }
+    if (req.url.startsWith('/api/hits')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(hits.get(new URL(req.url, 'http://x').searchParams.get('k')) || 0));
       return;
     }
     if (req.url.startsWith('/404')) {

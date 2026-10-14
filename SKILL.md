@@ -42,7 +42,7 @@ when `browser="safari"`. Unsupported operations fail explicitly. Python's
 `ChromeCDP` client, tab grouping, dormant Dia tabs, recording, uploads and raw CDP
 remain Chromium-only. Safari reload schedules `location.reload()` once through native JavaScript
 evaluation and observes the new document. It is an adapter helper, not a direct
-Apple MCP reload tool. Safari `focus` and its `wake` alias select the automation
+Apple MCP reload tool. Safari `focus` and `wake` both select the automation
 context through `switch_tab`; normal Safari window foregrounding is not
 guaranteed. Safari creates an automation session; do not assume access
 to the user's existing Safari tabs or signed-in state. Verify background behavior
@@ -227,6 +227,11 @@ Save a recipe only after `recipe run` returns the same facts the UI showed, and
 record that in its `verified` field. Recipes whose `kind` is `write` change data:
 follow the user's approval rules before running one.
 
+Each in-page call has its own deadline (`timeout_ms`, 20 s). A `read` recipe that
+stalls (tab, renderer or network did not answer) is retried once and reports
+`retried`; a `write` is never retried. A failure names the phase it stopped in,
+each phase's time and the machine load.
+
 ## Captchas and verification pages
 
 When a page shows a slider, puzzle or "verify you are human" step, run
@@ -308,8 +313,27 @@ existence really is the condition you mean.
 `reload` reloads the current URL without activating the tab and waits for the
 new document. Choose `--until load`, `domcontentloaded`, `networkidle` or `none`;
 the timeout defaults to 30000 milliseconds. `ready` only observes the existing
-page. `focus` selects it without reloading. Legacy `wake` aliases `focus`, and
-`refresh` aliases `reload`; focus needs no additional approval flag.
+page. `focus` selects it without reloading. `refresh` aliases `reload`; focus
+needs no additional approval flag.
+
+## Background tabs render
+
+A hidden tab runs no `requestAnimationFrame` or IntersectionObserver, so lazy
+pages (Shopee search and product pages) stay skeletons, and macOS demotes its
+renderer to background priority, where heavy machine load can stall it for tens
+of seconds. `wake` makes a background tab render through focus emulation: the
+page sees itself visible and focused, but the browser does not select the tab or
+take OS focus. Use it when a page stays a skeleton; recipe tabs get it on every
+run. It lasts until `wake --off` or a daemon restart, and never selects the tab;
+use `focus` for that.
+
+```bash
+browserctrl wake <tab> --browser dia          # render without selecting; prints visibilityState
+browserctrl wake <tab> --off --browser dia    # let it go hidden again
+```
+
+A rendering tab sees focus and visibility events, so chat sites may mark
+messages read. `tabs` tags it `rendering` and never reports it as `←you`.
 
 ## See what happened
 
@@ -426,6 +450,7 @@ browserctrl claims
 browserctrl release <tab> --browser dia   # or: browserctrl release --mine
 browserctrl close <tab> --browser dia
 browserctrl focus <tab> --browser dia     # select the tab without reloading
+browserctrl wake <tab> --browser dia      # render in the background without selecting
 browserctrl reload <tab> --browser dia --until load --timeout 30000
 browserctrl status --browser dia          # daemon state
 browserctrl stop --browser dia            # stop the daemon for that port
@@ -497,11 +522,12 @@ Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
 `browser_record`, `browser_recording`, `browser_activity`,
 `browser_recipe`, `browser_captcha`, `browser_profiles`.
 
-`browser_wake` and `browser_refresh` remain aliases for `browser_focus` and
-`browser_reload`. The SDK uses `ops.focus` and `ops.reload`, with `ops.wake` and
-`ops.refresh` as aliases. The Chromium Python client exposes `client.focus(tab)`
-and `client.reload(tab, wait_until='load', timeout=None)`; `client.wake` and
-`client.refresh` are aliases.
+`browser_refresh` remains an alias for `browser_reload`. `browser_wake`
+(`off=true` to stop), `ops.wake(conn, tab, {enabled})` and the Chromium Python
+client's `client.wake(tab, off=False)` render a tab in the background without
+selecting it. The SDK uses `ops.focus` and `ops.reload`, with `ops.refresh` as an
+alias. The Python client exposes `client.focus(tab)` and
+`client.reload(tab, wait_until='load', timeout=None)`; `client.refresh` is an alias.
 
 `browser_act` takes one action or a `steps` array that runs in order and stops
 at the first failure. Screenshots return inline images to clients that render
@@ -584,7 +610,8 @@ background screenshot stalls, use `browserctrl shot <tab> output.png
 --emulate-focus` or MCP `browser_screenshot emulateFocus=true`. This temporarily
 emulates page focus through CDP, then disables it after capture. It does not
 activate a browser tab or an OS window, but the page can observe focus events.
-Use it only when overriding that tab's focus emulation is acceptable. A cleanup
+Use it only when overriding that tab's focus emulation is acceptable. On a
+[rendering tab](#background-tabs-render) the emulation stays on. A cleanup
 failure is reported; inspect the tab before continuing. Focus emulation is not
 a guarantee: Windows CI needed an active owned target for reliable capture.
 Safari uses Apple's

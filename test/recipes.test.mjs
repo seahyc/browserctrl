@@ -192,3 +192,38 @@ t('a handoff recipe refuses to open a tab and uses the human tab without navigat
   assert.equal(res.items.length, 5);
   assert.equal(await ops.evaluate(conn, human.targetId, 'location.search'), '?human=1');
 });
+
+const stallRecipe = (k, kind) => ({
+  name: `fixture/stall-${kind}`, kind, origin, warm_path: '/shop', settle_ms: 0, timeout_ms: 1500,
+  request: { method: 'GET', url: `/api/hang-once?k=${k}` }, paginate: { items: 'items' },
+});
+const hits = async k => (await fetch(`${origin}/api/hits?k=${k}`)).json();
+
+t('a read recipe whose call never answers fails fast in the page and is retried once', async () => {
+  const k = `read-${Date.now()}`;
+  const started = Date.now();
+  const res = await runRecipe(conn, stallRecipe(k, 'read'));
+  assert.deepEqual(res.items.map(x => x.id), [1, 2]);
+  assert.equal(res.retried.length, 1);
+  assert.match(res.retried[0], /call 1: the request did not finish within 1500 ms.*stopped in call 1/);
+  assert.equal(await hits(k), 2);
+  assert.ok(Date.now() - started < 15000, 'bounded by the in-page timeout, not the 30 s CDP one');
+});
+
+t('a write recipe is never retried and says its outcome is uncertain', async () => {
+  const k = `write-${Date.now()}`;
+  await assert.rejects(runRecipe(conn, stallRecipe(k, 'write')), /did not finish within 1500 ms.*stopped in call 1.*never retried/);
+  assert.equal(await hits(k), 1);
+});
+
+t('an HTTP error is not retried', async () => {
+  const recipe = { ...ordersRecipe(), name: 'fixture/forbidden', auth: {}, request: { method: 'GET', url: '/api/orders/1' } };
+  await assert.rejects(runRecipe(conn, recipe), (e) => /HTTP 403/.test(e.message) && e.retried.length === 0);
+});
+
+t('the recipe tab renders as if visible without being selected', async () => {
+  const res = await runRecipe(conn, ordersRecipe());
+  const owned = (await ops.tabs(conn)).find(x => x.id === res.tab);
+  const page = await ops.evaluate(conn, owned.targetId, "new Promise(r => requestAnimationFrame(() => r(document.visibilityState)))", { timeoutMs: 5000 });
+  assert.equal(page, 'visible');
+});
