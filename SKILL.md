@@ -304,7 +304,12 @@ Pick the first that fits; each step down costs more agent turns:
    send every step you can foresee in one call. In benchmarks on marketplaces, GitHub,
    GitLab, Stripe and news sites it took 30–70% less time than reading and clicking
    step by step on 9 of 13 tasks, with the same success rate (bench/RESULTS.md).
-4. `read` and single actions, only for what `do` reports it could not do.
+4. To drill into a list (each PR's files, each listing's seller), take the links from
+   `items` and open them all at once: `browserctrl visit /mr/144 /mr/136 … --from <tab>
+   --grep "into|Source branch"` opens them in parallel background tabs and returns only
+   the matching lines (with one line either side) per page; `--then items` returns each
+   page's items instead. 12 GitLab MRs take about 15 s.
+5. `read` and single actions, only for what `do` reports it could not do.
 
 Read the page first only when you cannot guess the controls' names at all.
 
@@ -696,7 +701,7 @@ codex mcp add browser -- node ~/.agents/skills/browserctrl/mcp/server.mjs
 
 Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
 `browser_read`, `browser_navigate`, `browser_wait`, `browser_focus`,
-`browser_reload`, `browser_do`, `browser_items`, `browser_act`,
+`browser_reload`, `browser_do`, `browser_items`, `browser_visit`, `browser_act`,
 `browser_screenshot`, `browser_diagnostics`, `browser_eval`,
 `browser_annotations`, `browser_marks`, `browser_annotate_mode`,
 `browser_record`, `browser_recording`, `browser_activity`,

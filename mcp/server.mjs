@@ -27,6 +27,7 @@ import * as sessions from '../lib/sessions.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
+import { visit, formatVisits } from '../lib/visit.mjs';
 
 const SERVER_NAME = 'browser';
 const SERVER_VERSION = '2.3.0';
@@ -144,6 +145,11 @@ const TOOLS = [
       },
       required: ['tab'],
     },
+  },
+  {
+    name: 'browser_visit',
+    description: 'Open several links at once in background tabs, let each render, and return what you are looking for on each: lines matching grep (with neighbouring lines), the page items, or the main text. Tabs are closed afterwards. Use it to drill into a list (each PR, each listing) in one call; paths resolve against the from tab.',
+    inputSchema: { type: 'object', properties: { ...browserProp, urls: { type: 'array', items: { type: 'string' } }, from: { type: 'string', description: 'Tab whose URL relative paths resolve against.' }, grep: { type: 'string', description: 'Case-insensitive regex for the lines to return.' }, context: { type: 'number' }, then: { type: 'string', enum: ['text', 'items'] }, parallel: { type: 'number', description: 'Tabs at once, default 4.' } }, required: ['urls'] },
   },
   {
     name: 'browser_items',
@@ -616,6 +622,13 @@ const handlers = {
         then: args.then, dismiss: args.dismiss, repeat: args.repeat, until: args.until, max: args.max, collect: args.collect,
       });
       return text(formatSteps(r));
+    }),
+
+  browser_visit: args =>
+    withConn(args, async conn => {
+      let urls = args.urls || [];
+      if (args.from) { const base = (await ops.resolveTab(conn, args.from)).url; urls = urls.map(u => new URL(u, base).href); }
+      return text(formatVisits(await visit(conn, urls, { grep: args.grep, context: args.context ?? 1, then: args.then || 'text', parallel: args.parallel || 4 })));
     }),
 
   browser_items: args =>

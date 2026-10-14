@@ -30,6 +30,7 @@ import * as jev from '../lib/jev.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { formatRead } from '../lib/refs.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
+import { visit, formatVisits } from '../lib/visit.mjs';
 import * as show from '../lib/show.mjs';
 import * as trace from '../lib/trace.mjs';
 
@@ -181,6 +182,8 @@ function usage() {
 
   Tabs and claims:
     browserctrl open <url> --browser dia [--anonymous]          open a tab
+    browserctrl visit <url|/path>... [--from <tab>] [--grep RE] [--then items] [--parallel 4]
+                       open links in parallel background tabs, return matching lines or items, close them
     browserctrl open <url> --browser dia --anonymous            clean temporary session
     browserctrl profiles --browser chrome [--json]              profiles, their tabs, which is the default
     browserctrl open <url> --profile <name|dir|prefix> --browser chrome   open in that profile (opens its window if needed)
@@ -580,6 +583,20 @@ const main = async () => {
       console.error(`[${res.recipe}] ${res.count} items, ${res.calls} calls, ${res.ms} ms (tab ${res.tab})`);
       for (const r of res.retried || []) console.error(`  retried after: ${r}`);
       return out(res.items);
+    }
+    if (cmd === 'visit') {
+      let urls = positional.slice(1);
+      if (!urls.length) throw new Error('Usage: browserctrl visit <url|/path> ... [--from <tab>] [--grep "Source branch|files changed"] [--context 1] [--then items] [--parallel 4]');
+      // Paths from `items` resolve against the tab they came from.
+      if (flags.from) {
+        const base = (await ops.resolveTab(conn, flags.from)).url;
+        urls = urls.map(u => new URL(u, base).href);
+      }
+      const res = await visit(conn, urls, {
+        grep: flags.grep, then: flags.then === 'items' ? 'items' : 'text', parallel: Number(flags.parallel || 4),
+        maxText: Number(flags['max-text'] || 1500), force: Boolean(flags.force), context: flags.context != null ? Number(flags.context) : 1,
+      });
+      return out(flags.json ? res : formatVisits(res));
     }
     if (cmd === 'open') {
       if (flags.profile && flags.anonymous) throw new Error('--profile and --anonymous are exclusive: an anonymous tab belongs to no profile.');
