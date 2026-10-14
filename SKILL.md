@@ -347,14 +347,34 @@ render, and stops at the first step it cannot do with confidence:
 
 ```bash
 browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter' \
-  'click "More filters"' 'fill "maximum price" = 600' 'click Apply' \
-  'expect "search results for herman miller aeron"' --then items --browser dia
+  'click "More filters" => "a maximum price box is shown"' 'fill "maximum price" = 600' \
+  'click Apply => "results are under S$600"' --dismiss "cookie banner, app-install prompt" \
+  --repeat 'click Next' --until "there is no next page" --max 5 --collect items --browser dia
 ```
 
 - Steps: `click <element>`, `fill <element> = <value>`, `select <element> = <option>`,
   `hover`, `key Enter`, `scroll down|up`, `nav <url>`, `wait <ms>`, and
-  `expect <what the page shows>`, which stops the plan when Jev judges it untrue.
-  Write expectations about visible text, not inferences.
+  `expect <what the page shows>`.
+- `=> "<expected result>"` after any step: the plan stops right after that step when
+  Jev judges it untrue. It is checked in the same request that grounds the next step
+  (the last one with the final page checks), so it costs no extra time. Write it about
+  visible text, not inferences. Prefer it to a separate `expect` step.
+- `optional click "Close"` skips the step (reported with `–`) when nothing matches,
+  instead of stopping: for popups that may or may not appear.
+- Blocking overlays: whenever a dialog or popup covers the page, `do` asks Jev whether
+  it blocks the next step. Without `--dismiss` it stops with the overlay's text and
+  controls. `--dismiss "cookie banner, newsletter popup"` closes only those kinds, by a
+  harmless control ("Accept cookies", "Close", "No thanks"); it never clicks Subscribe,
+  Buy, Install or anything that commits, and stops if that is the only way out. List
+  only kinds you would close yourself without reading; let anything else (a login
+  wall, an age or region gate, a confirmation) stop the plan so you can decide.
+- Notices are never acted on: a new toast, alert or inline message such as "Price
+  changed", "Out of stock" or "Did you mean" is reported under `events` with the step
+  that caused it, beside the overlays dismissed. Read them before reporting a result.
+- `--repeat '<step>' --until "<page condition>"` runs after the plan: it repeats the
+  step (usually `click Next`) until Jev judges the condition true, the step cannot be
+  done (no Next button), or `--max` (10) repeats. `--collect items` returns the `items`
+  of every page, merged and de-duplicated by link and text; `--collect text` the text.
 - `--then items` or `--then text` returns the resulting page in the same call.
 - Exit 3 means the plan stopped: the report names the step, the reason, Jev's
   candidates with refs, elements with that name that exist but are hidden (often opened
@@ -363,8 +383,13 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
 - `do` never clicks a control that can commit something (Buy, Send, Pay, Delete,
   Submit, Confirm…), even when named exactly. Click it by ref only if the user
   authorized that action. You supply every typed value.
-- Steps that need Jev require `TYPESAFE_API_KEY` (see [Jev](#jev)); exact names work
-  without it.
+- Every run is traced per tab. `browserctrl trace <tab> [--last N] [--json]` shows
+  each step's target, how it was found (exact or Jev p), URL changes, expectations
+  with p, dismissed overlays and notices. Review traces after the task, or when a
+  result looks wrong, instead of adding read steps to the plan. Traces live in
+  `~/.local/share/browserctrl/traces/` (`BROWSERCTRL_TRACES` overrides).
+- Intent targets, expectations, `--until` and `--dismiss` need `TYPESAFE_API_KEY` (see
+  [Jev](#jev)). Exact names work without it; overlay checks are then skipped.
 
 ### Single actions
 

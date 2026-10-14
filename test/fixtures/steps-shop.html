@@ -1,0 +1,41 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Shop v2</title>
+<style>
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.4)} #ov .box{background:#fff;margin:20vh auto;width:60%;padding:20px}
+.toast{position:fixed;bottom:10px;right:10px;background:#333;color:#fff;padding:8px}
+</style></head><body><main>
+<h1>Chairs</h1>
+<label>Search <input id="q"></label><button id="go">Search</button>
+<button id="more">More filters</button>
+<div id="panel" hidden><label>Maximum <input id="max"></label><button id="apply">Apply</button></div>
+<ul id="list"></ul><button>Buy now</button>
+</main>
+<script>
+window.clicked = [];
+const all = [{t:'Aeron A', p:380},{t:'Aeron B', p:580},{t:'Aeron C', p:900},{t:'Chair D', p:100}];
+function show() {
+  const q = document.getElementById('q').value.toLowerCase(), max = Number(document.getElementById('max').value) || Infinity;
+  setTimeout(() => {
+    document.getElementById('list').innerHTML = all.filter(x => x.t.toLowerCase().includes(q) && x.p <= max).map(x => `<li>${x.t} · S$${x.p}</li>`).join('');
+    // A non-blocking notice, as when a listing's price moved between search and filter.
+    if (max !== Infinity) { const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = 'Price changed to S$590'; document.body.appendChild(t); }
+  }, 250);
+}
+document.getElementById('go').onclick = show;
+document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') show(); });
+document.getElementById('more').onclick = () => { document.getElementById('panel').hidden = false; };
+document.getElementById('apply').onclick = show;
+// ?overlay=cookie | newsletter | subscribe: a blocking popup on load.
+const kind = new URLSearchParams(location.search).get('overlay');
+const OVERLAYS = {
+  cookie: '<p>We use cookies to improve your experience.</p><button data-k="accept">Accept cookies</button><a href="/privacy">Privacy policy</a>',
+  newsletter: '<p>Get 10% off: join our newsletter!</p><button data-k="subscribe">Subscribe</button><button data-k="nothanks">No thanks</button>',
+  subscribe: '<p>Special offer: subscribe to Premium for S$9.90 a month.</p><button data-k="subscribe">Subscribe now</button><button data-k="buy">Buy Premium</button>',
+};
+if (OVERLAYS[kind]) {
+  const ov = document.createElement('div');
+  ov.id = 'ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+  ov.innerHTML = `<div class="box">${OVERLAYS[kind]}</div>`;
+  ov.addEventListener('click', e => { const k = e.target.dataset && e.target.dataset.k; if (!k) return; window.clicked.push(k); if (k === 'accept' || k === 'nothanks') ov.remove(); });
+  document.body.appendChild(ov);
+}
+</script></body></html>
