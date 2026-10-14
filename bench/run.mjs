@@ -262,7 +262,12 @@ const checks = {
     // The failed list's own links are the truth for ids; each payment page for the rest.
     const id = await readyTab('https://dashboard.stripe.com/payments');
     let links = [];
-    try { bc('wake', id); await sleep(5000); bc('do', id, 'click Failed'); await sleep(3000); links = JSON.parse(bc('eval', id, `JSON.stringify([...new Set([...document.querySelectorAll('a[href*="/payments/pi_"]')].map(a => a.href.match(/pi_[A-Za-z0-9]+/)[0]))])`)); } catch {}
+    try {
+      bc('wake', id); await sleep(5000);
+      // Click Failed until the URL shows the filter (a click on a page still loading is lost).
+      for (let i = 0; i < 3 && !/status\[0\]=failed|status%5B0%5D=failed/.test(bc('eval', id, 'location.href')); i++) { try { bc('do', id, 'click Failed'); } catch {} await sleep(3000); }
+      links = JSON.parse(bc('eval', id, `JSON.stringify([...new Set([...document.querySelectorAll('a[href*="/payments/pi_"]')].map(a => a.href.match(/pi_[A-Za-z0-9]+/)[0]))])`));
+    } catch {}
     try { bc('close', id); } catch {}
     const got = a.payments ?? [];
     const pages = got.length ? visitTexts(got.map((p) => `https://dashboard.stripe.com/payments/${p.id}`)) : [];
