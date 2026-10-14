@@ -211,7 +211,8 @@ if (cmd === 'start') {
   const mine = new Set([...(handoff ? [] : [run.tab]), ...(answer?.tab && answer.tab !== run.tab ? [answer.tab] : [])].map((t) => t.slice(0, 8)));
   const closed = [];
   for (const id of tabIds()) {
-    if (mine.has(id)) { try { bc('close', id); closed.push(id); } catch {} }
+    // The run's agent still holds a claim on its tab, so take it over to close it.
+    if (mine.has(id)) { try { bc('close', id, '--steal'); closed.push(id); } catch (e) { console.error(`could not close ${id}: ${String(e.stderr || e).trim()}`); } }
   }
   const row = {
     run: runId, task: run.task, arm: run.arm, n: run.n, at: run.startedAt, load: run.load,
