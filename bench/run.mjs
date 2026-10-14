@@ -52,6 +52,29 @@ async function readyTab(url) {
   return id;
 }
 
+// GitLab truth from the web UI when glab cannot authenticate: MR pages opened directly
+// by IID (not the agent's path), read by stable selectors.
+const GL = 'https://gitlab.glints.com/glints/glints-dashboard/-/merge_requests';
+async function glListIids(query) {
+  const id = await readyTab(`${GL}?${query}`);
+  try { return JSON.parse(bc('eval', id, `JSON.stringify([...new Set([...document.querySelectorAll('a[href*="/-/merge_requests/"]')].map(a => (a.getAttribute('href').match(/merge_requests\\/(\\d+)$/) || [])[1]).filter(Boolean).map(Number))])`)); }
+  finally { try { bc('close', id); } catch {} }
+}
+async function glMRs(iids) {
+  const id = await readyTab(`${GL}/${iids[0]}`);
+  const out = new Map();
+  try {
+    for (const iid of iids) {
+      bc('nav', id, `${GL}/${iid}`);
+      for (let i = 0; i < 20; i++) { await sleep(500); try { if (bc('eval', id, `!!document.querySelector('.ref-container')`).trim() === 'true') break; } catch {} }
+      const r = JSON.parse(bc('eval', id, `JSON.stringify({ author: document.querySelector('a.author-link')?.dataset.username, refs: [...document.querySelectorAll('.ref-container')].map(e => e.textContent.trim()), commits: Number(([...document.querySelectorAll('a, li')].map(e => e.textContent.replace(/\\s+/g, ' ').trim()).find(t => /^Commits \\d+$/.test(t)) || '').replace(/\\D/g, '')) })`));
+      out.set(iid, { iid, author: { username: r.author }, source_branch: r.refs[0], target_branch: r.refs[1], commits: r.commits });
+    }
+  } finally { try { bc('close', id); } catch {} }
+  return out;
+}
+const glabOk = () => { try { gitlab('user'); return true; } catch { return false; } };
+
 // Each check returns [{name, ok, detail}]. Truth is read live, before and after the run when it can drift.
 const CARDS = `JSON.stringify([...document.querySelectorAll('a[href*="/products/"]')].map(x => { const c = x.closest('[data-qa-locator=product-item]') || x.parentElement.parentElement; return { href: x.href.split('?')[0], text: (c || x).innerText }; }))`;
 
@@ -172,8 +195,9 @@ const checks = {
     return out;
   },
   async 'gitlab-closed-branches'(a) {
-    const truth = gitlab('projects/19/merge_requests?state=closed&per_page=100');
-    const byIid = new Map(truth.map((m) => [m.iid, m]));
+    const byIid = glabOk()
+      ? new Map(gitlab('projects/19/merge_requests?state=closed&per_page=100').map((m) => [m.iid, m]))
+      : await glMRs(await glListIids('state=closed'));
     const got = a.mrs ?? [];
     const ids = got.map((m) => Number(m.iid));
     const wrong = got.filter((m) => {
@@ -186,12 +210,16 @@ const checks = {
     ];
   },
   async 'gitlab-author-commits'(a) {
-    const merged = gitlab('projects/19/merge_requests?state=merged&author_username=yjwong&per_page=100&order_by=created_at');
-    const top = merged.map((m) => m.iid).sort((x, y) => y - x).slice(0, 5);
+    const api = glabOk();
+    const iids = api
+      ? gitlab('projects/19/merge_requests?state=merged&author_username=yjwong&per_page=100').map((m) => m.iid)
+      : await glListIids('state=merged&author_username=yjwong&sort=created_date');
+    const top = iids.sort((x, y) => y - x).slice(0, 5);
     const got = a.mrs ?? [];
     const wrong = [];
+    const ui = api ? null : await glMRs(got.map((m) => Number(m.iid)));
     for (const m of got) {
-      const commits = gitlab(`projects/19/merge_requests/${Number(m.iid)}/commits?per_page=100`).length;
+      const commits = api ? gitlab(`projects/19/merge_requests/${Number(m.iid)}/commits?per_page=100`).length : ui.get(Number(m.iid))?.commits;
       if (Number(m.commits) !== commits) wrong.push({ iid: m.iid, got: m.commits, want: commits });
     }
     return [
