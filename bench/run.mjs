@@ -63,12 +63,26 @@ const checks = {
     }
     return out;
   },
-  async 'shopee-compare'(a) {
+  async 'shopee-compare'(a, run) {
     const urls = new Set((a.listings ?? []).map((l) => l.url));
     const out = [{ name: 'three distinct listings', ok: a.listings?.length === 3 && urls.size === 3 }];
+    // Read each card from the run's own results tab: opening product pages in fresh tabs
+    // is what raises Shopee's crawler captcha.
+    let cards = {};
+    try {
+      cards = JSON.parse(bc('eval', run.tab, `JSON.stringify(Object.fromEntries([...document.querySelectorAll('a[href*="-i."]')].map(a => [a.href.match(/i\\.(\\d+\\.\\d+)/)?.[1], (a.closest('li,[data-sqe=item]') || a).innerText])))`));
+    } catch {}
+    if (!Object.keys(cards).length) {
+      // The run's tab moved on: one search page beats a product page per listing.
+      const id = await readyTab('https://shopee.sg/search?keyword=anker%2030w%20charger&sortBy=sales');
+      try { bc('wake', id); await sleep(4000); cards = JSON.parse(bc('eval', id, `JSON.stringify(Object.fromEntries([...document.querySelectorAll('a[href*="-i."]')].map(a => [a.href.match(/i\\.(\\d+\\.\\d+)/)?.[1], (a.closest('li,[data-sqe=item]') || a).innerText])))`)); } catch {}
+      try { bc('close', id); } catch {}
+    }
     for (const l of a.listings ?? []) {
-      const text = await pageText(l.url, 8000);
-      out.push({ name: `listing ${l.url}`, ok: /anker/i.test(l.title) && /anker/i.test(text) && text.includes(`$${Number(l.price_sgd).toFixed(2)}`), detail: { price: l.price_sgd } });
+      const key = String(l.url).match(/i\.(\d+\.\d+)/)?.[1];
+      const text = (key && cards[key]) || await pageText(l.url, 8000);
+      const flat = text.replace(/\s+/g, ''); // Shopee splits "$" and the amount into separate elements
+      out.push({ name: `listing ${l.url}`, ok: /anker/i.test(l.title) && /anker/i.test(text) && flat.includes(`$${Number(l.price_sgd).toFixed(2)}`), detail: { price: l.price_sgd } });
     }
     return out;
   },
