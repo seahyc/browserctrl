@@ -25,7 +25,17 @@
       {
         "kind": "click",
         "role": "button",
-        "label": "add to cart"
+        "label": "Grey"
+      },
+      {
+        "kind": "click",
+        "role": "button",
+        "label": "20cm, 50pcs"
+      },
+      {
+        "kind": "click",
+        "role": "button",
+        "label": "Add To Cart"
       }
     ]
   },
