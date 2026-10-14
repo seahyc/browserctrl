@@ -26,7 +26,7 @@ const gh = (...args) => JSON.parse(sh('gh', args));
 
 const fill = (s) => s.replace(/FIXTURE:(\w+)/g, (_, k) => fixtures[k]);
 const norm = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
-const tabIds = () => bcJson('tabs', '--json').map((t) => t.targetId || t.id);
+const tabIds = () => bcJson('tabs', '--json').map((t) => (t.targetId || t.id).slice(0, 8));
 
 async function pageText(url, waitMs = 6000) {
   const { id } = bcJson('open', url);
@@ -219,12 +219,12 @@ if (cmd === 'start') {
   try { answer = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); } catch { answer = null; }
   const results = answer ? await checks[run.task](answer, run) : [{ name: 'answer is JSON', ok: false }];
   const undone = undo[run.task] ? await undo[run.task](run) : null;
+  // Close only this run's tabs: runs overlap, so "new since start" would include other runs' tabs.
   const handoff = tasks.find((t) => t.id === run.task).start_url.startsWith('HANDOFF:');
+  const mine = new Set([...(handoff ? [] : [run.tab]), ...(answer?.tab && answer.tab !== run.tab ? [answer.tab] : [])].map((t) => t.slice(0, 8)));
   const closed = [];
   for (const id of tabIds()) {
-    if (handoff ? !run.tabsBefore.includes(id) : (id === run.tab || !run.tabsBefore.includes(id))) {
-      try { bc('close', id); closed.push(id); } catch {}
-    }
+    if (mine.has(id)) { try { bc('close', id); closed.push(id); } catch {} }
   }
   const row = {
     run: runId, task: run.task, arm: run.arm, n: run.n, at: run.startedAt, load: run.load,
