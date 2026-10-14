@@ -78,3 +78,24 @@ t('ids stay stable across reads and newly loaded items are marked', async () => 
   assert.ok(second.items.slice(12).every(i => i.new));
   await ops.closeTab(conn, id);
 });
+
+t('table rows carry their column headers, and a row links to its record', async () => {
+  const id = await open('items-table.html');
+  const r = await items(id);
+  const rows = r.groups.find(g => g.items[0].text.includes('Amount:'));
+  assert.ok(rows, formatItems(r));
+  assert.equal(rows.items[1].text, 'Amount: $25.00 · Status: Failed · Customer: b@example.com');
+  assert.ok(!r.groups.some(g => g.items[0].text === 'Amount'), 'no separate header group');
+  const issues = r.groups.find(g => g.items[0].text.startsWith('Issue 1'));
+  assert.equal(issues.items[0].link, '/issues/1001');
+  assert.equal(issues.items[0].align, undefined);
+  await ops.closeTab(conn, id);
+});
+
+t('a div grid takes its labels from the header row above it', async () => {
+  const id = await open('items-grid.html');
+  const r = await items(id);
+  assert.equal(r.groups.length, 1, formatItems(r));
+  assert.equal(r.groups[0].items[1].text, 'Email: b@x.com · Company: Beta · Credits: 510');
+  await ops.closeTab(conn, id);
+});
