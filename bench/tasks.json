@@ -70,5 +70,37 @@
     "goal": "Using the GitLab web UI for glints/glints-dashboard, list every merge request that was closed without being merged (not the merged ones). Report each one's IID, title and author username. Then open the one with the highest IID and report its source branch.",
     "answer": "{\"mrs\": [{\"iid\": number, \"title\": str, \"author\": str}], \"highest_iid_source_branch\": str}",
     "jev_allow_controls": []
+  },
+  {
+    "id": "gitlab-author",
+    "kind": "messy",
+    "start_url": "https://gitlab.glints.com/glints/glints-dashboard/-/merge_requests",
+    "goal": "Using the GitLab web UI for glints/glints-dashboard, list every merged merge request authored by yjwong (Yong Jie): IID and title. They span several pages.",
+    "answer": "{\"mrs\": [{\"iid\": number, \"title\": str}]}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "lazada-cheapest",
+    "kind": "messy",
+    "start_url": "https://www.lazada.sg/",
+    "goal": "On Lazada Singapore, search for \"27 inch 4k monitor\" and sort the results by price, low to high. Report the 5 cheapest results on the first results page whose title mentions 4K, in price order.",
+    "answer": "{\"listings\": [{\"title\": str, \"price_sgd\": number, \"url\": str}] (exactly 5, cheapest first)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "cna-singapore",
+    "kind": "messy",
+    "start_url": "https://www.channelnewsasia.com/",
+    "goal": "On CNA (channelnewsasia.com), open the Singapore news section and report the first 5 article headlines listed there, with their links.",
+    "answer": "{\"articles\": [{\"headline\": str, \"url\": str}] (exactly 5)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "stripe-failed",
+    "kind": "messy",
+    "start_url": "https://dashboard.stripe.com/payments",
+    "goal": "In the Stripe dashboard's Payments page, filter to Failed payments and report the 3 most recent: amount, customer email and date.",
+    "answer": "{\"payments\": [{\"amount\": str, \"customer\": str, \"date\": str}] (3, newest first)}",
+    "jev_allow_controls": []
   }
 ]

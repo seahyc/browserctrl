@@ -46,6 +46,16 @@ result and can return `items` in the same call. A is re-run in the same round. T
 decision rule is unchanged: D wins a task if it is at least 30% faster to a verified
 answer than A and passes at least as many runs.
 
+## Round 4: do v2 and read v2 on more sites
+
+Runs 31-33. Approach D now has expected results per step, popup dismissal, pagination
+(`--repeat/--until/--collect items`) and the improved `read`/`items`. Tasks: the two
+round-3 ties (github-prs, gitlab-mrs) and four new ones from the user's browsing
+history: gitlab-author (a paginated list), lazada-cheapest (search, custom sort, pick),
+cna-singapore (navigate a news site), stripe-failed (filter a dashboard). A is re-run in
+the same round. Same decision rule. One pilot per task (run 0) runs with --show so the
+user can watch; counted runs do not, since --show adds pauses.
+
 ## Running
 
 ```sh

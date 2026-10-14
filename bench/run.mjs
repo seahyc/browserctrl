@@ -140,6 +140,41 @@ const checks = {
       { name: 'highest IID source branch', ok: a.highest_iid_source_branch === top.source_branch, detail: top.source_branch },
     ];
   },
+  async 'gitlab-author'(a) {
+    const all = [1, 2].flatMap(pg => gitlab(`projects/19/merge_requests?state=merged&author_username=yjwong&per_page=100&page=${pg}`));
+    const truth = new Set(all.map(m => m.iid));
+    const got = new Set((a.mrs ?? []).map(m => Number(m.iid)));
+    return [{ name: 'exact merged MR set', ok: truth.size > 0 && [...truth].every(n => got.has(n)) && [...got].every(n => truth.has(n)), detail: { truth: truth.size, got: got.size, missing: [...truth].filter(n => !got.has(n)).slice(0, 10), extra: [...got].filter(n => !truth.has(n)).slice(0, 10) } }];
+  },
+  async 'lazada-cheapest'(a, run) {
+    // Judge against the run's own results tab: the same page the agent saw.
+    let cards = [];
+    try { cards = JSON.parse(bc('eval', run.tab, `JSON.stringify([...document.querySelectorAll('a[href*="/products/"]')].map(x => { const c = x.closest('[data-qa-locator=product-item]') || x.parentElement.parentElement; return { href: x.href.split('?')[0], text: (c || x).innerText }; }))`)); } catch {}
+    const price = (t) => Number((String(t).match(/\$\s*([\d,]+(?:\.\d+)?)/) || [])[1]?.replace(/,/g, ''));
+    const fourK = cards.filter(c => /4k/i.test(c.text) && price(c.text) > 0).map(c => ({ ...c, p: price(c.text) })).sort((x, y) => x.p - y.p);
+    const got = a.listings ?? [];
+    const out = [{ name: 'five listings, ascending', ok: got.length === 5 && got.every((l, i) => i === 0 || Number(l.price_sgd) >= Number(got[i - 1].price_sgd)) }];
+    out.push({ name: 'each is a 4K listing on the page at that price', ok: got.every(l => /4k/i.test(l.title) && cards.some(c => c.href === String(l.url).split('?')[0] && c.text.replace(/\s+/g, '').includes(Number(l.price_sgd).toFixed(2)))), detail: { cards: cards.length } });
+    const fifth = Number(got[4]?.price_sgd);
+    out.push({ name: 'no cheaper 4K listing was skipped', ok: fourK.filter(c => c.p < fifth).every(c => got.some(l => String(l.url).split('?')[0] === c.href)), detail: fourK.slice(0, 6).map(c => c.p) });
+    return out;
+  },
+  async 'cna-singapore'(a) {
+    const text = await pageText('https://www.channelnewsasia.com/singapore', 7000);
+    const got = a.articles ?? [];
+    return [
+      { name: 'five articles', ok: got.length === 5 },
+      { name: 'each headline is on the Singapore section and links to CNA', ok: got.every(x => /channelnewsasia\.com\//.test(x.url) && norm(text).includes(norm(x.headline).slice(0, 40))) },
+    ];
+  },
+  async 'stripe-failed'(a) {
+    const text = await pageText('https://dashboard.stripe.com/payments?status%5B0%5D=failed', 9000);
+    const got = a.payments ?? [];
+    return [
+      { name: 'three payments', ok: got.length === 3 },
+      { name: 'each customer and amount appear among failed payments', ok: got.every(x => norm(text).includes(norm(x.customer)) && text.replace(/\s+/g, '').includes(String(x.amount).replace(/\s+/g, '').replace(/USD$/i, ''))), detail: got.map(x => x.customer) },
+    ];
+  },
 };
 
 async function cartRows() {
@@ -186,7 +221,7 @@ Add "notes": a one-line string on anything that went wrong.`;
 
 Method: plan with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md, sections "Plan several steps in one call with do" and "Read lists, cards and messages with items"). Send the steps you can foresee in ONE call instead of reading the page before each click:
   browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --browser dia
-It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. Do not use jev-tool.`;
+It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. For lists that span pages, add --repeat 'click "Next"' --until "<when to stop>" --collect items to the do call. Do not use jev-tool.`;
   if (arm === 'C') return `${common}
 
 Method: drive the page yourself with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md), using its Jev intent commands instead of reading the page to find refs:
