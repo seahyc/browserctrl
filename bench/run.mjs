@@ -168,7 +168,11 @@ const checks = {
     ];
   },
   async 'stripe-failed'(a) {
-    const text = await pageText('https://dashboard.stripe.com/payments?status%5B0%5D=failed', 9000);
+    // Filter the way the UI does; Stripe's filter URLs are not stable.
+    const id = await readyTab('https://dashboard.stripe.com/payments');
+    let text = '';
+    try { bc('wake', id); await sleep(6000); bc('do', id, 'click Failed'); await sleep(5000); text = bc('text', id, '--max-text', '60000'); } catch {}
+    try { bc('close', id); } catch {}
     const got = a.payments ?? [];
     return [
       { name: 'three payments', ok: got.length === 3 },
