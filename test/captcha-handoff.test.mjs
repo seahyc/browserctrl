@@ -27,7 +27,10 @@ fs.writeFileSync(script, `#!/bin/sh\nprintf '%s|' "$@" >> "${sent}"\nprintf '\\n
 const pings = () => (fs.existsSync(sent) ? fs.readFileSync(sent, 'utf8').trim().split('\n').filter(Boolean) : []);
 const waitFor = async (fn, ms = 3000) => { for (const end = Date.now() + ms; Date.now() < end; await new Promise(r => setTimeout(r, 50))) if (fn()) return true; return false; };
 
-test('the notify command gets its own arguments and then the message, through the shell', async () => {
+// The handoff is built for macOS (notifications, Dia); these tests use a POSIX script.
+const onWindows = process.platform === 'win32';
+
+test('the notify command gets its own arguments and then the message, through the shell', { skip: onWindows && 'POSIX shell script' }, async () => {
   fs.rmSync(sent, { force: true });
   assert.equal(await ping('shopee.sg shows a "puzzle" $HOME `x`', `${script} --to me`), 'sent');
   assert.deepEqual(pings(), ['--to|me|shopee.sg shows a "puzzle" $HOME `x`|']);
@@ -52,7 +55,7 @@ after(async () => {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.rmSync(cooldown.file(), { force: true });
 });
-const t = (name, fn) => test(name, { skip: haveBrowser ? false : 'no Chromium-family browser installed' }, fn);
+const t = (name, fn) => test(name, { skip: onWindows ? 'handoff is macOS-oriented' : haveBrowser ? false : 'no Chromium-family browser installed' }, fn);
 const open = async p => { const { targetId } = await ops.newTab(conn, fixture.url + p); await ops.waitForReady(conn, targetId); return targetId; };
 
 t('a handoff brings the tab to the front, pings, and resumes when the challenge clears', async () => {

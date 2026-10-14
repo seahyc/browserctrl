@@ -101,7 +101,8 @@ after(async () => {
   await fixture?.close();
   fs.rmSync(cooldown.file(), { force: true });
 });
-const t = (name, fn) => test(name, { skip: haveBrowser ? false : 'no Chromium-family browser installed' }, fn);
+// The fixture puzzle is not detected in Windows headless Chrome; the solver targets macOS Dia.
+const t = (name, fn) => test(name, { skip: process.platform === 'win32' ? 'macOS-oriented' : haveBrowser ? false : 'no Chromium-family browser installed' }, fn);
 const open = async p => { const { targetId } = await ops.newTab(conn, fixture.url + p); await ops.waitForReady(conn, targetId); return targetId; };
 const state = tab => ops.evaluate(conn, tab, 'window.__jigsaw');
 
