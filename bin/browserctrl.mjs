@@ -620,7 +620,7 @@ const main = async () => {
     // --intent: Jev picks the target from the page instead of the caller naming a ref.
     if (flags.intent && ['click', 'fill', 'select', 'hover'].includes(cmd)) {
       const cfg = jev.jevKey();
-      const snap = await ops.readPage(conn, targetId, { maxText: 0, max: 400, all: true });
+      const snap = await ops.readPage(conn, targetId, { maxText: 0, max: 1500, all: true });
       const view = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
       const pick = await jev.pickTarget(cfg, snap, { intent: String(flags.intent), action: cmd, view });
       const why = jev.refusal(pick, flags['min-p'] ? Number(flags['min-p']) : undefined);
