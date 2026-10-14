@@ -170,6 +170,10 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-background-networking',
+      // Tabs open in the background; newer Chrome defers loading them otherwise.
+      '--disable-background-timer-throttling',
+      '--disable-renderer-backgrounding',
+      '--disable-backgrounding-occluded-windows',
       '--disable-extensions',
       ...(process.env.CHROME_TEST_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
       'about:blank',

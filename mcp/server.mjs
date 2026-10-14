@@ -25,6 +25,8 @@ import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 import * as sessions from '../lib/sessions.mjs';
 import * as profiles from '../lib/profiles.mjs';
+import { runSteps, formatSteps } from '../lib/steps.mjs';
+import { itemsExpression, formatItems } from '../lib/items.mjs';
 
 const SERVER_NAME = 'browser';
 const SERVER_VERSION = '2.3.0';
@@ -122,6 +124,31 @@ const TOOLS = [
       properties: { ...browserProp, urlPatterns: { type: 'array', items: { type: 'string' } } },
       required: ['urlPatterns'],
     },
+  },
+  {
+    name: 'browser_do',
+    description: 'Run a multi-step plan on a Chromium tab in one call, the fastest way through a page task. Steps: click <element>, fill <element> = <value>, select <element> = <option>, hover, key Enter, type "<text>" (into the focused element), scroll down|up, nav <url>, wait <ms>, expect <page state>. Name elements as they appear; exact names match without a model, others are grounded by Jev (needs TYPESAFE_API_KEY). Append => "<expected result>" to check a step; prefix optional to skip a missing element; click! "<exact name>" for a committing control the user authorized. Stops at the first uncertain step and reports candidates, hidden matches and on-screen controls: re-plan from that.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...browserProp,
+        ...tabProp,
+        steps: { type: 'array', items: { type: 'string' }, description: 'Plan lines, e.g. [\'fill "the search box" = "aeron"\', "key Enter", \'click "Price: low to high"\'].' },
+        then: { type: 'string', enum: ['items', 'text'], description: 'Return the resulting page as items (lists, cards, rows) or text in the same call.' },
+        dismiss: { type: 'string', description: 'Kinds of popups to close when they block a step, e.g. "cookie banner, app-install prompt".' },
+        repeat: { type: 'string', description: 'A step to repeat after the plan, usually click Next.' },
+        until: { type: 'string', description: 'Page condition that ends repeat.' },
+        max: { type: 'number', description: 'Most repeats, default 10.' },
+        collect: { type: 'string', enum: ['items', 'text'], description: 'Collect each repeated page, merged.' },
+        steal: { type: 'boolean' },
+      },
+      required: ['tab'],
+    },
+  },
+  {
+    name: 'browser_items',
+    description: 'The repeated items on a page (search results, listings, table rows, inbox, chat messages, standalone headlines) grouped by page region and heading, each with its own text and link. Use it to report what a list shows instead of page text.',
+    inputSchema: { type: 'object', properties: { ...browserProp, ...tabProp, all: { type: 'boolean' }, group: { type: 'string', description: 'Show one group in full, e.g. g2.' } }, required: ['tab'] },
   },
   {
     name: 'browser_read',
@@ -579,6 +606,24 @@ const handlers = {
           fn: args.fn, networkIdle: args.networkIdle, present: Boolean(args.present), timeoutMs: args.timeoutMs ?? 15000,
         }),
       );
+    }),
+
+  browser_do: args =>
+    withConn(args, async (conn, port) => {
+      const tab = await ops.resolveTab(conn, args.tab);
+      claims.claim(port, tab.targetId, { steal: Boolean(args.steal) });
+      const r = await runSteps(conn, tab.targetId, args.steps || [], {
+        then: args.then, dismiss: args.dismiss, repeat: args.repeat, until: args.until, max: args.max, collect: args.collect,
+      });
+      return text(formatSteps(r));
+    }),
+
+  browser_items: args =>
+    withConn(args, async conn => {
+      const tab = await ops.resolveTab(conn, args.tab);
+      const r = await ops.evaluate(conn, tab.targetId, itemsExpression({ all: Boolean(args.all) }));
+      if (args.group) r.groups = r.groups.filter(g => g.id === args.group);
+      return text(formatItems(r, { full: Boolean(args.group) }));
     }),
 
   browser_act: args =>

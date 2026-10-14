@@ -84,19 +84,20 @@ node ~/.agents/skills/browserctrl/scripts/browserctrl.mjs tabs --browser dia
 One initial approval or a new approval after browser reconnection can still be
 required. The pool cannot suppress approvals from clients that bypass it.
 
-For multi-step work, prepare independent field values once and use guarded
-batches or the workflow runner. Both are data-only; Jev selection is optional
-in workflows and disabled by default. Read the [batch contract](references/batch.md)
-and [workflow contract](references/workflow.md) before using these APIs.
+For a task on a page (search, filter, open, read a list), send the whole plan in one
+`browserctrl do` call: see [Fastest way through a task](#fastest-way-through-a-task).
+Guarded batches and the workflow runner are for filling the same prepared fields many
+times; read the [batch contract](references/batch.md) and
+[workflow contract](references/workflow.md) before using them.
 
 Chrome DevTools Protocol control for agents. Two frontends over one core:
 
 - **CLI**: `scripts/browserctrl.mjs <command>` (also `bin/browserctrl.mjs`)
 - **MCP server**: `mcp/server.mjs`, exposing `browser_*` tools to Claude Code, Codex, or any MCP client
 
-Prefer the MCP tools when they are available in your session: screenshots come
-back inline, and the schemas stop you guessing CLI syntax. The CLI is the
-fallback and the debugging surface.
+Prefer the MCP tools when they are available in your session: screenshots come back
+inline, and `browser_do` / `browser_items` are the same `do` and `items` as the CLI.
+The CLI is the fallback and the debugging surface.
 
 ## Pick a browser explicitly
 
@@ -292,6 +293,21 @@ file:
                                 "background": ".puzzle img.bg", "piece": ".puzzle img.piece" } } }
 ```
 
+## Fastest way through a task
+
+Pick the first that fits; each step down costs more agent turns:
+
+1. A recipe for the site (`browserctrl recipe find <url>`): one call, no page at all.
+2. A URL that already carries the filter or search, when the site keeps them in its
+   address (`?q=`, `?state=merged&author_username=…`, `?sort=priceasc`): `nav` to it.
+3. **`do` with the whole plan and `--then items`** (see [below](#plan-several-steps-in-one-call-with-do)):
+   send every step you can foresee in one call. In benchmarks on marketplaces, GitHub,
+   GitLab, Stripe and news sites it took 30–70% less time than reading and clicking
+   step by step on 9 of 13 tasks, with the same success rate (bench/RESULTS.md).
+4. `read` and single actions, only for what `do` reports it could not do.
+
+Read the page first only when you cannot guess the controls' names at all.
+
 ## Read before you act
 
 `browserctrl read` snapshots the page into `ref_1..ref_N` with roles, accessible names
@@ -344,7 +360,10 @@ browserctrl items a1b2c3d4 --browser dia
 ```
 
 - Pick the group by its region and heading: a banner of three cards and the results
-  grid are different groups. Header, nav and footer lists are folded; `--group gN`
+  grid are different groups. Linked headlines that stand alone (a lead story, a hero
+  card) are listed as `headlines outside lists`, one group per page section, so "the
+  first N stories" includes them. Links are printed in full; long titles are shortened
+  before prices, dates or statuses beside them. Header, nav and footer lists are folded; `--group gN`
   shows one group in full, `--all` every item, `--json` the raw records.
 - A badge such as "Spotlight", "Ad" or "Sponsored" appears in the item's own text;
   `{…}` shows class or label hints such as `{D_bump}`. Leave those items out when
@@ -372,8 +391,13 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
 ```
 
 - Steps: `click <element>`, `fill <element> = <value>`, `select <element> = <option>`,
-  `hover`, `key Enter`, `scroll down|up`, `nav <url>`, `wait <ms>`, and
-  `expect <what the page shows>`.
+  `hover`, `key Enter`, `type "<text>"` (into whatever has focus), `scroll down|up`,
+  `nav <url>`, `wait <ms>`, and `expect <what the page shows>`.
+- `fill` types like a person (select the old text, insert the new), so search-as-you-type
+  boxes, comboboxes and token filters react. For a token filter (GitLab, Jira, Linear),
+  plan it the way you would click it: `click "Search or filter results"` `type "Author"`
+  `click "Author"` `click "= is"` `type "yjwong"` `click "yjwong"` `key Enter`. Items of
+  an open dropdown or suggestion list are listed and clickable even without roles.
 - `=> "<expected result>"` after any step: the plan stops right after that step when
   Jev judges it untrue. It is checked in the same request that grounds the next step
   (the last one with the final page checks), so it costs no extra time. Write it about
@@ -672,7 +696,7 @@ codex mcp add browser -- node ~/.agents/skills/browserctrl/mcp/server.mjs
 
 Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
 `browser_read`, `browser_navigate`, `browser_wait`, `browser_focus`,
-`browser_reload`, `browser_act`,
+`browser_reload`, `browser_do`, `browser_items`, `browser_act`,
 `browser_screenshot`, `browser_diagnostics`, `browser_eval`,
 `browser_annotations`, `browser_marks`, `browser_annotate_mode`,
 `browser_record`, `browser_recording`, `browser_activity`,
