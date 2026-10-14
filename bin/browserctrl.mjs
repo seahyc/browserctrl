@@ -29,6 +29,7 @@ import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
+import * as show from '../lib/show.mjs';
 import * as trace from '../lib/trace.mjs';
 
 const MUTATING = new Set([
@@ -606,6 +607,15 @@ const main = async () => {
     };
     const timeoutMs = flags.timeout ? Number(flags.timeout) : undefined;
 
+    // --show / BROWSERCTRL_SHOW=1: bring the tab forward, outline the target and log the
+    // action in a corner panel, so a person can watch the automation.
+    if (show.showing(flags) && ['click', 'fill', 'select', 'hover', 'key', 'type', 'scroll', 'scroll-to', 'nav', 'reload'].includes(cmd)) {
+      await show.bringToFront(conn, targetId);
+      const what = flags.intent ? `"${flags.intent}"` : target.ref || target.selector || positional.slice(2).join(' ');
+      await show.panel(conn, targetId, { title: 'browserctrl', append: `▶ ${cmd} ${String(what).slice(0, 70)}${flags.value !== undefined ? ` = ${String(flags.value).slice(0, 30)}` : ''}` });
+      if (target.ref) await show.flash(conn, targetId, target.ref);
+    }
+
     // --intent: Jev picks the target from the page instead of the caller naming a ref.
     if (flags.intent && ['click', 'fill', 'select', 'hover'].includes(cmd)) {
       const cfg = jev.jevKey();
@@ -638,7 +648,7 @@ const main = async () => {
       case 'do': {
         const lines = positional.slice(2);
         if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text]');
-        const r = await runSteps(conn, targetId, lines, {
+        const r = await runSteps(conn, targetId, lines, { show: show.showing(flags),
           then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
           force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
           dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,

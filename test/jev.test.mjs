@@ -75,3 +75,13 @@ test('jevKey reads the environment first, then the private env file', () => {
   assert.equal(jevKey({ BROWSERCTRL_JEV_ENV: file }).key, 'b');
   assert.throws(() => jevKey({ BROWSERCTRL_JEV_ENV: path.join(os.tmpdir(), 'missing.env') }), /TYPESAFE_API_KEY/);
 });
+
+test('a label cut through an emoji still makes a valid request', async () => {
+  const seen = [];
+  const half = 'Free🚚'.slice(0, 5); // ends in a lone surrogate
+  await pickTarget(cfg, { ...snap, elements: [{ ref: 'ref_1', role: 'button', name: half }] }, { intent: 'free' }, {
+    fetchImpl: async (url, init) => { seen.push(init.body); return { ok: true, json: async () => ({ answers: { target: { type: 'choice', choice: 'ref_1', probabilities: { ref_1: 1 } } } }) }; },
+  });
+  assert.doesNotMatch(seen[0], /\\ud83d(?!\\ud)/i);
+  assert.ok(Buffer.from(seen[0], 'utf8').toString('utf8') === seen[0]);
+});

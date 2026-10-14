@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { endpointOf, createStore, frameKind, frameJson } from '../lib/exemplars.mjs';
+import { endpointOf, createStore, frameKind, frameJson, createCapture } from '../lib/exemplars.mjs';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
@@ -90,4 +90,13 @@ test('a page WebSocket frame in an attached tab is captured by kind', { skip: ha
   }
   assert.ok(ep, 'the LOGI frame should be in the store');
   assert.equal(frameJson(ep.exemplars.at(-1).frame).key, fixture.wsKey);
+});
+
+test('extra request headers arriving twice before the request do not throw', () => {
+  const cap = createCapture({ store: { record() {} }, getBody: async () => null });
+  // A redirect sends requestWillBeSentExtraInfo twice before requestWillBeSent.
+  cap.onEvent('Network.requestWillBeSentExtraInfo', { requestId: 'r1', headers: { cookie: 'a' } });
+  cap.onEvent('Network.requestWillBeSentExtraInfo', { requestId: 'r1', headers: { cookie: 'b' } });
+  cap.onEvent('Network.requestWillBeSent', { requestId: 'r1', type: 'Fetch', documentURL: 'https://x/', request: { method: 'GET', url: 'https://x/api', headers: {} } });
+  cap.onEvent('Network.requestWillBeSentExtraInfo', { requestId: 'r1', headers: { cookie: 'c' } });
 });
