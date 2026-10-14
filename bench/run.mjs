@@ -274,6 +274,8 @@ const checks = {
     return out;
   },
   async 'cna-top-bylines'(a) {
+    // A byline may list several people; each name must be on the article.
+    const names = (s) => String(s || '').replace(/^.*\bby\b/i, '').split(/,|\band\b|&/).map(norm).filter(Boolean);
     const got = a.articles ?? [];
     const section = await pageText('https://www.channelnewsasia.com/singapore', 6000);
     const pages = got.length ? visitTexts(got.map((x) => x.url)) : [];
@@ -282,7 +284,7 @@ const checks = {
     const out = [{ name: 'three articles from the top of the Singapore section', ok: got.length === 3 && got.every((x) => top.includes(norm(x.headline).slice(0, 40))), detail: got.map((x) => norm(section).indexOf(norm(x.headline).slice(0, 40))) }];
     got.forEach((x, i) => {
       const text = pages[i]?.text || '';
-      out.push({ name: `article ${i + 1}: headline, author and date on its page`, ok: /channelnewsasia\.com\//.test(x.url) && norm(text).includes(norm(x.headline).slice(0, 40)) && norm(text).includes(norm(x.author)) && norm(text).includes(norm(x.published).slice(0, 10)), detail: { author: x.author, published: x.published, chars: text.length } });
+      out.push({ name: `article ${i + 1}: headline, author and date on its page`, ok: /channelnewsasia\.com\//.test(x.url) && norm(text).includes(norm(x.headline).slice(0, 40)) && names(x.author).every((n) => norm(text).includes(n)) && norm(text).includes(norm(x.published).slice(0, 10)), detail: { author: x.author, published: x.published, chars: text.length } });
     });
     return out;
   },
