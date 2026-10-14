@@ -14,6 +14,9 @@ import * as ops from '../lib/ops.mjs';
 import * as cooldown from '../lib/cooldown.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 
+// CLI calls from this test share one tab owner; otherwise each spawned call is a
+// different shell and a tab claimed by the previous call is refused.
+process.env.CDP_AGENT_ID = 'test-cooldown';
 process.env.BROWSERCTRL_NOTIFY = '0';
 delete process.env.BROWSERCTRL_NOTIFY_CMD;
 delete process.env.TYPESAFE_API_KEY;
