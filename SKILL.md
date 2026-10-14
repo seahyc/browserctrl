@@ -732,6 +732,30 @@ finished none of its 21 runs: it paused at the first control outside its policy
 a Jev pause or failure, read the page and its completed actions before continuing;
 never replay the failed action blindly.
 
+### Intent targets and page checks (experimental)
+
+Instead of reading the page to find a ref, name the element and let Jev pick it from
+the page's controls in one ~0.4 s request:
+
+```bash
+browserctrl click <tab> --intent "the Grey colour option" --browser dia
+browserctrl fill <tab> --intent "the search box" --value "aeron" --expect "results for aeron" --browser dia
+browserctrl check <tab> [--expect "the price filter is open"] --browser dia
+```
+
+- An intent acts only when Jev's top pick has p ≥ 0.6 (`--min-p`). Otherwise it exits 3
+  with the top candidates and their refs; pick one and act by ref.
+- An intent never clicks a control that can commit something (Buy, Send, Pay, Delete,
+  Submit, Confirm…), even when the intent names it. It returns the ref; click it by ref
+  only if the user authorized that action.
+- After acting it reports yes/no probabilities for a challenge, a login wall, an error,
+  a dialog and an empty state, plus `--expect`, from what is on screen. `check` runs the
+  same checks alone. `--no-check` skips them. These are judgments; confirm the result
+  you report.
+- Needs `TYPESAFE_API_KEY` in the environment or in `BROWSERCTRL_JEV_ENV`
+  (default `~/Code/jev-ultrafast/.env`). Jev receives the intent, the candidate
+  elements' roles, names and links, and up to 3,000 characters of on-screen text.
+
 ## Opt-in lifecycle diagnostics
 
 Set `CDP_DIAGNOSTIC_LOG=/absolute/local/path.jsonl` when starting a fresh daemon.

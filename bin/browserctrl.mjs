@@ -24,6 +24,7 @@ import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint, listTaps, 
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
 import * as profiles from '../lib/profiles.mjs';
+import * as jev from '../lib/jev.mjs';
 
 const MUTATING = new Set([
   'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha',
@@ -117,6 +118,8 @@ function usage() {
     browserctrl eval <tab> <js>
 
   Act (all accept --ref ref_3, --selector <css>, or --x/--y):
+    browserctrl click <tab> --intent "the Grey option" [--expect "…"]   Jev picks the element (also fill/select/hover); never clicks Buy/Send/Pay/Delete
+    browserctrl check <tab> [--expect "…"]               Jev yes/no checks: challenge, login, error, dialog, empty
     browserctrl click <tab> --ref ref_3 [--button right] [--count 2] [--mod cmd,shift]
     browserctrl hover <tab> --selector ".menu"
     browserctrl fill  <tab> --ref ref_5 --value "text"
@@ -535,7 +538,39 @@ const main = async () => {
     };
     const timeoutMs = flags.timeout ? Number(flags.timeout) : undefined;
 
+    // --intent: Jev picks the target from the page instead of the caller naming a ref.
+    if (flags.intent && ['click', 'fill', 'select', 'hover'].includes(cmd)) {
+      const cfg = jev.jevKey();
+      const snap = await ops.readPage(conn, targetId, { maxText: 0, max: 400 });
+      const view = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
+      const pick = await jev.pickTarget(cfg, snap, { intent: String(flags.intent), action: cmd, view });
+      const why = jev.refusal(pick, flags['min-p'] ? Number(flags['min-p']) : undefined);
+      if (why) {
+        process.exitCode = 3;
+        return out({ acted: false, reason: why, candidates: pick.ranked, jev_ms: pick.ms });
+      }
+      const t = { ref: pick.pick.ref, token: snap.token };
+      let result;
+      if (cmd === 'click') result = await ops.click(conn, targetId, { ...t, button: flags.button || 'left', clickCount: Number(flags.count || 1) });
+      else if (cmd === 'fill') result = await ops.fill(conn, targetId, { ...t, value: flags.value ?? positional[2] });
+      else if (cmd === 'select') result = await ops.selectOption(conn, targetId, { ...t, value: flags.value, label: flags.label });
+      else result = await ops.hover(conn, targetId, t);
+      const report = { acted: true, target: { ref: t.ref, role: pick.pick.role, name: (pick.pick.name || '').slice(0, 80) }, p: pick.p, result, jev_ms: pick.ms };
+      if (!flags['no-check']) {
+        await ops.waitForReady(conn, targetId, { timeoutMs: 5000 }).catch(() => {});
+        await new Promise(r => setTimeout(r, 400));
+        const page = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
+        report.page = { url: page.url, title: page.title };
+        report.after = await jev.checkPage(cfg, page, { expect: flags.expect });
+      }
+      return out(report);
+    }
+
     switch (cmd) {
+      case 'check': {
+        const page = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
+        return out({ page: { url: page.url, title: page.title }, ...(await jev.checkPage(jev.jevKey(), page, { expect: flags.expect })) });
+      }
       case 'read': {
         const snap = await ops.readPage(conn, targetId, {
           maxText: flags.text === 'none' ? 0 : Number(flags['max-text'] || 20000),

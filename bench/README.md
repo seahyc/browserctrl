@@ -26,13 +26,23 @@ the agent drives, browserctrl asks Jev to pick the target when a step is
 ambiguous). If Jev wins none, nothing is built and the result is recorded in the
 skill.
 
+## Round 2: Jev inside browserctrl (approach C)
+
+Round 1 (runs 1-3) found that handing Jev the task (B) is never faster. Round 2
+(runs 11-13) tests Jev as a step inside browserctrl: the agent still drives, but
+names elements with `--intent` instead of reading the page for refs, and confirms
+page state with `check`. A is re-run in the same round, so both share the code and
+machine conditions. The decision rule is unchanged: C wins a task if it is at least
+30% faster to a verified answer than A and passes at least as many runs. Agent
+tokens and tool calls are reported alongside.
+
 ## Running
 
 ```sh
-node bench/run.mjs start <task> <A|B> <n> [--tab ID]   # prints the agent prompt
+node bench/run.mjs start <task> <A|B|C> <n> [--tab ID]   # prints the agent prompt
 # run the prompt in a fresh subagent; save its final message to a file
 node bench/run.mjs finish <task>-<arm>-<n> answer.txt --ms <agent ms> --tokens <agent tokens> --tools <tool uses>
-node bench/run.mjs report
+node bench/run.mjs report [--from 11]
 ```
 
 `finish` checks the answer against live truth (gh, glab, recipes, or a fresh read
