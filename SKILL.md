@@ -302,10 +302,29 @@ browserctrl tabs --browser dia
 browserctrl read a1b2c3d4 --browser dia
 # Use --json when another tool should parse the result; --text none skips page text.
 browserctrl read a1b2c3d4 --json --max-text 8000
-# ref_1    button     Sign in with Google              [signin-google]
-# ref_2    textbox    Your name
-# ref_7    select     Access level
+# token: 1791…:ogs5vo   scroll 0/4180 · 0 screens above, 6 below
+# stats: 31 interactive · 121 links · 1 iframe (cross-origin: https://ads.example) · 980 elements
+# modal open: dialog "Subscribe to our newsletter"; its controls come first, everything else is inert
+#  ref_1    e14   button     No thanks
+#  ref_2    e15   button     Subscribe
+#  ref_3    e1    button     Sign in with Google      [signin-google] (covered by div)
+# *ref_9    e22   clickable  Sort By: Best Match
+# (88 more elements not listed: 88 below; --all lists the whole page)
 ```
+
+- By default `read` lists elements within about one screen of the viewport (plus an
+  open modal) and counts the rest; `--all` lists the whole page. `(below)`/`(above)`
+  marks a listed element outside the visible screen.
+- A card that is one big link is one row; real controls inside it (a Like button, an
+  input) stay separate. Divs that act as controls (pointer cursor or their own click
+  listener, such as a "Sort by" dropdown) appear with role `clickable`.
+- `(covered by …)` means another element sits on top, so a click by ref is refused.
+  With a modal open, everything outside it is `(inert)` and its controls come first.
+- `e17` ids stay the same across reads of one document; `*` marks elements that were
+  not there at the previous read (a menu that just opened, a row that loaded).
+- `loading:` appears when the document is still loading, shows skeleton or placeholder
+  blocks, or has almost no content: wait and read again. Same-origin iframe controls are
+  listed `(in frame)` and click correctly; cross-origin frames are listed in `stats`.
 
 Refs are invalidated by navigation and by the next `read`. Using a stale ref
 returns "re-run browserctrl read" instead of clicking whatever now sits in that slot.
