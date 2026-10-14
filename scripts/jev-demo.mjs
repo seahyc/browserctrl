@@ -57,7 +57,7 @@ const panel = (html) => bc('eval', tab, `window.__jevDemo.panel(${JSON.stringify
 const boxes = (items) => bc('eval', tab, `window.__jevDemo.boxes(${JSON.stringify(items)})`);
 
 const cfg = jev.jevKey();
-const snap = JSON.parse(bc('read', tab, '--json', '--max-text', '0'));
+const snap = JSON.parse(bc('read', tab, '--json', '--all', '--max-text', '0'));
 evalJs(OVERLAY);
 const view = evalJs(jev.VIEW_TEXT);
 const cands = jev.shortlist(jev.candidatesFor(snap.elements, action), intent);

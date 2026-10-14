@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Cards</title>
+<style>
+  body { font-family: sans-serif; margin: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 220px); gap: 16px; }
+  .card { position: relative; display: block; border: 1px solid #ccc; padding: 12px; height: 160px; color: inherit; text-decoration: none; }
+  .card .title { display: block; font-weight: bold; }
+  .card .price { display: block; color: #a00; }
+  .like { position: absolute; right: 8px; bottom: 8px; }
+</style></head>
+<body>
+<h1>Results</h1>
+<div class="grid">
+  <a class="card" href="/p/aeron"><span class="title" tabindex="0">Herman Miller Aeron</span><span class="price" role="link">S$580</span><span class="seller" tabindex="0">office.chair.seller</span><button class="like" aria-label="Like Aeron" onclick="event.preventDefault();this.textContent='liked'">♡</button></a>
+  <a class="card" href="/p/embody"><span class="title" tabindex="0">Embody</span><span class="price" role="link">S$900</span></a>
+  <a class="card" href="/p/leap"><span class="title" tabindex="0">Steelcase Leap</span><span class="price" role="link">S$450</span><input class="qty" type="number" value="1" aria-label="Quantity"></a>
+</div>
+<p><button id="add" onclick="var b=document.createElement('button');b.textContent='Freshly added';b.id='fresh';document.body.appendChild(b)">Add one</button></p>
+</body></html>

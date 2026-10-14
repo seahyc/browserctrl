@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Modal</title>
+<style>
+  body { font-family: sans-serif; margin: 20px; }
+  .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); }
+  .dialog { position: fixed; top: 120px; left: 120px; width: 360px; padding: 20px; background: #fff; }
+</style></head>
+<body>
+<h1>Shop</h1>
+<p><button id="bg" onclick="document.title='background clicked'">Background action</button> <a href="/elsewhere">Elsewhere</a></p>
+<div class="backdrop"></div>
+<div class="dialog" role="dialog" aria-modal="true" aria-label="Subscribe to our newsletter">
+  <p>Get 10% off.</p>
+  <button id="close" onclick="document.title='closed'">No thanks</button>
+  <button id="sub">Subscribe</button>
+</div>
+</body></html>

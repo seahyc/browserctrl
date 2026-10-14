@@ -1,0 +1,35 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Sort dropdown</title>
+<style>
+  body { font-family: sans-serif; margin: 20px; }
+  .sort { display: inline-block; border: 1px solid #ccc; padding: 6px 10px; cursor: pointer; }
+  .sort .label { color: #555; }
+  .menu { display: none; border: 1px solid #ccc; width: 200px; }
+  .menu.open { display: block; }
+  .menu .opt { padding: 6px 10px; cursor: pointer; }
+  .chip { display: inline-block; padding: 4px 8px; background: #eef; margin-left: 20px; }
+</style></head>
+<body>
+<h1>Results</h1>
+<div class="sort" id="sort"><span class="label">Sort By:</span> <span class="value">Best Match</span></div>
+<div class="chip" id="chip">Free shipping</div>
+<div class="menu" id="menu">
+  <div class="opt" data-v="best">Best Match</div>
+  <div class="opt" data-v="asc">Price low to high</div>
+  <div class="opt" data-v="desc">Price high to low</div>
+</div>
+<p id="state">sorted: best</p>
+<script>
+  var menu = document.getElementById('menu');
+  document.getElementById('sort').addEventListener('click', function () { menu.classList.toggle('open'); });
+  document.querySelectorAll('.opt').forEach(function (o) {
+    o.addEventListener('click', function () {
+      document.getElementById('state').textContent = 'sorted: ' + o.dataset.v;
+      document.querySelector('#sort .value').textContent = o.textContent;
+      menu.classList.remove('open');
+    });
+  });
+  // No pointer cursor, only a listener: found through getEventListeners.
+  document.getElementById('chip').addEventListener('click', function () { this.textContent = 'Free shipping ✓'; });
+</script>
+</body></html>

@@ -28,6 +28,7 @@ import * as jigsaw from '../lib/jigsaw.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
+import { formatRead } from '../lib/refs.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import * as show from '../lib/show.mjs';
 import * as trace from '../lib/trace.mjs';
@@ -137,7 +138,7 @@ function usage() {
     browserctrl activity resume --owner <agent-id> --browser dia
 
   Read before you act:
-    browserctrl read <tab> --browser dia [--json]        snapshot with ref_1..N + page text
+    browserctrl read <tab> --browser dia [--json] [--all] snapshot with ref_1..N + page text (--all: whole page, not just near the viewport)
     browserctrl text <tab> [--max-text 8000] [--match re] visible text, bounded by default
     browserctrl items <tab> [--group g2] [--all] [--json]  repeated items (results, cards, rows, messages) grouped by page region
     browserctrl html <tab> [selector]
@@ -619,7 +620,7 @@ const main = async () => {
     // --intent: Jev picks the target from the page instead of the caller naming a ref.
     if (flags.intent && ['click', 'fill', 'select', 'hover'].includes(cmd)) {
       const cfg = jev.jevKey();
-      const snap = await ops.readPage(conn, targetId, { maxText: 0, max: 400 });
+      const snap = await ops.readPage(conn, targetId, { maxText: 0, max: 400, all: true });
       const view = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
       const pick = await jev.pickTarget(cfg, snap, { intent: String(flags.intent), action: cmd, view });
       const why = jev.refusal(pick, flags['min-p'] ? Number(flags['min-p']) : undefined);
@@ -672,16 +673,11 @@ const main = async () => {
           maxText: flags.text === 'none' ? 0 : Number(flags['max-text'] || 20000),
           max: Number(flags.max || 400),
           includeHidden: Boolean(flags['include-hidden']),
+          all: Boolean(flags.all),
         });
         hint(snap.url);
         if (flags.json) return out(snap);
-        const lines = snap.elements.map(
-          e => `${e.ref.padEnd(8)} ${e.role.padEnd(10)} ${(e.name || '').slice(0, 60).padEnd(60)}${e.testid ? ` [${e.testid}]` : ''}${e.disabled ? ' (disabled)' : ''}`,
-        );
-        return out(
-          `${snap.title}\n${snap.url}\ntoken: ${snap.token}   scroll ${snap.scroll.y}/${snap.scroll.h}\n\n` +
-            `${lines.join('\n')}\n\n--- text${snap.textTruncated ? ` (truncated from ${snap.textLength})` : ''} ---\n${snap.text}`,
-        );
+        return out(formatRead(snap));
       }
       case 'text': {
         const raw = await ops.evaluate(conn, targetId, 'document.body ? document.body.innerText : ""');

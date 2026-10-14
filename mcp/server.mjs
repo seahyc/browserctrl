@@ -126,7 +126,7 @@ const TOOLS = [
   {
     name: 'browser_read',
     description:
-      'Safari returns Apple content with node UIDs. Chromium snapshots include every interactive element as ref_1..ref_N with role, accessible name and test id, plus the visible text. Read before acting, then pass refs to browser_act. Refs are invalidated by navigation and the tools say so rather than clicking the wrong element.',
+      'Safari returns Apple content with node UIDs. Chromium snapshots list the interactive elements within about one screen of the viewport (all: true for the whole page) as ref_1..ref_N with role, accessible name, test id and a stable id, plus the visible text. A card link is one element; covered, inert (behind a modal) and new (* since the last read) elements are marked; the header has page stats, a loading hint and screens above/below. Read before acting, then pass refs to browser_act. Refs are invalidated by navigation and the tools say so rather than clicking the wrong element.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -134,6 +134,7 @@ const TOOLS = [
         ...tabProp,
         maxText: { type: 'number', description: 'Cap on returned page text, default 20000 characters.' },
         includeHidden: { type: 'boolean', description: 'Include off-screen and hidden elements. Default false.' },
+        all: { type: 'boolean', description: 'List elements from the whole page, not just near the viewport. Default false.' },
       },
       required: ['tab'],
     },
@@ -513,17 +514,27 @@ const handlers = {
       const snap = await ops.readPage(conn, tab.targetId, {
         maxText: args.maxText ?? 20000,
         includeHidden: Boolean(args.includeHidden),
+        all: args.all === true,
       });
       const elements = snap.elements.map(e => {
-        const bits = [e.ref, e.role, e.name];
+        const bits = [(e.new ? '*' : '') + e.ref, e.role, e.name];
         if (e.testid) bits.push(`testid=${e.testid}`);
         if (e.disabled) bits.push('disabled');
         if (e.checked) bits.push('checked');
         if (e.value) bits.push(`value=${e.value}`);
+        if (e.covered) bits.push(`covered by ${e.covered}`);
+        else if (e.inert) bits.push('inert');
+        if (e.offscreen) bits.push(e.offscreen);
         return bits.join('  ');
       });
+      const o = snap.omitted;
+      if (o?.total) elements.push(`(${o.total} more not listed: ${o.above} above, ${o.below} below, ${o.overLimit} over the limit; pass all: true for the whole page)`);
+      const s = snap.stats || {};
+      const head = [`stats: ${s.interactive} interactive · ${s.links} links · ${s.iframes} iframes${s.crossOrigin?.length ? ` (cross-origin: ${[...new Set(s.crossOrigin)].join(', ')})` : ''} · ${s.shadowRoots} shadow roots · ${s.total} elements`];
+      if (snap.loading) head.push(`loading: ${snap.loading}`);
+      if (snap.modal) head.push(`modal open: ${snap.modal.role} "${snap.modal.name}"; its controls come first, everything else is inert`);
       return withHint(text(
-        `${snap.title}\n${snap.url}\nscroll ${snap.scroll.y}/${snap.scroll.h}\n\n` +
+        `${snap.title}\n${snap.url}\nscroll ${snap.scroll.y}/${snap.scroll.h} · ${snap.scroll.above} screens above, ${snap.scroll.below} below\n${head.join('\n')}\n\n` +
           `ELEMENTS (${elements.length})\n${elements.join('\n')}\n\n` +
           `TEXT${snap.textTruncated ? ` (truncated from ${snap.textLength} chars)` : ''}\n${snap.text}`,
       ), snap.url);
