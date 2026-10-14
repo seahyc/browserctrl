@@ -15,8 +15,8 @@ with `do`. Medians of passing runs; tool calls are the agent's.
 | GitLab: 12 closed MRs, author and branches | 99 s, 7 calls | 160 s, 10 calls | 3/3 | +62% |
 | GitLab: yjwong's top 5 merged MRs, commits | 59 s, 6 calls | 164 s, 16 calls | 3/3 | +178% |
 
-35 of 36 graded runs passed except the two Lazada runs of run 43, where both arms on Lazada
-at once drew a challenge; the cool-down then blocked the store pages (recorded as fails).
+34 of 36 runs passed. The two failures are run 43's Lazada runs: both arms on Lazada at once
+drew a challenge, and the cool-down then blocked the store pages.
 
 **Verdict:** `do` + `visit` wins the four tasks on marketplaces, Stripe and CNA (−32% to
 −67%, with a third to a quarter of the tool calls) and loses both GitLab tasks. On GitLab
