@@ -694,16 +694,16 @@ not implemented. This is useful local/forwarded-CDP coverage, not full Browser H
 cloud parity. Existing CLI/MCP APIs, recording and diagnostics remain available.
 
 
-## Jev and Codex routing
+## Jev
 
-When using the Jev integration with a working TYPESAFE_API_KEY, Jev selects the
-browser operations and targets; Codex supplies TYPE_TEXT values and independently
-verifies completion. When Jev is unavailable or no key is configured, Codex drives
-this browserctrl CLI/MCP directly, choosing actions and supplying text as before.
-This is agent-level routing, not an automatic alternate decision model inside
-jev-tool. After a Jev failure, inspect the current page and completed actions before
-continuing with Codex; never replay the failed action blindly. Preserve the user's
-existing scope and final-send approval boundaries in either mode.
+Drive browserctrl yourself; do not hand a task to Jev to make it faster. On seven
+real tasks (marketplace search, cart, chat, order lookup, GitHub and GitLab lists),
+handing Jev the task first was never 30% faster to a verified answer, and Jev
+finished none of its 21 runs: it paused at the first control outside its policy
+(a chat, a sort menu, Add To Cart) and the agent finished the work. Results are in
+[bench/RESULTS.md](bench/RESULTS.md). Use Jev only when the user asks for it. After
+a Jev pause or failure, read the page and its completed actions before continuing;
+never replay the failed action blindly.
 
 ## Opt-in lifecycle diagnostics
 
