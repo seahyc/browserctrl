@@ -171,7 +171,7 @@ Add "notes": a one-line string on anything that went wrong.`;
 
 Method: plan with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md, sections "Plan several steps in one call with do" and "Read lists, cards and messages with items"). Send the steps you can foresee in ONE call instead of reading the page before each click:
   browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --browser dia
-It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3, with candidate refs); re-plan from its report. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. Do not use jev-tool.`;
+It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. Do not use jev-tool.`;
   if (arm === 'C') return `${common}
 
 Method: drive the page yourself with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md), using its Jev intent commands instead of reading the page to find refs:

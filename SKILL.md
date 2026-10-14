@@ -304,8 +304,10 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   `expect <what the page shows>`, which stops the plan when Jev judges it untrue.
   Write expectations about visible text, not inferences.
 - `--then items` or `--then text` returns the resulting page in the same call.
-- Exit 3 means the plan stopped: the report names the step, the reason and Jev's
-  candidates with refs. Re-plan from there; the steps before it already happened.
+- Exit 3 means the plan stopped: the report names the step, the reason, Jev's
+  candidates with refs, elements with that name that exist but are hidden (often opened
+  by another control), and the controls on screen. Re-plan from that report; the steps
+  before it already happened.
 - `do` never clicks a control that can commit something (Buy, Send, Pay, Delete,
   Submit, Confirm…), even when named exactly. Click it by ref only if the user
   authorized that action. You supply every typed value.
