@@ -85,7 +85,7 @@ const checks = {
     // "me" is a fair answer for the user's own messages; anything else must name the other party.
     const other = norm(fixtures.carousell_chat_user);
     const sameSender = (got, truth) => (norm(truth) === other ? norm(got) === other : norm(got) !== other && norm(got) !== '');
-    const msgs = recipe('carousell.sg/messages', `offer_id=${fixtures.carousell_offer_id}`).filter((m) => m.text);
+    const msgs = fixtures.carousell_last_messages; // the chat is closed (sold), so its tail is fixed
     const got = a.messages ?? [];
     return [
       { name: 'offer price', ok: Number(a.price_sgd) === fixtures.carousell_offer_price },
