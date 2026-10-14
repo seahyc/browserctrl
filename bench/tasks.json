@@ -123,8 +123,8 @@
     "id": "lazada-brand-stores",
     "kind": "hard",
     "start_url": "https://www.lazada.sg/",
-    "goal": "On Lazada Singapore, search for \"27 inch 4k monitor\", sort by price low to high, and filter the brand to LG. Open the 3 cheapest results and report each one's title, price and the name of the store selling it.",
-    "answer": "{\"listings\": [{\"title\": str, \"price_sgd\": number, \"store\": str, \"url\": str}] (3, cheapest first)}",
+    "goal": "On Lazada Singapore, search for \"27 inch 4k monitor\", sort by price low to high, and filter the brand to LG. Open the 3 cheapest results and report each one's title, the price shown on its product page, and the name of the store selling it.",
+    "answer": "{\"listings\": [{\"title\": str, \"price_sgd\": number, \"store\": str, \"url\": str}] (3, in the order of the sorted results)}",
     "jev_allow_controls": []
   },
   {

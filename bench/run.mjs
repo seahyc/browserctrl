@@ -202,7 +202,7 @@ const checks = {
   async 'lazada-brand-stores'(a) {
     const got = a.listings ?? [];
     const pages = got.length ? bcJson('visit', ...got.map((l) => l.url), '--max-text', '60000', '--parallel', '1', '--json') : [];
-    const out = [{ name: 'three listings, cheapest first', ok: got.length === 3 && got.every((l, i) => i === 0 || Number(l.price_sgd) >= Number(got[i - 1].price_sgd)) }];
+    const out = [{ name: 'three listings', ok: got.length === 3 }]; // product-page prices need not follow the list's order
     got.forEach((l, i) => {
       const text = pages[i]?.text || '';
       out.push({ name: `listing ${i + 1}: LG, 4K, store and price on its page`, ok: /lazada\.sg\/products\//.test(l.url) && /\bLG\b/i.test(l.title) && /4k|uhd|3840/i.test(l.title) && norm(text).includes(norm(l.store)) && text.replace(/[\s,]/g, '').includes(Number(l.price_sgd).toFixed(2)), detail: { store: l.store, price: l.price_sgd, chars: text.length } });
@@ -241,7 +241,9 @@ const checks = {
     const got = a.articles ?? [];
     const section = await pageText('https://www.channelnewsasia.com/singapore', 6000);
     const pages = got.length ? bcJson('visit', ...got.map((x) => x.url), '--max-text', '60000', '--json') : [];
-    const out = [{ name: 'three articles from the Singapore section', ok: got.length === 3 && got.every((x) => norm(section).includes(norm(x.headline).slice(0, 40))) }];
+    // "At the top" means in the first quarter of the section page's text.
+    const top = norm(section).slice(0, Math.max(3000, norm(section).length / 4));
+    const out = [{ name: 'three articles from the top of the Singapore section', ok: got.length === 3 && got.every((x) => top.includes(norm(x.headline).slice(0, 40))), detail: got.map((x) => norm(section).indexOf(norm(x.headline).slice(0, 40))) }];
     got.forEach((x, i) => {
       const text = pages[i]?.text || '';
       out.push({ name: `article ${i + 1}: headline, author and date on its page`, ok: /channelnewsasia\.com\//.test(x.url) && norm(text).includes(norm(x.headline).slice(0, 40)) && norm(text).includes(norm(x.author)) && norm(text).includes(norm(x.published).slice(0, 10)), detail: { author: x.author, published: x.published, chars: text.length } });
