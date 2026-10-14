@@ -29,6 +29,7 @@ import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
+import * as trace from '../lib/trace.mjs';
 
 const MUTATING = new Set([
   'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha', 'do',
@@ -143,9 +144,13 @@ function usage() {
 
   Act (all accept --ref ref_3, --selector <css>, or --x/--y):
     browserctrl click <tab> --intent "the Grey option" [--expect "…"]   Jev picks the element (also fill/select/hover); never clicks Buy/Send/Pay/Delete
-    browserctrl do <tab> 'fill "search" = "aeron"' 'key Enter' 'click "More filters"' [--then items|text]
-                                                   run a plan in one call; stops at the first uncertain or committing step
+    browserctrl do <tab> 'fill "search" = "aeron"' 'key Enter' 'click Apply => "results are filtered"' [--then items|text]
+                                                   run a plan in one call; stops at the first uncertain or committing step,
+                                                   or the first unmet => expectation; 'optional click …' skips when absent
+                                                   [--dismiss "cookie banner, app-install prompt"] closes only those overlays
+                                                   [--repeat 'click Next' --until "<condition>" --max 10 --collect items|text]
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
+    browserctrl trace <tab> [--last N] [--json]          what recent do runs did: targets, expectations, overlays, notices
     browserctrl check <tab> [--expect "…"]               Jev yes/no checks: challenge, login, error, dialog, empty
     browserctrl click <tab> --ref ref_3 [--button right] [--count 2] [--mod cmd,shift]
     browserctrl hover <tab> --selector ".menu"
@@ -302,6 +307,11 @@ const main = async () => {
   }
 
   if (cmd === 'launch') return out(await launch(positional[1]));
+  if (cmd === 'trace') {
+    if (!positional[1]) throw new Error('Usage: browserctrl trace <tab> [--last N] [--json]');
+    const runs = trace.read(positional[1], { last: Number(flags.last || 5) });
+    return out(flags.json ? runs : trace.format(runs));
+  }
   if (cmd === 'cooldown') {
     if (positional[1] === 'clear') {
       if (!positional[2]) throw new Error('Usage: browserctrl cooldown clear <site>');
@@ -627,10 +637,11 @@ const main = async () => {
     switch (cmd) {
       case 'do': {
         const lines = positional.slice(2);
-        if (!lines.length) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'fill "max price" = 600\' ... [--then items|text]');
+        if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text]');
         const r = await runSteps(conn, targetId, lines, {
           then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
           force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
+          dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,
         });
         if (!r.done) process.exitCode = 3;
         return out(flags.json ? r : formatSteps(r));
