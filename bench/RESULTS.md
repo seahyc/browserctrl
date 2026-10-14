@@ -1,5 +1,45 @@
 # Jev benchmark results, 2026-10-14
 
+## Round 5: harder drill-down tasks, `do` + `visit`
+
+Six tasks that filter or sort and then open several items (runs 41-43). A: plain
+browserctrl without `do` or Jev (it may use `visit`). D: `do` + `visit`, prompted to plan
+with `do`. Medians of passing runs; tool calls are the agent's.
+
+| Task | A | D | D passed | D vs A |
+| --- | --- | --- | --- | --- |
+| CNA: open the top 3 Singapore stories, bylines and dates | 159 s, 15 calls | 53 s, 4 calls | 3/3 | −67% |
+| Stripe: open 3 failed payments, last 4 and decline reason | 148 s, 19 calls | 97 s, 7 calls | 3/3 | −34% |
+| Lazada: search, sort, LG brand filter, 3 stores | 166 s, 17 calls (2/3) | 112 s, 9 calls | 2/3 | −33% |
+| Carousell: price cap, sort, skip ads, 3 sellers | 158 s, 28 calls | 107 s, 7 calls | 3/3 | −32% |
+| GitLab: 12 closed MRs, author and branches | 99 s, 7 calls | 160 s, 10 calls | 3/3 | +62% |
+| GitLab: yjwong's top 5 merged MRs, commits | 59 s, 6 calls | 164 s, 16 calls | 3/3 | +178% |
+
+35 of 36 graded runs passed except the two Lazada runs of run 43, where both arms on Lazada
+at once drew a challenge; the cool-down then blocked the store pages (recorded as fails).
+
+**Verdict:** `do` + `visit` wins the four tasks on marketplaces, Stripe and CNA (−32% to
+−67%, with a third to a quarter of the tool calls) and loses both GitLab tasks. On GitLab
+the A agents type the filter into the URL (`?state=closed`, `author_username=yjwong`) and
+open MR pages directly; D agents, told to plan with `do`, drive GitLab's token filter box,
+which costs retries. The skill already ranks "a URL that carries the filter" above `do`,
+but the D prompt overrides it. In run 43, with the settle fixes below, D's `do` calls took
+1.7-7 s each and its GitLab-author time fell to 86 s (A: 29 s).
+
+Fixes made during the round, from traces:
+
+- Settle polled with in-page timers, which Chrome throttles in background tabs (steps waited
+  7-19 s). It now polls from the CLI; a GitLab 7-step filter plan went from 15-40 s to 9 s.
+- Typing waits for 700 ms of quiet so debounced suggestion lists load before the next step.
+- `do` no longer waits 1.5 s for text stability on a page that is already loaded.
+- `visit`: waits through empty app shells (Stripe), reads the body when `main` is a fragment
+  (Lazada), limits tabs per site and stops on a challenge.
+- Traces record time per phase (setup, read, Jev, input, settle, then).
+
+Checkers read truth from MR pages, payment pages and articles (glab and gh had lost their
+tokens). Several checker fixes were made mid-round (byline names, decline codes, a lost
+filter click); affected runs were regraded with the same answers.
+
 ## Round 4: `do` v2 on more sites
 
 Six tasks, three runs per approach (runs 31-33), plain browserctrl (A) re-run
