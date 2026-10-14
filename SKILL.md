@@ -258,6 +258,32 @@ browserctrl read a1b2c3d4 --json --max-text 8000
 Refs are invalidated by navigation and by the next `read`. Using a stale ref
 returns "re-run browserctrl read" instead of clicking whatever now sits in that slot.
 
+### Read lists, cards and messages with `items`
+
+To report what a list shows (search results, listings, inbox rows, chat messages),
+use `items` rather than page text. It finds repeated items, groups them by page
+region and heading, and keeps each item's own text together:
+
+```bash
+browserctrl items a1b2c3d4 --browser dia
+# g1  main · "190 search results for 'aeron'"  · 48 items, 4 per row, 40 below the fold
+#   i1    ezshopcare · 3 months ago · Spotlight · office chair … · S$29 · Brand new  → /p/office-chair-…
+#   i3    office.chair.seller · 38 minutes ago · Herman Miller Aeron chair … · S$580  → /p/herman-miller-…
+# g4  footer › list · "Top searches"  · 42 items   (page chrome: … --group g4)
+```
+
+- Pick the group by its region and heading: a banner of three cards and the results
+  grid are different groups. Header, nav and footer lists are folded; `--group gN`
+  shows one group in full, `--all` every item, `--json` the raw records.
+- A badge such as "Spotlight", "Ad" or "Sponsored" appears in the item's own text;
+  `{…}` shows class or label hints such as `{D_bump}`. Leave those items out when
+  the task asks for organic results.
+- In a single-column thread, `[left]` and `[right]` give each message's side: on chat
+  sites your own messages are usually on the right. Confirm with the page if unsure.
+- Item ids stay the same across reads of the same page, and `*` marks items not seen
+  in an earlier read. To collect a lazily loaded list, `wake` the tab, scroll, and read
+  again until no new items appear.
+
 ## Acting
 
 Every action takes `--ref ref_3`, `--selector <css>`, or `--x/--y`.

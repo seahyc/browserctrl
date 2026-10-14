@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Search: aeron</title><style>
+body{font:14px sans-serif;margin:0} nav a{margin:0 8px} .Xq9 {display:grid;grid-template-columns:repeat(4,220px);gap:12px;padding:12px}
+.k7Z{border:1px solid #ddd;height:240px;padding:8px} .bn{display:flex;gap:10px;padding:12px;background:#fde} .bn > div{width:180px;height:120px;border:1px solid #c9c}
+.badge{background:#f60;color:#fff;font-size:11px;padding:1px 4px}
+</style></head><body>
+<header><nav aria-label="Main"><a href="/">Home</a><a href="/sell">Sell</a><a href="/inbox">Inbox</a><a href="/likes">Likes</a><a href="/me">Me</a></nav></header>
+<main>
+<section class="bn" aria-label="Official store"><div><a href="/shop/anker/a">Anker Official · Zolo charger</a><span>$7.59</span></div><div><a href="/shop/anker/b">Anker Official · Powerbank</a><span>$32.93</span></div><div><a href="/shop/anker/c">Anker Official · Earbuds</a><span>$32.08</span></div></section>
+<h2>Search results for "aeron"</h2>
+<div class="Xq9" id="grid"></div>
+</main>
+<script>
+const grid = document.getElementById('grid');
+let n = 0;
+function card(promoted) {
+  n++;
+  const d = document.createElement('div');
+  d.className = 'k7Z' + (promoted ? ' D_bump_x2' : '');
+  d.innerHTML = (promoted ? '<span class="badge">Spotlight</span>' : '') +
+    `<a href="/p/listing-${n}">Herman Miller Aeron ${n}</a><p>S$${300 + n * 10}</p><p>Well used</p><p>seller${n}</p>`;
+  grid.appendChild(d);
+}
+card(true); card(true); for (let i = 0; i < 10; i++) card(false);
+// Lazy loading: six more cards when the end of the grid comes into view.
+const sentinel = document.createElement('div'); sentinel.style.height = '1px'; document.querySelector('main').appendChild(sentinel);
+let loaded = false;
+new IntersectionObserver(e => { if (e[0].isIntersecting && !loaded) { loaded = true; for (let i = 0; i < 6; i++) card(false); } }).observe(sentinel);
+</script></body></html>

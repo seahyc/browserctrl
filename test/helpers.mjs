@@ -117,6 +117,14 @@ document.addEventListener('mouseup', () => { if (!down) return; down = false;
       res.end(JSON.stringify(hits.get(new URL(req.url, 'http://x').searchParams.get('k')) || 0));
       return;
     }
+    // Static pages for snapshot tests: /fixtures/items-market.html and the like.
+    if (req.url.startsWith('/fixtures/')) {
+      const file = path.join(HERE, 'fixtures', path.basename(new URL(req.url, 'http://x').pathname));
+      if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(fs.readFileSync(file));
+      return;
+    }
     if (req.url.startsWith('/404')) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('nope');

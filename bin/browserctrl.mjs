@@ -25,6 +25,7 @@ import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
+import { itemsExpression, formatItems } from '../lib/items.mjs';
 
 const MUTATING = new Set([
   'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha',
@@ -114,6 +115,7 @@ function usage() {
   Read before you act:
     browserctrl read <tab> --browser dia [--json]        snapshot with ref_1..N + page text
     browserctrl text <tab> [--max-text 8000] [--match re] visible text, bounded by default
+    browserctrl items <tab> [--group g2] [--all] [--json]  repeated items (results, cards, rows, messages) grouped by page region
     browserctrl html <tab> [selector]
     browserctrl eval <tab> <js>
 
@@ -567,6 +569,11 @@ const main = async () => {
     }
 
     switch (cmd) {
+      case 'items': {
+        const r = await ops.evaluate(conn, targetId, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }));
+        if (flags.group) r.groups = r.groups.filter(g => g.id === flags.group);
+        return out(flags.json ? r : formatItems(r, { full: Boolean(flags.group) }));
+      }
       case 'check': {
         const page = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
         return out({ page: { url: page.url, title: page.title }, ...(await jev.checkPage(jev.jevKey(), page, { expect: flags.expect })) });
