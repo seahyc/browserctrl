@@ -70,12 +70,12 @@ const checks = {
     // is what raises Shopee's crawler captcha.
     let cards = {};
     try {
-      cards = JSON.parse(bc('eval', run.tab, `JSON.stringify(Object.fromEntries([...document.querySelectorAll('a[href*="-i."]')].map(a => [a.href.match(/i\\.(\\d+\\.\\d+)/)?.[1], (a.closest('li,[data-sqe=item]') || a).innerText])))`));
+      cards = JSON.parse(bc('eval', run.tab, `JSON.stringify([...document.querySelectorAll('a[href*="-i."]')].reduce((m, a) => { const k = a.href.match(/i\\.(\\d+\\.\\d+)/)?.[1]; const t = (a.closest('li,[data-sqe=item]') || a).innerText; if (k && t.length > (m[k] || '').length) m[k] = t; return m; }, {}))`));
     } catch {}
     if (!Object.keys(cards).length) {
       // The run's tab moved on: one search page beats a product page per listing.
       const id = await readyTab('https://shopee.sg/search?keyword=anker%2030w%20charger&sortBy=sales');
-      try { bc('wake', id); await sleep(4000); cards = JSON.parse(bc('eval', id, `JSON.stringify(Object.fromEntries([...document.querySelectorAll('a[href*="-i."]')].map(a => [a.href.match(/i\\.(\\d+\\.\\d+)/)?.[1], (a.closest('li,[data-sqe=item]') || a).innerText])))`)); } catch {}
+      try { bc('wake', id); await sleep(4000); cards = JSON.parse(bc('eval', id, `JSON.stringify([...document.querySelectorAll('a[href*="-i."]')].reduce((m, a) => { const k = a.href.match(/i\\.(\\d+\\.\\d+)/)?.[1]; const t = (a.closest('li,[data-sqe=item]') || a).innerText; if (k && t.length > (m[k] || '').length) m[k] = t; return m; }, {}))`)); } catch {}
       try { bc('close', id); } catch {}
     }
     for (const l of a.listings ?? []) {
