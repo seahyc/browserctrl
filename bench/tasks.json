@@ -102,5 +102,53 @@
     "goal": "In the Stripe dashboard's Payments page, filter to Failed payments and report the 3 most recent: amount, customer email and date.",
     "answer": "{\"payments\": [{\"amount\": str, \"customer\": str, \"date\": str}] (3, newest first)}",
     "jev_allow_controls": []
+  },
+  {
+    "id": "gitlab-closed-branches",
+    "kind": "hard",
+    "start_url": "https://gitlab.glints.com/glints/glints-dashboard/-/merge_requests",
+    "goal": "Using the GitLab web UI for glints/glints-dashboard, list every merge request that was closed without being merged. For each one, open it and report its IID, author username, source branch and target branch.",
+    "answer": "{\"mrs\": [{\"iid\": number, \"author\": str, \"source_branch\": str, \"target_branch\": str}]}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "gitlab-author-commits",
+    "kind": "hard",
+    "start_url": "https://gitlab.glints.com/glints/glints-dashboard/-/merge_requests",
+    "goal": "Using the GitLab web UI for glints/glints-dashboard, filter the merged merge requests to author yjwong. For the 5 with the highest IIDs, open each and report its IID, title and number of commits.",
+    "answer": "{\"mrs\": [{\"iid\": number, \"title\": str, \"commits\": number}] (5, highest IID first)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "lazada-brand-stores",
+    "kind": "hard",
+    "start_url": "https://www.lazada.sg/",
+    "goal": "On Lazada Singapore, search for \"27 inch 4k monitor\", sort by price low to high, and filter the brand to LG. Open the 3 cheapest results and report each one's title, price and the name of the store selling it.",
+    "answer": "{\"listings\": [{\"title\": str, \"price_sgd\": number, \"store\": str, \"url\": str}] (3, cheapest first)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "carousell-aeron-sellers",
+    "kind": "hard",
+    "start_url": "https://www.carousell.sg/",
+    "goal": "On Carousell Singapore, search for \"herman miller aeron\", set the maximum price to 800 and sort by most recent. Open the first 3 listings that are not ads or Spotlight, and report each one's title, price, condition and seller username.",
+    "answer": "{\"listings\": [{\"title\": str, \"price_sgd\": number, \"condition\": str, \"seller\": str, \"url\": str}] (3, in list order)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "stripe-failed-details",
+    "kind": "hard",
+    "start_url": "https://dashboard.stripe.com/payments",
+    "goal": "In the Stripe dashboard, filter Payments to Failed. Open each of the 3 most recent failed payments and report its payment ID (pi_…), the card's last 4 digits and the decline reason shown on the payment page.",
+    "answer": "{\"payments\": [{\"id\": str, \"last4\": str, \"reason\": str}] (3, newest first)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "cna-top-bylines",
+    "kind": "hard",
+    "start_url": "https://www.channelnewsasia.com/",
+    "goal": "On CNA (channelnewsasia.com), open the Singapore section. Open each of the first 3 stories at the top of that section and report its headline, author byline and published date as shown on the article.",
+    "answer": "{\"articles\": [{\"headline\": str, \"author\": str, \"published\": str, \"url\": str}] (3)}",
+    "jev_allow_controls": []
   }
 ]

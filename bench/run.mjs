@@ -171,6 +171,80 @@ const checks = {
     out.push({ name: 'no cheaper 4K listing was skipped', ok: fourK.filter(c => c.p < fifth).every(c => got.some(l => String(l.url).split('?')[0] === c.href)), detail: fourK.slice(0, 6).map(c => c.p) });
     return out;
   },
+  async 'gitlab-closed-branches'(a) {
+    const truth = gitlab('projects/19/merge_requests?state=closed&per_page=100');
+    const byIid = new Map(truth.map((m) => [m.iid, m]));
+    const got = a.mrs ?? [];
+    const ids = got.map((m) => Number(m.iid));
+    const wrong = got.filter((m) => {
+      const t = byIid.get(Number(m.iid));
+      return !t || norm(m.author) !== norm(t.author.username) || m.source_branch !== t.source_branch || m.target_branch !== t.target_branch;
+    }).map((m) => m.iid);
+    return [
+      { name: 'exact closed MR set', ok: ids.length === byIid.size && [...byIid.keys()].every((n) => ids.includes(n)), detail: { got: ids.length, want: byIid.size } },
+      { name: 'author, source and target branch per MR', ok: !wrong.length, detail: wrong },
+    ];
+  },
+  async 'gitlab-author-commits'(a) {
+    const merged = gitlab('projects/19/merge_requests?state=merged&author_username=yjwong&per_page=100&order_by=created_at');
+    const top = merged.map((m) => m.iid).sort((x, y) => y - x).slice(0, 5);
+    const got = a.mrs ?? [];
+    const wrong = [];
+    for (const m of got) {
+      const commits = gitlab(`projects/19/merge_requests/${Number(m.iid)}/commits?per_page=100`).length;
+      if (Number(m.commits) !== commits) wrong.push({ iid: m.iid, got: m.commits, want: commits });
+    }
+    return [
+      { name: 'the 5 highest IIDs, in order', ok: JSON.stringify(got.map((m) => Number(m.iid))) === JSON.stringify(top), detail: top },
+      { name: 'commit counts', ok: !wrong.length, detail: wrong },
+    ];
+  },
+  async 'lazada-brand-stores'(a) {
+    const got = a.listings ?? [];
+    const pages = got.length ? bcJson('visit', ...got.map((l) => l.url), '--max-text', '60000', '--json') : [];
+    const out = [{ name: 'three listings, cheapest first', ok: got.length === 3 && got.every((l, i) => i === 0 || Number(l.price_sgd) >= Number(got[i - 1].price_sgd)) }];
+    got.forEach((l, i) => {
+      const text = pages[i]?.text || '';
+      out.push({ name: `listing ${i + 1}: LG, 4K, store and price on its page`, ok: /lazada\.sg\/products\//.test(l.url) && /\bLG\b/i.test(l.title) && /4k|uhd|3840/i.test(l.title) && norm(text).includes(norm(l.store)) && text.replace(/[\s,]/g, '').includes(Number(l.price_sgd).toFixed(2)), detail: { store: l.store, price: l.price_sgd, chars: text.length } });
+    });
+    return out;
+  },
+  async 'carousell-aeron-sellers'(a) {
+    const got = a.listings ?? [];
+    const pages = got.length ? bcJson('visit', ...got.map((l) => l.url), '--max-text', '60000', '--parallel', '1', '--json') : [];
+    const out = [{ name: 'three listings', ok: got.length === 3 }];
+    got.forEach((l, i) => {
+      const text = pages[i]?.text || '', price = Number(l.price_sgd);
+      out.push({ name: `listing ${i + 1}: aeron, price <= 800, condition and seller on its page`, ok: /carousell\.sg\/p\//.test(l.url) && /aeron/i.test(text) && price <= 800 && text.includes(`S$${price.toLocaleString('en-US')}`) && norm(text).includes(norm(l.condition)) && norm(text).includes(norm(l.seller)), detail: { price, condition: l.condition, seller: l.seller, chars: text.length } });
+    });
+    return out;
+  },
+  async 'stripe-failed-details'(a) {
+    // The failed list's own links are the truth for ids; each payment page for the rest.
+    const id = await readyTab('https://dashboard.stripe.com/payments');
+    let links = [];
+    try { bc('wake', id); await sleep(5000); bc('do', id, 'click Failed'); await sleep(3000); links = JSON.parse(bc('eval', id, `JSON.stringify([...new Set([...document.querySelectorAll('a[href*="/payments/pi_"]')].map(a => a.href.match(/pi_[A-Za-z0-9]+/)[0]))])`)); } catch {}
+    try { bc('close', id); } catch {}
+    const got = a.payments ?? [];
+    const pages = got.length ? bcJson('visit', ...got.map((p) => `https://dashboard.stripe.com/payments/${p.id}`), '--max-text', '60000', '--json') : [];
+    const out = [{ name: 'the 3 newest failed payment ids, in order', ok: JSON.stringify(got.map((p) => p.id)) === JSON.stringify(links.slice(0, 3)), detail: links.slice(0, 3) }];
+    got.forEach((p, i) => {
+      const text = pages[i]?.text || '';
+      out.push({ name: `payment ${i + 1}: last 4 and reason on its page`, ok: text.includes(String(p.last4)) && norm(text).includes(norm(p.reason)), detail: { last4: p.last4, reason: p.reason, chars: text.length } });
+    });
+    return out;
+  },
+  async 'cna-top-bylines'(a) {
+    const got = a.articles ?? [];
+    const section = await pageText('https://www.channelnewsasia.com/singapore', 6000);
+    const pages = got.length ? bcJson('visit', ...got.map((x) => x.url), '--max-text', '60000', '--json') : [];
+    const out = [{ name: 'three articles from the Singapore section', ok: got.length === 3 && got.every((x) => norm(section).includes(norm(x.headline).slice(0, 40))) }];
+    got.forEach((x, i) => {
+      const text = pages[i]?.text || '';
+      out.push({ name: `article ${i + 1}: headline, author and date on its page`, ok: /channelnewsasia\.com\//.test(x.url) && norm(text).includes(norm(x.headline).slice(0, 40)) && norm(text).includes(norm(x.author)) && norm(text).includes(norm(x.published).slice(0, 10)), detail: { author: x.author, published: x.published, chars: text.length } });
+    });
+    return out;
+  },
   async 'cna-singapore'(a) {
     const text = await pageText('https://www.channelnewsasia.com/singapore', 7000);
     const got = a.articles ?? [];
@@ -237,7 +311,7 @@ Add "notes": a one-line string on anything that went wrong.`;
 
 Method: plan with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md, sections "Plan several steps in one call with do" and "Read lists, cards and messages with items"). Send the steps you can foresee in ONE call instead of reading the page before each click:
   browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --browser dia
-It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. For lists that span pages, add --repeat 'click "Next"' --until "<when to stop>" --collect items to the do call. Do not use jev-tool.`;
+It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. For lists that span pages, add --repeat 'click "Next"' --until "<when to stop>" --collect items to the do call. To open several items from a list, pass their links to \`browserctrl visit <link>... --from ${tab} --grep "<what to find>" --browser dia\` (parallel, returns matching lines per page) instead of clicking into each. Do not use jev-tool.`;
   if (arm === 'C') return `${common}
 
 Method: drive the page yourself with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md), using its Jev intent commands instead of reading the page to find refs:

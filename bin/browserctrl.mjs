@@ -594,7 +594,7 @@ const main = async () => {
       }
       const res = await visit(conn, urls, {
         grep: flags.grep, then: flags.then === 'items' ? 'items' : 'text', parallel: Number(flags.parallel || 4),
-        maxText: Number(flags['max-text'] || 1500), force: Boolean(flags.force), context: flags.context != null ? Number(flags.context) : 1,
+        maxText: Number(flags['max-text'] || 1500), force: Boolean(flags.force), show: show.showing(flags), context: flags.context != null ? Number(flags.context) : 1,
       });
       return out(flags.json ? res : formatVisits(res));
     }
