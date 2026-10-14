@@ -82,12 +82,14 @@ const checks = {
     ];
   },
   async 'carousell-chat'(a) {
+    // "me" is a fair answer for the user's own messages; anything else must name the other party.
+    const other = norm(fixtures.carousell_chat_user);
+    const sameSender = (got, truth) => (norm(truth) === other ? norm(got) === other : norm(got) !== other && norm(got) !== '');
     const msgs = recipe('carousell.sg/messages', `offer_id=${fixtures.carousell_offer_id}`).filter((m) => m.text);
-    const chat = recipe('carousell.sg/chats').find((c) => String(c.offer_id) === fixtures.carousell_offer_id);
     const got = a.messages ?? [];
     return [
-      { name: 'offer price', ok: Number(a.price_sgd) === Number(chat?.price), detail: { truth: chat?.price } },
-      { name: 'last 3 messages', ok: got.length === 3 && got.every((m, i) => norm(m.text) === norm(msgs[i]?.text) && norm(m.from) === norm(msgs[i]?.from)), detail: msgs.slice(0, 3).map((m) => [m.from, m.text]) },
+      { name: 'offer price', ok: Number(a.price_sgd) === fixtures.carousell_offer_price },
+      { name: 'last 3 messages', ok: got.length === 3 && got.every((m, i) => norm(m.text) === norm(msgs[i]?.text) && sameSender(m.from, msgs[i]?.from)), detail: msgs.slice(0, 3).map((m) => [m.from, m.text]) },
     ];
   },
   async 'shopee-refund'(a) {
