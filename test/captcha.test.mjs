@@ -41,7 +41,10 @@ t('a puzzle challenge waits for the human and reports who cleared it', async () 
   const tab = await open('verify/captcha?x=1');
   assert.equal((await detect(conn, tab)).kind, 'shopee-verify');
   await ops.evaluate(conn, tab, "setTimeout(() => history.replaceState(null, '', '/done'), 600), 1");
-  assert.deepEqual(await solve(conn, tab, { timeoutMs: 5000, pollMs: 200 }), { captcha: 'shopee-verify', solvedBy: 'human' });
+  const r = await solve(conn, tab, { timeoutMs: 5000, pollMs: 200 });
+  assert.equal(r.captcha, 'shopee-verify');
+  assert.equal(r.solvedBy, 'human');
+  assert.ok(r.waitedMs >= 400 && r.waitedMs < 4000, `waited ${r.waitedMs}`);
 });
 
 t('an uncleared challenge times out with an error', async () => {

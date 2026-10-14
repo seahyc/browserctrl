@@ -23,6 +23,8 @@ import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
 import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint, listTaps, tapAdd, tapUpdate, tapRemove } from '../lib/recipes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
+import * as cooldown from '../lib/cooldown.mjs';
+import * as jigsaw from '../lib/jigsaw.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
@@ -59,6 +61,19 @@ function hint(url) {
   if (line) console.error(`hint: ${line}`);
 }
 
+// After a page load: a challenge starts the site's cool-down; say so on stderr.
+async function observe(conn, targetId, res) {
+  const found = await captcha.observe(conn, targetId).catch(() => null);
+  if (!found) return res;
+  console.error(`challenge: ${found.kind} on tab ${targetId.slice(0, 8)}. Cool-down: ${cooldown.describe(found.cooldown)}. ` +
+    `Do not reload or retry; hand it to the human with: browserctrl captcha ${targetId.slice(0, 8)}`);
+  return { ...res, challenge: found.kind, cooldownUntil: new Date(found.cooldown.until).toISOString() };
+}
+
+function cooldownLines() {
+  return cooldown.list().map(e => `cool-down: ${cooldown.describe(e)}`);
+}
+
 function activityOutput(report, flags) {
   if (flags.json) return out(report);
   return out(report.agents.map(a => {
@@ -88,8 +103,14 @@ function usage() {
     browserctrl doctor --browser dia                     read-only connection diagnosis (JSON)
     browserctrl doctor --browser dia --watch-seconds 20   passive OS connection capture
 
-  Captchas: browserctrl captcha <tab> --browser dia [--timeout ms] [--no-attempt]
-    tries a drag-to-end slider once, otherwise notifies you and waits until the challenge clears
+  Captchas: browserctrl captcha <tab> --browser dia [--timeout ms] [--no-attempt] [--no-focus]
+    tries a drag-to-end slider once (or an opted-in jigsaw), otherwise brings the tab to the front,
+    sounds, notifies (and runs $BROWSERCTRL_NOTIFY_CMD "<message>" if set) and resumes once it clears
+    browserctrl captcha solver enable|disable <site>      opt in to the jigsaw-slider solver (off by default)
+    browserctrl captcha solver status                     enabled sites and pinned selectors
+    browserctrl cooldown [clear <site>]                   sites cooling down after a challenge
+    A challenge starts a cool-down for its site (20 min, doubling within a day, max 2 h): open, nav,
+    do with nav and recipe run refuse that site until it ends or clears; --force overrides.
 
   Recipes: a site's own API call, faster than its UI (see references/recipes.md):
     browserctrl recipe find <url or words>                recipes for a page or task; open/nav/read also hint at them
@@ -124,6 +145,7 @@ function usage() {
     browserctrl click <tab> --intent "the Grey option" [--expect "…"]   Jev picks the element (also fill/select/hover); never clicks Buy/Send/Pay/Delete
     browserctrl do <tab> 'fill "search" = "aeron"' 'key Enter' 'click "More filters"' [--then items|text]
                                                    run a plan in one call; stops at the first uncertain or committing step
+                                                   a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
     browserctrl check <tab> [--expect "…"]               Jev yes/no checks: challenge, login, error, dialog, empty
     browserctrl click <tab> --ref ref_3 [--button right] [--count 2] [--mod cmd,shift]
     browserctrl hover <tab> --selector ".menu"
@@ -245,6 +267,7 @@ const main = async () => {
     if (seconds !== null && (flags['watch-seconds'] === true || !Number.isFinite(seconds) || seconds <= 0 || seconds > 60)) throw new Error('watch-seconds must be greater than 0 and at most 60.');
     const report = await diagnose(flags);
     if (seconds !== null && report.port) report.capture = await captureConnections(report.port, { seconds, daemonPid: report.daemonPid });
+    report.cooldowns = cooldown.list().map(e => ({ site: e.site, kind: e.kind, until: new Date(e.until).toISOString(), strikes: e.strikes, summary: cooldown.describe(e) }));
     return out(report);
   }
 
@@ -279,6 +302,29 @@ const main = async () => {
   }
 
   if (cmd === 'launch') return out(await launch(positional[1]));
+  if (cmd === 'cooldown') {
+    if (positional[1] === 'clear') {
+      if (!positional[2]) throw new Error('Usage: browserctrl cooldown clear <site>');
+      const url = /^[a-z]+:\/\//i.test(positional[2]) ? positional[2] : `https://${positional[2]}`;
+      return out({ cleared: cooldown.clear(url) ? cooldown.siteOf(url) : null });
+    }
+    if (flags.json) return out(cooldown.list());
+    return out(cooldownLines().join('\n') || '(no site is cooling down)');
+  }
+  if (cmd === 'captcha' && positional[1] === 'solver') {
+    const action = positional[2] || 'status';
+    if (action === 'enable') {
+      const r = jigsaw.enable(positional[3]);
+      console.error(`Warning: ${r.warning}`);
+      return out(r);
+    }
+    if (action === 'disable') return out(jigsaw.disable(positional[3]));
+    if (action === 'status') {
+      const c = jigsaw.readConfig();
+      return out({ enabled: jigsaw.solverHosts(), selectors: c.selectors, config: jigsaw.configFile(), note: 'Off unless a site is listed. Add selectors per site to pin the handle, track, background and piece.' });
+    }
+    throw new Error('Usage: browserctrl captcha solver enable <site> | disable <site> | status');
+  }
   if (cmd === 'recipe' && positional[1] !== 'run') {
     const sub = positional[1] || 'list';
     const row = r => `${r.name.padEnd(28)} ${r.error || `${r.kind}${r.tab === 'handoff' ? ', handoff tab' : ''}${r.source !== 'local' ? `, tap ${r.source}` : ''}  ${r.description || ''}`}`;
@@ -397,6 +443,7 @@ const main = async () => {
         `${p.default ? '  [default: new tabs land here]' : ''}${p.email ? `  ${p.email}` : ''}`)].join('\n'));
     }
     if (cmd === 'tabs') {
+      if (!flags.json) for (const line of cooldownLines()) console.error(line);
       let rows = await ops.tabs(conn, { focus: !flags['no-focus'] });
       // Profile names cost a one-time probe per profile; see lib/profiles.mjs.
       rows = flags.profile ? await profiles.filterByProfile(conn, rows, flags.profile) : await profiles.labelTabs(conn, rows);
@@ -513,18 +560,24 @@ const main = async () => {
     }
     if (cmd === 'recipe') {
       const params = Object.fromEntries(positional.slice(3).map(kv => [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)]));
-      const res = await runRecipe(conn, loadRecipe(positional[2]), params, { raw: Boolean(flags.raw) });
+      const res = await runRecipe(conn, loadRecipe(positional[2]), params, {
+        raw: Boolean(flags.raw), force: Boolean(flags.force), handoff: !flags['no-handoff'],
+        ...(flags['handoff-timeout'] ? { handoffMs: Number(flags['handoff-timeout']) } : {}),
+      });
+      if (res.challenge) console.error(`  challenge: ${res.challenge.captcha} cleared by ${res.challenge.solvedBy}${res.challenge.waitedMs ? ` after ${Math.round(res.challenge.waitedMs / 1000)} s` : ''}`);
       console.error(`[${res.recipe}] ${res.count} items, ${res.calls} calls, ${res.ms} ms (tab ${res.tab})`);
       for (const r of res.retried || []) console.error(`  retried after: ${r}`);
       return out(res.items);
     }
     if (cmd === 'open') {
       if (flags.profile && flags.anonymous) throw new Error('--profile and --anonymous are exclusive: an anonymous tab belongs to no profile.');
-      const res = flags.profile
+      if (positional[1]) cooldown.guard(positional[1], { force: Boolean(flags.force), action: 'open' });
+      let res = flags.profile
         ? await profiles.openInProfile(conn, positional[1], flags.profile)
         : await ops.newTab(conn, positional[1], { anonymous: Boolean(flags.anonymous) });
       if (flags.until !== 'none' && positional[1]) {
         await ops.waitForReady(conn, res.targetId, { waitUntil: flags.until || 'load' }).catch(() => {});
+        res = await observe(conn, res.targetId, res);
       }
       hint(positional[1]);
       return out(res);
@@ -575,7 +628,10 @@ const main = async () => {
       case 'do': {
         const lines = positional.slice(2);
         if (!lines.length) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'fill "max price" = 600\' ... [--then items|text]');
-        const r = await runSteps(conn, targetId, lines, { then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined });
+        const r = await runSteps(conn, targetId, lines, {
+          then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
+          force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
+        });
         if (!r.done) process.exitCode = 3;
         return out(flags.json ? r : formatSteps(r));
       }
@@ -586,7 +642,9 @@ const main = async () => {
       }
       case 'check': {
         const page = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
-        return out({ page: { url: page.url, title: page.title }, ...(await jev.checkPage(jev.jevKey(), page, { expect: flags.expect })) });
+        const c = await jev.checkPage(jev.jevKey(), page, { expect: flags.expect });
+        const cool = c.flags.includes('challenge') ? cooldown.record(page.url, { kind: 'challenge (Jev)' }) : null;
+        return out({ page: { url: page.url, title: page.title }, ...c, ...(cool ? { cooldown: cooldown.describe(cool) } : {}) });
       }
       case 'read': {
         const snap = await ops.readPage(conn, targetId, {
@@ -658,7 +716,9 @@ const main = async () => {
         return out(flags.json ? { results } : results.map(r => JSON.stringify(r)).join('\n'));
       }
       case 'nav': {
-        const res = await ops.navigate(conn, targetId, positional[2], { waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000 });
+        cooldown.guard(positional[2], { force: Boolean(flags.force), action: 'navigate to' });
+        let res = await ops.navigate(conn, targetId, positional[2], { waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000 });
+        if ((flags.until || 'load') !== 'none') res = await observe(conn, targetId, res);
         hint(res.url);
         return out(res);
       }
@@ -697,7 +757,7 @@ const main = async () => {
       case 'scroll-to':
         return out(await ops.scrollTo(conn, targetId, target));
       case 'captcha':
-        return out(await captcha.solve(conn, targetId, { timeoutMs: Number(flags.timeout || 300000), attempt: !flags['no-attempt'] }));
+        return out(await captcha.solve(conn, targetId, { timeoutMs: Number(flags.timeout || 300000), attempt: !flags['no-attempt'], focus: !flags['no-focus'] }));
       case 'shot': {
         const res = await ops.screenshot(conn, targetId, {
           path: positional[2],

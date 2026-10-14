@@ -16,6 +16,7 @@ import * as ops from '../lib/ops.mjs';
 import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint } from '../lib/recipes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
+import * as cooldown from '../lib/cooldown.mjs';
 import { waitForBackgroundReady } from '../lib/readiness.mjs';
 import * as ext from '../lib/ext.mjs';
 import * as claims from '../lib/claims.mjs';
@@ -88,6 +89,7 @@ const TOOLS = [
         until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle', 'none'] },
         anonymous: { type: 'boolean', description: 'Use a temporary isolated browser context with no profile cookies or storage. Closing the tab disposes the entire context.' },
         profile: { type: 'string', description: 'Open in this browser profile (directory, display name, or unique prefix; see browser_profiles). Opens a window in the profile if it has none.' },
+        force: { type: 'boolean', description: 'Load the site even though it is cooling down after a challenge. Only when the user wants it now: retrying into a challenge escalates it.' },
       },
       required: ['url'],
     },
@@ -151,7 +153,7 @@ const TOOLS = [
     description: 'Navigate a tab and wait for real readiness (load, domcontentloaded, or networkidle). No fixed sleeps.',
     inputSchema: {
       type: 'object',
-      properties: { ...browserProp, ...tabProp, url: { type: 'string' }, until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle', 'none'] } },
+      properties: { ...browserProp, ...tabProp, url: { type: 'string' }, until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle', 'none'] }, force: { type: 'boolean', description: 'Load the site even though it is cooling down after a challenge. Only when the user wants it now: retrying into a challenge escalates it.' }, },
       required: ['tab', 'url'],
     },
   },
@@ -246,10 +248,10 @@ const TOOLS = [
   },
   {
     name: 'browser_captcha',
-    description: 'Chromium only. Clear a captcha or verification challenge on a tab. Tries Alibaba\'s drag-to-end slider once with a trusted drag; for anything else (puzzle sliders, image challenges, framed challenges) or after a failed attempt, notifies the human and waits until the challenge is gone. Returns {captcha, solvedBy: auto|human} or {captcha: null}; errors when not cleared in time.',
+    description: 'Chromium only. Clear a captcha or verification challenge on a tab. Tries Alibaba\'s drag-to-end slider once with a trusted drag (and a jigsaw puzzle slider only where the user enabled the solver); for anything else or after a failed attempt, brings the tab to the front, sounds and notifies the human, and returns as soon as the challenge is gone. Returns {captcha, solvedBy: auto|solver|human, waitedMs} or {captcha: null}; errors when not cleared in time. A challenge starts a cool-down for its site: do not reload or retry into it.',
     inputSchema: {
       type: 'object',
-      properties: { ...browserProp, ...tabProp, timeoutMs: { type: 'number', description: 'How long to wait for the human (default 300000)' }, attempt: { type: 'boolean', description: 'Try the automatic slider drag first (default true)' } },
+      properties: { ...browserProp, ...tabProp, timeoutMs: { type: 'number', description: 'How long to wait for the human (default 300000)' }, attempt: { type: 'boolean', description: 'Try the automatic slider drag first (default true)' }, focus: { type: 'boolean', description: 'Bring the tab to the front for the human (default true)' } },
       required: ['tab'],
     },
   },
@@ -268,6 +270,9 @@ const TOOLS = [
         raw: { type: 'boolean', description: 'Return unmapped items' },
         host: { type: 'string', description: 'Host for endpoints/inspect, e.g. shopee.sg' },
         match: { type: 'string', description: 'Template substring for inspect' },
+        force: { type: 'boolean', description: 'Load the site even though it is cooling down after a challenge. Only when the user wants it now: retrying into a challenge escalates it.' },
+        handoff: { type: 'boolean', description: 'On a challenge, hand the tab to the human and wait (default true); false fails at once' },
+        handoffMs: { type: 'number', description: 'How long to wait for the human (default 300000)' },
       },
       required: ['action'],
     },
@@ -350,6 +355,13 @@ function text(value) {
 
 // Appends a line about matching recipes: a faster path than the UI the agent is
 // about to drive.
+// A challenge seen right after a load: report it with the site's cool-down.
+function withChallenge(res, found) {
+  if (!found) return res;
+  return { ...res, challenge: found.kind, cooldown: cooldown.describe(found.cooldown),
+    next: `Do not reload or retry. Hand the tab to the human with browser_captcha (tab ${res.targetId ? res.targetId.slice(0, 8) : 'this tab'}).` };
+}
+
 function withHint(result, url) {
   const line = url && recipeHint(url);
   if (line) result.content.push({ type: 'text', text: `hint: ${line}` });
@@ -464,10 +476,14 @@ const handlers = {
   browser_open: args =>
     withConn(args, async conn => {
       if (args.profile && args.anonymous) throw new Error('profile and anonymous are exclusive: an anonymous tab belongs to no profile.');
-      const res = args.profile
+      cooldown.guard(args.url, { force: Boolean(args.force), action: 'open' });
+      let res = args.profile
         ? await profiles.openInProfile(conn, args.url, args.profile)
         : await ops.newTab(conn, args.url, { anonymous: Boolean(args.anonymous) });
-      if (args.until !== 'none') await ops.waitForReady(conn, res.targetId, { waitUntil: args.until || 'load' }).catch(() => {});
+      if (args.until !== 'none') {
+        await ops.waitForReady(conn, res.targetId, { waitUntil: args.until || 'load' }).catch(() => {});
+        res = withChallenge(res, await captcha.observe(conn, res.targetId).catch(() => null));
+      }
       return withHint(text(res), args.url);
     }),
 
@@ -531,7 +547,10 @@ const handlers = {
     withConn(args, async (conn, port) => {
       const tab = await ops.resolveTab(conn, args.tab);
       claims.claim(port, tab.targetId, { steal: Boolean(args.steal) });
-      return withHint(text(await ops.navigate(conn, tab.targetId, args.url, { waitUntil: args.until || 'load' })), args.url);
+      cooldown.guard(args.url, { force: Boolean(args.force), action: 'navigate to' });
+      const res = await ops.navigate(conn, tab.targetId, args.url, { waitUntil: args.until || 'load' });
+      const found = args.until === 'none' ? null : await captcha.observe(conn, tab.targetId).catch(() => null);
+      return withHint(text(found ? withChallenge({ ...res, targetId: tab.targetId }, found) : res), args.url);
     }),
 
   browser_activity: args => withConn(args, async conn => text(await conn.activity(args.action, {owner: args.owner, intent: args.intent, completed: args.completed, total: args.total}))),
@@ -598,7 +617,7 @@ const handlers = {
     withConn(args, async (conn, port) => {
       const tab = await ops.resolveTab(conn, args.tab);
       claims.claim(port, tab.targetId, { steal: false });
-      return text(await captcha.solve(conn, tab.targetId, { timeoutMs: args.timeoutMs ?? 300000, attempt: args.attempt !== false }));
+      return text(await captcha.solve(conn, tab.targetId, { timeoutMs: args.timeoutMs ?? 300000, attempt: args.attempt !== false, focus: args.focus !== false }));
     }),
 
   browser_recipe: async args => {
@@ -607,7 +626,9 @@ const handlers = {
     if (args.action === 'endpoints') { const store = createStore(); return text(args.host ? store.catalog(args.host) : store.hosts()); }
     if (args.action === 'inspect') return text(createStore().exemplars(args.host, args.match));
     if (args.action !== 'run') throw new Error('action must be find, run, list, endpoints or inspect');
-    return withConn(args, async conn => text(await runRecipe(conn, loadRecipe(args.name), args.params || {}, { raw: Boolean(args.raw) })));
+    return withConn(args, async conn => text(await runRecipe(conn, loadRecipe(args.name), args.params || {}, {
+      raw: Boolean(args.raw), force: Boolean(args.force), handoff: args.handoff !== false, ...(args.handoffMs ? { handoffMs: args.handoffMs } : {}),
+    })));
   },
 
   browser_annotations: async args => {

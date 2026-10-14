@@ -1,0 +1,88 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Security check</title>
+<style>
+  body { margin: 40px; font: 14px sans-serif; }
+  .captcha-box { width: 340px; padding: 12px; border: 1px solid #ccc; }
+  .puzzle { position: relative; width: 340px; height: 170px; }
+  .puzzle canvas { display: block; }
+  #piece { position: absolute; left: 0; }
+  .slider-track { position: relative; width: 280px; height: 40px; margin-top: 10px; background: #e8e8e8; border-radius: 20px; }
+  .slider-handle { position: absolute; left: 0; top: 0; width: 40px; height: 40px; background: #3a7; border-radius: 20px; cursor: grab; }
+</style></head>
+<body>
+<!-- A "slide to complete the puzzle" jigsaw. ?seed=N places the gap; the slider
+     passes only when a trusted, multi-move drag releases the piece within
+     ?tol= px (default 4) of the gap. The piece moves at a ratio to the handle.
+     ?autoclear=ms removes the puzzle by itself, standing in for a human. -->
+<div class="captcha-box" id="box">
+  <p>Slide to complete the puzzle</p>
+  <div class="puzzle"><canvas id="bg" width="340" height="170"></canvas><canvas id="piece"></canvas></div>
+  <div class="slider-track"><div class="slider-handle" id="handle"></div></div>
+</div>
+<p id="msg"></p>
+<script>
+const q = new URLSearchParams(location.search);
+let seed = Number(q.get('seed') || 1) >>> 0;
+const rnd = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const tol = Number(q.get('tol') ?? 4);
+const W = 340, H = 170, S = 44, K = 9; // square side, knob radius
+const PW = S + K, PH = S + K;           // piece bounding box (knob on top and right)
+const gapX = Math.round(PW + 30 + rnd() * (W - 2 * PW - 40));
+const gapY = Math.round(K + 6 + rnd() * (H - PH - 12));
+
+// A busy background: gradient, random blobs and stripes, a little noise.
+const bg = document.getElementById('bg'), g = bg.getContext('2d');
+const grad = g.createLinearGradient(0, 0, W, H);
+grad.addColorStop(0, `hsl(${rnd() * 360},60%,55%)`); grad.addColorStop(1, `hsl(${rnd() * 360},60%,45%)`);
+g.fillStyle = grad; g.fillRect(0, 0, W, H);
+for (let i = 0; i < 40; i++) {
+  g.fillStyle = `hsla(${rnd() * 360},${40 + rnd() * 50}%,${30 + rnd() * 50}%,0.6)`;
+  g.beginPath(); g.arc(rnd() * W, rnd() * H, 6 + rnd() * 30, 0, Math.PI * 2); g.fill();
+}
+for (let i = 0; i < 6; i++) { g.fillStyle = `rgba(255,255,255,${0.1 + rnd() * 0.2})`; g.fillRect(rnd() * W, 0, 3 + rnd() * 10, H); }
+const noise = g.getImageData(0, 0, W, H);
+for (let i = 0; i < noise.data.length; i += 4) { const n = (rnd() - 0.5) * 24; noise.data[i] += n; noise.data[i + 1] += n; noise.data[i + 2] += n; }
+g.putImageData(noise, 0, 0);
+
+// The jigsaw outline, relative to its bounding box's top-left.
+const shape = (c, x, y) => {
+  const sx = x, sy = y + K;
+  c.beginPath();
+  c.moveTo(sx, sy);
+  c.lineTo(sx + S / 2 - K * 0.7, sy); c.arc(sx + S / 2, sy, K, Math.PI * 0.8, Math.PI * 0.2, false); c.lineTo(sx + S, sy);
+  c.lineTo(sx + S, sy + S / 2 - K * 0.7); c.arc(sx + S, sy + S / 2, K, Math.PI * 1.3, Math.PI * 0.7, false); c.lineTo(sx + S, sy + S);
+  c.lineTo(sx, sy + S); c.closePath();
+};
+
+// The piece carries the background under the gap, cut to shape.
+const piece = document.getElementById('piece'), p = piece.getContext('2d');
+piece.width = PW + 2; piece.height = PH + 2;
+piece.style.top = (gapY - 1) + 'px';
+p.save(); shape(p, 1, 1); p.clip(); p.drawImage(bg, gapX - 1, gapY - 1, PW + 2, PH + 2, 0, 0, PW + 2, PH + 2); p.restore();
+shape(p, 1, 1); p.strokeStyle = 'rgba(255,255,255,0.9)'; p.lineWidth = 2; p.stroke();
+
+// Then darken the gap on the background, with a light rim.
+shape(g, gapX, gapY); g.fillStyle = 'rgba(0,0,0,0.5)'; g.fill(); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1.5; g.stroke();
+
+const handle = document.getElementById('handle');
+const HANDLE_TRAVEL = 280 - 40, PIECE_TRAVEL = W - PW - 2;
+const ratio = PIECE_TRAVEL / HANDLE_TRAVEL;
+window.__jigsaw = { gapX, gapY, ratio, attempts: 0, results: [] };
+let down = false, startX = 0, moves = 0, trusted = true, left = 0;
+handle.addEventListener('mousedown', e => { down = true; startX = e.clientX; moves = 0; trusted = e.isTrusted; window.__jigsaw.attempts++; });
+document.addEventListener('mousemove', e => {
+  if (!down) return; moves++; trusted = trusted && e.isTrusted;
+  left = Math.max(0, Math.min(HANDLE_TRAVEL, e.clientX - startX));
+  handle.style.left = left + 'px'; piece.style.left = (left * ratio) + 'px';
+});
+document.addEventListener('mouseup', e => {
+  if (!down) return; down = false;
+  const pieceLeft = left * ratio + 1; // the piece canvas has a 1 px margin
+  const ok = Math.abs(pieceLeft - gapX) <= tol && moves >= 10 && trusted && e.isTrusted;
+  window.__jigsaw.results.push({ pieceLeft, gapX, moves, ok });
+  if (ok) { document.getElementById('box').remove(); document.getElementById('msg').textContent = 'Verified'; document.title = 'Verified'; }
+  else setTimeout(() => { left = 0; handle.style.left = '0px'; piece.style.left = '0px'; }, 300);
+});
+if (q.get('autoclear')) setTimeout(() => { document.getElementById('box').remove(); document.getElementById('msg').textContent = 'Verified'; }, Number(q.get('autoclear')));
+</script>
+</body></html>
