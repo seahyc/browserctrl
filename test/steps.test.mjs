@@ -14,6 +14,8 @@ test('steps parse into action, target and value', () => {
   assert.deepEqual(parseStep('click More filters'), { action: 'click', target: 'More filters' });
   assert.deepEqual(parseStep('select Sort = Price - Low to High'), { action: 'select', target: 'Sort', value: 'Price - Low to High' });
   assert.deepEqual(parseStep('key Enter'), { action: 'key', target: 'Enter' });
+  assert.deepEqual(parseStep('click! "Buy now"'), { action: 'click', target: 'Buy now', commit: true });
+  assert.throws(() => parseStep('fill! Search = x'), /only click! and select! can commit/);
   assert.throws(() => parseStep('buy everything'), /Unknown step/);
   assert.throws(() => parseStep('fill "box"'), /fill <target> = <value>/);
 });
@@ -65,5 +67,17 @@ t('a step that needs Jev stops cleanly when no key is configured', async () => {
   const r = await runSteps(conn, id, ['fill "the box for the product name" = aeron']);
   assert.equal(r.done, false);
   assert.match(r.stopped.reason, /TYPESAFE_API_KEY/);
+  await ops.closeTab(conn, id);
+});
+
+t('a step marked ! clicks a committing control named exactly', async () => {
+  const id = await open();
+  await ops.evaluate(conn, id, `[...document.querySelectorAll('button')].find(b => b.innerText === 'Buy now').onclick = () => { document.body.dataset.bought = '1'; }`);
+  const r = await runSteps(conn, id, ['click! "Buy now"']);
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.equal(r.steps[0].committed, true);
+  assert.equal(await ops.evaluate(conn, id, 'document.body.dataset.bought'), '1');
+  const unmarked = await runSteps(conn, id, ['click "Buy now"']);
+  assert.match(unmarked.stopped.reason, /mark the step: click! "Buy now"/);
   await ops.closeTab(conn, id);
 });

@@ -380,9 +380,11 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   candidates with refs, elements with that name that exist but are hidden (often opened
   by another control), and the controls on screen. Re-plan from that report; the steps
   before it already happened.
-- `do` never clicks a control that can commit something (Buy, Send, Pay, Delete,
-  Submit, Confirm…), even when named exactly. Click it by ref only if the user
-  authorized that action. You supply every typed value.
+- A control that can commit something (Buy, Send, Pay, Delete, Submit, Confirm…) is
+  clicked only by a step marked `!` that names it exactly: `click! "Submit"`. Jev never
+  picks one, and an unmarked step stops. Mark a step only for an action the user
+  authorized; messages and payments need their approval first. You supply every typed
+  value.
 - Every run is traced per tab. `browserctrl trace <tab> [--last N] [--json]` shows
   each step's target, how it was found (exact or Jev p), URL changes, expectations
   with p, dismissed overlays and notices. Review traces after the task, or when a
@@ -879,8 +881,8 @@ browserctrl check <tab> [--expect "the price filter is open"] --browser dia
 - An intent acts only when Jev's top pick has p ≥ 0.6 (`--min-p`). Otherwise it exits 3
   with the top candidates and their refs; pick one and act by ref.
 - An intent never clicks a control that can commit something (Buy, Send, Pay, Delete,
-  Submit, Confirm…), even when the intent names it. It returns the ref; click it by ref
-  only if the user authorized that action.
+  Submit, Confirm…), even when the intent names it. It returns the ref; if the user
+  authorized the action, click it by ref or with `do` and `click! "<exact name>"`.
 - After acting it reports yes/no probabilities for a challenge, a login wall, an error,
   a dialog and an empty state, plus `--expect`, from what is on screen. `check` runs the
   same checks alone. `--no-check` skips them. These are judgments; confirm the result
