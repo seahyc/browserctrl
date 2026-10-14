@@ -73,6 +73,14 @@ async function glMRs(iids) {
   } finally { try { bc('close', id); } catch {} }
   return out;
 }
+// Visit pages for truth, re-reading any that came back nearly empty (a slow app shell).
+function visitTexts(urls, extra = []) {
+  const pages = bcJson('visit', ...urls, '--max-text', '60000', ...extra, '--json');
+  for (let i = 0; i < pages.length; i++) {
+    if ((pages[i].text || '').length < 300) { try { pages[i] = bcJson('visit', urls[i], '--max-text', '60000', '--json')[0]; } catch {} }
+  }
+  return pages;
+}
 const glabOk = () => { try { gitlab('user'); return true; } catch { return false; } };
 
 // Each check returns [{name, ok, detail}]. Truth is read live, before and after the run when it can drift.
@@ -229,7 +237,7 @@ const checks = {
   },
   async 'lazada-brand-stores'(a) {
     const got = a.listings ?? [];
-    const pages = got.length ? bcJson('visit', ...got.map((l) => l.url), '--max-text', '60000', '--parallel', '1', '--json') : [];
+    const pages = got.length ? visitTexts(got.map((l) => l.url), ['--parallel', '1']) : [];
     const out = [{ name: 'three listings', ok: got.length === 3 }]; // product-page prices need not follow the list's order
     got.forEach((l, i) => {
       const text = pages[i]?.text || '';
@@ -239,7 +247,7 @@ const checks = {
   },
   async 'carousell-aeron-sellers'(a) {
     const got = a.listings ?? [];
-    const pages = got.length ? bcJson('visit', ...got.map((l) => l.url), '--max-text', '60000', '--parallel', '1', '--json') : [];
+    const pages = got.length ? visitTexts(got.map((l) => l.url), ['--parallel', '1']) : [];
     const out = [{ name: 'three listings', ok: got.length === 3 }];
     got.forEach((l, i) => {
       const text = pages[i]?.text || '', price = Number(l.price_sgd);
@@ -257,7 +265,7 @@ const checks = {
     try { bc('wake', id); await sleep(5000); bc('do', id, 'click Failed'); await sleep(3000); links = JSON.parse(bc('eval', id, `JSON.stringify([...new Set([...document.querySelectorAll('a[href*="/payments/pi_"]')].map(a => a.href.match(/pi_[A-Za-z0-9]+/)[0]))])`)); } catch {}
     try { bc('close', id); } catch {}
     const got = a.payments ?? [];
-    const pages = got.length ? bcJson('visit', ...got.map((p) => `https://dashboard.stripe.com/payments/${p.id}`), '--max-text', '60000', '--json') : [];
+    const pages = got.length ? visitTexts(got.map((p) => `https://dashboard.stripe.com/payments/${p.id}`)) : [];
     const out = [{ name: 'the 3 newest failed payment ids, in order', ok: JSON.stringify(got.map((p) => p.id)) === JSON.stringify(links.slice(0, 3)), detail: links.slice(0, 3) }];
     got.forEach((p, i) => {
       const text = pages[i]?.text || '';
@@ -268,7 +276,7 @@ const checks = {
   async 'cna-top-bylines'(a) {
     const got = a.articles ?? [];
     const section = await pageText('https://www.channelnewsasia.com/singapore', 6000);
-    const pages = got.length ? bcJson('visit', ...got.map((x) => x.url), '--max-text', '60000', '--json') : [];
+    const pages = got.length ? visitTexts(got.map((x) => x.url)) : [];
     // "At the top" means in the first quarter of the section page's text.
     const top = norm(section).slice(0, Math.max(3000, norm(section).length / 4));
     const out = [{ name: 'three articles from the top of the Singapore section', ok: got.length === 3 && got.every((x) => top.includes(norm(x.headline).slice(0, 40))), detail: got.map((x) => norm(section).indexOf(norm(x.headline).slice(0, 40))) }];
