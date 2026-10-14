@@ -51,3 +51,10 @@ t('an uncleared challenge times out with an error', async () => {
   const tab = await open('verify/captcha?x=2');
   await assert.rejects(solve(conn, tab, { timeoutMs: 600, pollMs: 200 }), /was not cleared within/);
 });
+
+t('an invisible captcha frame (as Stripe embeds) is not a challenge', async () => {
+  const id = (await ops.newTab(conn, fixture.url + 'fixtures/invisible-captcha.html')).targetId;
+  await ops.waitForReady(conn, id, { waitUntil: 'load' });
+  assert.equal(await detect(conn, id), null);
+  await ops.closeTab(conn, id);
+});
