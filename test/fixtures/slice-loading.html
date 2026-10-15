@@ -4,7 +4,7 @@
 <body>
 <div id="results" aria-busy="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
 <script>
-  // Results arrive after a chain of slow API calls (about 4.5 s), as a search page pages
+  // Results arrive after a chain of slow API calls (about 3 s), as a search page pages
   // through its backend; the placeholders hold still meanwhile.
   function step(n) {
     if (!n) {
@@ -15,6 +15,6 @@
     }
     fetch('/delay?ms=750&n=' + n).then(function () { step(n - 1); });
   }
-  step(6);
+  step(4);
 </script>
 </body></html>

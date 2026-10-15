@@ -119,10 +119,13 @@ t('read shows a disclosure button as collapsed or expanded, and items lists the 
   await ops.click(conn, id, { ref: rowOf(snap, /^Number of seats$/).ref, token: snap.token });
   snap = await ops.readPage(conn, id);
   assert.match(formatRead(snap), /Number of seats\s+\(expanded\)/);
+  // The opened section's options are their own group even though they sit inside the
+  // accordion list's item, and they come first under the group cap.
   const r = await ops.evaluate(conn, id, itemsExpression({ maxGroups: 1 }));
   assert.equal(r.groups.length, 1);
   assert.equal(r.groups[0].revealed, 'expanded', JSON.stringify(r.groups.map(g => [g.heading, g.revealed])));
-  assert.match(formatItems(r), /3 seats[\s\S]*\(in an expanded section\)|\(in an expanded section\)[\s\S]*3 seats/);
+  assert.deepEqual(r.groups[0].items.map(i => i.text), ['1 seat', '2 seats', '3 seats', '4 seats', '5 seats']);
+  assert.match(formatItems(r), /\(in an expanded section\)/);
 });
 
 t('click and fill take a positional ref or selector; a word that is neither says what to do instead', async () => {
