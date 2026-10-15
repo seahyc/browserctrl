@@ -150,5 +150,53 @@
     "goal": "On CNA (channelnewsasia.com), open the Singapore section. Open each of the first 3 stories at the top of that section and report its headline, author byline and published date as shown on the article.",
     "answer": "{\"articles\": [{\"headline\": str, \"author\": str, \"published\": str, \"url\": str}] (3)}",
     "jev_allow_controls": []
+  },
+  {
+    "id": "hn-top-comments",
+    "kind": "r6",
+    "start_url": "https://news.ycombinator.com/",
+    "goal": "On Hacker News, among the stories on the front page find the 3 with the most points. Open each one's comments page and report its item id, title, points, number of comments, and the username of the first (top) comment.",
+    "answer": "{\"stories\": [{\"item_id\": number, \"title\": str, \"points\": number, \"comments\": number, \"top_commenter\": str}] (3, most points first)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "wiki-tallest",
+    "kind": "r6",
+    "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+    "goal": "On Wikipedia, open the article \"List of tallest buildings in Singapore\". Take the 3 tallest buildings in its main ranking table, open each building's own article and report its name, height in metres and year of completion as given in that article's infobox.",
+    "answer": "{\"buildings\": [{\"name\": str, \"height_m\": number, \"completed\": number, \"url\": str}] (3, tallest first)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "so-top-puppeteer",
+    "kind": "r6",
+    "start_url": "https://stackoverflow.com/",
+    "goal": "On Stack Overflow, list the questions tagged puppeteer sorted by score, highest first. Open the 3 highest-scored questions and report each one's id, title, score, and the display name of the author of its accepted answer (empty string if none).",
+    "answer": "{\"questions\": [{\"id\": number, \"title\": str, \"score\": number, \"accepted_answer_author\": str}] (3, highest score first)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "npm-headless",
+    "kind": "r6",
+    "start_url": "https://www.npmjs.com/",
+    "goal": "On npmjs.com, search for \"headless browser\". Open the first 3 results and report each package's name, latest version, license and weekly downloads as shown on its page.",
+    "answer": "{\"packages\": [{\"name\": str, \"version\": str, \"license\": str, \"weekly_downloads\": number}] (3, in result order)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "youtube-popular",
+    "kind": "r6",
+    "start_url": "https://www.youtube.com/",
+    "goal": "On YouTube, open the channel @veritasium, go to its Videos tab and sort by Popular. Report the 5 most popular videos' titles and view counts as shown, then open the top 2 and report their upload dates.",
+    "answer": "{\"videos\": [{\"title\": str, \"views\": str, \"url\": str}] (5, most popular first), \"top2_upload_dates\": [str, str]}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "imdb-top3",
+    "kind": "r6",
+    "start_url": "https://www.imdb.com/",
+    "goal": "On IMDb, open the Top 250 movies chart. Open the top 3 movies and report each one's title, year, director and runtime as shown on its page.",
+    "answer": "{\"movies\": [{\"title\": str, \"year\": number, \"director\": str, \"runtime\": str, \"url\": str}] (3, in chart order)}",
+    "jev_allow_controls": []
   }
 ]

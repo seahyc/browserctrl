@@ -293,6 +293,96 @@ const checks = {
     });
     return out;
   },
+  async 'hn-top-comments'(a) {
+    // Truth from the official API: front page = the first 30 top stories; points drift, so
+    // a story counts when it is in the top 5 now and its numbers are within 15%.
+    const api = (p) => fetch(`https://hacker-news.firebaseio.com/v0/${p}.json`).then((r) => r.json());
+    const ids = (await api('topstories')).slice(0, 30);
+    const items = await Promise.all(ids.map((id) => api(`item/${id}`)));
+    const top5 = items.filter(Boolean).sort((x, y) => y.score - x.score).slice(0, 5);
+    const got = a.stories ?? [];
+    const near = (x, y) => Math.abs(Number(x) - Number(y)) <= Math.max(5, 0.15 * Number(y));
+    const out = [{ name: 'three stories among the 5 highest-scored on the front page', ok: got.length === 3 && got.every((g) => top5.some((t) => t.id === Number(g.item_id))), detail: top5.map((t) => t.id) }];
+    for (const g of got) {
+      const t = items.find((x) => x && x.id === Number(g.item_id)) || await api(`item/${Number(g.item_id)}`);
+      const first = t?.kids?.length ? await api(`item/${t.kids[0]}`) : null;
+      out.push({ name: `story ${g.item_id}: points, comments, top commenter`, ok: !!t && near(g.points, t.score) && near(g.comments, t.descendants) && (!first || first.deleted || norm(first.by) === norm(g.top_commenter)), detail: { score: t?.score, comments: t?.descendants, first: first?.by } });
+    }
+    return out;
+  },
+  async 'wiki-tallest'(a) {
+    // The list's first ranking table names the tallest; each article's infobox has the facts.
+    const id = await readyTab('https://en.wikipedia.org/wiki/List_of_tallest_buildings_in_Singapore');
+    let top = [];
+    try { top = JSON.parse(bc('eval', id, `JSON.stringify([...document.querySelectorAll('table.wikitable')[0].querySelectorAll('tbody tr')].map(tr => { const a = [...tr.querySelectorAll('td a, th a')].find(x => x.closest('td,th') && !/^\\[|^\\d/.test(x.textContent.trim())); return a ? a.textContent.trim() : null; }).filter(Boolean).slice(0, 5))`)); } catch {}
+    try { bc('close', id); } catch {}
+    const got = a.buildings ?? [];
+    const pages = got.length ? visitTexts(got.map((b) => b.url)) : [];
+    const out = [{ name: 'the 3 tallest in the list, tallest first', ok: got.length === 3 && got.every((b, i) => top.slice(0, 4).some((t) => norm(t).includes(norm(b.name).slice(0, 12)) || norm(b.name).includes(norm(t).slice(0, 12)))), detail: top }];
+    got.forEach((b, i) => {
+      const text = pages[i]?.text || '';
+      out.push({ name: `${b.name}: height and year on its article`, ok: /wikipedia\.org\/wiki\//.test(b.url) && text.includes(String(Math.round(Number(b.height_m)))) && text.includes(String(b.completed)), detail: { height: b.height_m, completed: b.completed, chars: text.length } });
+    });
+    return out;
+  },
+  async 'so-top-puppeteer'(a) {
+    const se = (p) => fetch(`https://api.stackexchange.com/2.3/${p}${p.includes('?') ? '&' : '?'}site=stackoverflow`).then((r) => r.json());
+    const qs = (await se('questions?order=desc&sort=votes&tagged=puppeteer&pagesize=3')).items || [];
+    const acc = qs.map((q) => q.accepted_answer_id).filter(Boolean);
+    const answers = acc.length ? ((await se(`answers/${acc.join(';')}`)).items || []) : [];
+    const got = a.questions ?? [];
+    const out = [{ name: 'the 3 highest-scored puppeteer questions, in order', ok: JSON.stringify(got.map((q) => Number(q.id))) === JSON.stringify(qs.map((q) => q.question_id)), detail: qs.map((q) => q.question_id) }];
+    got.forEach((g, i) => {
+      const q = qs[i] || {}, ans = answers.find((x) => x.answer_id === q.accepted_answer_id);
+      const he = (s) => String(s || '').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+      out.push({ name: `question ${g.id}: score and accepted answer author`, ok: Math.abs(Number(g.score) - q.score) <= Math.max(3, q.score * 0.02) && norm(g.accepted_answer_author) === norm(he(ans?.owner?.display_name || '')), detail: { score: q.score, author: he(ans?.owner?.display_name || '') } });
+    });
+    return out;
+  },
+  async 'npm-headless'(a) {
+    // The site's search order is its own; the registry gives version and license, the
+    // downloads API the weekly count (windows differ, so within 25%).
+    const got = a.packages ?? [];
+    const search = await fetch('https://registry.npmjs.org/-/v1/search?text=headless%20browser&size=20').then((r) => r.json());
+    const names = (search.objects || []).map((o) => o.package.name);
+    const out = [{ name: 'three packages from the search results', ok: got.length === 3 && got.every((g) => names.includes(g.name)), detail: names.slice(0, 6) }];
+    for (const g of got) {
+      const meta = await fetch(`https://registry.npmjs.org/${encodeURIComponent(g.name).replace('%40', '@')}/latest`).then((r) => r.json()).catch(() => ({}));
+      const dl = await fetch(`https://api.npmjs.org/downloads/point/last-week/${g.name}`).then((r) => r.json()).catch(() => ({}));
+      const lic = typeof meta.license === 'string' ? meta.license : meta.license?.type;
+      out.push({ name: `${g.name}: version, license, weekly downloads`, ok: g.version === meta.version && norm(g.license) === norm(lic) && Math.abs(Number(g.weekly_downloads) - dl.downloads) <= dl.downloads * 0.25 + 50, detail: { version: meta.version, license: lic, downloads: dl.downloads } });
+    }
+    return out;
+  },
+  async 'youtube-popular'(a) {
+    const id = await readyTab('https://www.youtube.com/@veritasium/videos');
+    let text = '';
+    try { bc('wake', id); await sleep(3000); try { bc('do', id, 'click Popular'); } catch {} await sleep(4000); text = bc('text', id, '--max-text', '60000'); } catch {}
+    try { bc('close', id); } catch {}
+    const got = a.videos ?? [];
+    const head = norm(text).slice(0, Math.max(4000, norm(text).length / 3));
+    const out = [{ name: 'five videos from the top of the Popular view', ok: got.length === 5 && got.every((v) => head.includes(norm(v.title).slice(0, 30))), detail: { chars: text.length } }];
+    const pages = got.length >= 2 ? visitTexts(got.slice(0, 2).map((v) => v.url)) : [];
+    (a.top2_upload_dates || []).forEach((d, i) => {
+      const t = norm(pages[i]?.text || ''), year = (String(d).match(/\d{4}/) || [''])[0];
+      out.push({ name: `video ${i + 1}: upload date on its page`, ok: /youtube\.com\/watch|youtu\.be\//.test(got[i]?.url || '') && !!year && t.includes(year), detail: { date: d, chars: t.length } });
+    });
+    return out;
+  },
+  async 'imdb-top3'(a) {
+    const id = await readyTab('https://www.imdb.com/chart/top/');
+    let top = [];
+    try { top = JSON.parse(bc('eval', id, `JSON.stringify([...document.querySelectorAll('a[href*="/title/tt"] h3, h3.ipc-title__text')].map(h => h.textContent.replace(/^\\d+\\.\\s*/, '').trim()).filter(Boolean).slice(0, 5))`)); } catch {}
+    try { bc('close', id); } catch {}
+    const got = a.movies ?? [];
+    const pages = got.length ? visitTexts(got.map((m) => m.url), ['--parallel', '1']) : [];
+    const out = [{ name: 'the top 3 of the chart, in order', ok: got.length === 3 && got.every((m, i) => norm(top[i] || '').includes(norm(m.title).slice(0, 15)) || norm(m.title).includes(norm(top[i] || '').slice(0, 15))), detail: top.slice(0, 3) }];
+    got.forEach((m, i) => {
+      const t = norm(pages[i]?.text || '');
+      out.push({ name: `${m.title}: year, director, runtime on its page`, ok: /imdb\.com\/title\/tt/.test(m.url) && t.includes(String(m.year)) && t.includes(norm(m.director)) && t.includes(norm(m.runtime).replace(/\s+/g, ' ')), detail: { director: m.director, runtime: m.runtime, chars: t.length } });
+    });
+    return out;
+  },
   async 'cna-singapore'(a) {
     const text = await pageText('https://www.channelnewsasia.com/singapore', 7000);
     const got = a.articles ?? [];
