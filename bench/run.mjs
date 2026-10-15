@@ -357,7 +357,7 @@ Your final message must be only a JSON object of this shape: ${task.answer}
 Add "notes": a one-line string on anything that went wrong.`;
   if (arm === 'D') return `${common}
 
-Method: plan with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md, sections "Plan several steps in one call with do" and "Read lists, cards and messages with items"). Send the steps you can foresee in ONE call instead of reading the page before each click:
+Method: plan with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md, sections "Plan several steps in one call with do" and "Read lists, cards and messages with items"). If the site keeps filters in its URL, nav to that URL instead of driving the filter controls. Otherwise send the steps you can foresee in ONE call instead of reading the page before each click:
   browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --browser dia
 It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. For lists that span pages, add --repeat 'click "Next"' --until "<when to stop>" --collect items to the do call. To open several items from a list, pass their links to \`browserctrl visit <link>... --from ${tab} --grep "<what to find>" --browser dia\` (parallel, returns matching lines per page) instead of clicking into each. Do not use jev-tool.`;
   if (arm === 'C') return `${common}

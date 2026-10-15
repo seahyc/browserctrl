@@ -299,7 +299,11 @@ Pick the first that fits; each step down costs more agent turns:
 
 1. A recipe for the site (`browserctrl recipe find <url>`): one call, no page at all.
 2. A URL that already carries the filter or search, when the site keeps them in its
-   address (`?q=`, `?state=merged&author_username=…`, `?sort=priceasc`): `nav` to it.
+   address (`?q=`, `?state=merged&author_username=…`, `?sort=priceasc`): `nav` to it, or
+   start the plan with a `nav` step. Check this before driving a filter box: after one
+   click, the address often shows the parameter names (`?state=closed`), and token filters
+   (GitLab, Jira) take several steps in the UI but one in the URL. In the benchmark,
+   GitLab tasks took half the time this way.
 3. **`do` with the whole plan and `--then items`** (see [below](#plan-several-steps-in-one-call-with-do)):
    send every step you can foresee in one call. In benchmarks on marketplaces, GitHub,
    GitLab, Stripe and news sites it took 30–70% less time than reading and clicking

@@ -85,3 +85,12 @@ test('a label cut through an emoji still makes a valid request', async () => {
   assert.doesNotMatch(seen[0], /\\ud83d(?!\\ud)/i);
   assert.ok(Buffer.from(seen[0], 'utf8').toString('utf8') === seen[0]);
 });
+
+test('removing a search filter is not a commit; removing anything else still is', async () => {
+  const { commits } = await import('../lib/jev.mjs');
+  assert.equal(commits('Remove', { infilter: true }), false);
+  assert.equal(commits('Clear filters', { infilter: true }), false);
+  assert.equal(commits('Remove'), true);
+  assert.equal(commits('Delete account', { infilter: true }), true);
+  assert.equal(commits('Buy now', { infilter: true }), true);
+});
