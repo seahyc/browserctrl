@@ -469,6 +469,16 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   with p, dismissed overlays and notices. Review traces after the task, or when a
   result looks wrong, instead of adding read steps to the plan. Traces live in
   `~/.local/share/browserctrl/traces/` (`BROWSERCTRL_TRACES` overrides).
+- Each run also updates the site's **flow notes**: short facts learned from what
+  worked, such as a control that puts a filter in the URL, a field that submits on
+  Enter, the control that closed an overlay, a sequence of steps that finished, or
+  pages that drew a challenge when `visit` opened them together. `open`, `nav` and
+  `read` print the best five as `hint:` lines after any recipe hint. Treat them as
+  advice: if a note says a filter is in the URL, try one `nav` to it before driving
+  the filter UI. A failed run counts against the notes it contradicts, so stale ones
+  drop out. `browserctrl notes [site] [--clear]` shows or clears them; `--no-notes`
+  skips the hint once, `BROWSERCTRL_NOTES=quiet` records without hinting, `=off`
+  disables them (`BROWSERCTRL_NOTES_DIR` moves the store).
 - Intent targets, expectations, `--until` and `--dismiss` need `TYPESAFE_API_KEY` (see
   [Jev](#jev)). Exact names work without it; overlay checks are then skipped.
 

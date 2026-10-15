@@ -18,6 +18,7 @@ process.env.BROWSERCTRL_EXEMPLARS ||= path.join(os.tmpdir(), 'browserctrl-test-e
 process.env.BROWSERCTRL_RECIPE_TABS ||= path.join(os.tmpdir(), 'browserctrl-test-recipe-tabs.json');
 process.env.BROWSERCTRL_RECIPES ||= path.join(os.tmpdir(), 'browserctrl-test-recipes');
 process.env.BROWSERCTRL_TAPS ||= path.join(os.tmpdir(), 'browserctrl-test-taps');
+process.env.BROWSERCTRL_NOTES_DIR ||= path.join(os.tmpdir(), `browserctrl-test-notes-${process.pid}`);
 // Challenges on the fixture host would otherwise cool 127.0.0.1 down for other
 // test files, and the solver config must never come from the real home dir.
 process.env.BROWSERCTRL_COOLDOWN ||= path.join(os.tmpdir(), `browserctrl-test-cooldown-${process.pid}.json`);

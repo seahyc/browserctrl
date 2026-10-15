@@ -34,6 +34,7 @@ import * as prefetch from '../lib/prefetch.mjs';
 import { visit, formatVisits } from '../lib/visit.mjs';
 import * as show from '../lib/show.mjs';
 import * as trace from '../lib/trace.mjs';
+import * as notes from '../lib/notes.mjs';
 
 const MUTATING = new Set([
   'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha', 'do',
@@ -61,9 +62,11 @@ const out = v => console.log(typeof v === 'string' ? v : JSON.stringify(v, null,
 
 // A matching recipe is usually much faster than the UI the agent is about to
 // drive. Hints go to stderr so stdout stays parseable.
-function hint(url) {
+// Flow notes (lib/notes.mjs) follow: what worked on this site in past runs.
+function hint(url, flags = {}) {
   const line = recipeHint(url);
   if (line) console.error(`hint: ${line}`);
+  if (!flags['no-notes']) for (const l of notes.hintLines(url)) console.error(`hint: ${l}`);
 }
 
 // After a page load: a challenge starts the site's cool-down; say so on stderr.
@@ -155,6 +158,9 @@ function usage() {
                                                    [--repeat 'click Next' --until "<condition>" --max 10 --collect items|text]
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
     browserctrl trace <tab> [--last N] [--json]          what recent do runs did: targets, expectations, overlays, notices
+    browserctrl notes [site] [--clear] [--json]          flow notes learned from do runs (URL filters, Enter submits, overlays,
+                                                         flows that worked); open/nav/read hint them. --no-notes skips the hint;
+                                                         BROWSERCTRL_NOTES=quiet records without hints, =off disables
     browserctrl check <tab> [--expect "…"]               Jev yes/no checks: challenge, login, error, dialog, empty
     browserctrl click <tab> --ref ref_3 [--button right] [--count 2] [--mod cmd,shift]
     browserctrl hover <tab> --selector ".menu"
@@ -317,6 +323,17 @@ const main = async () => {
     if (!positional[1]) throw new Error('Usage: browserctrl trace <tab> [--last N] [--json]');
     const runs = trace.read(positional[1], { last: Number(flags.last || 5) });
     return out(flags.json ? runs : trace.format(runs));
+  }
+  if (cmd === 'notes') {
+    const what = positional[1];
+    if (flags.clear) return out(`Cleared flow notes: ${notes.clear(what)}`);
+    if (!what) {
+      const all = notes.sites();
+      if (flags.json) return out(all);
+      return out(all.map(s => `${s.site}  ${s.facts} notes, last ${s.last.slice(0, 10)}`).join('\n') || `(no flow notes yet; they are written from do runs into ${notes.dir()})`);
+    }
+    const note = notes.show(what);
+    return out(flags.json ? note : notes.format(note));
   }
   if (cmd === 'cooldown') {
     if (positional[1] === 'clear') {
@@ -609,7 +626,7 @@ const main = async () => {
         await ops.waitForReady(conn, res.targetId, { waitUntil: flags.until || 'load' }).catch(() => {});
         res = await observe(conn, res.targetId, res);
       }
-      hint(positional[1]);
+      hint(positional[1], flags);
       return out(res);
     }
 
@@ -697,7 +714,7 @@ const main = async () => {
           includeHidden: Boolean(flags['include-hidden']),
           all: Boolean(flags.all),
         });
-        hint(snap.url);
+        hint(snap.url, flags);
         snap.params = await ops.evaluate(conn, targetId, PAGE_PARAMS).catch(() => []);
         if (flags.json) return out(snap);
         return out(formatRead(snap) + (snap.params?.length ? `\nurl params (set them with a nav step): ${formatParams(snap.params)}` : ''));
@@ -759,7 +776,7 @@ const main = async () => {
         cooldown.guard(positional[2], { force: Boolean(flags.force), action: 'navigate to' });
         let res = await ops.navigate(conn, targetId, positional[2], { waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000 });
         if ((flags.until || 'load') !== 'none') res = await observe(conn, targetId, res);
-        hint(res.url);
+        hint(res.url, flags);
         return out(res);
       }
       case 'wait':

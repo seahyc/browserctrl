@@ -14,6 +14,7 @@ import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
 import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
 import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint } from '../lib/recipes.mjs';
+import * as notes from '../lib/notes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
 import * as cooldown from '../lib/cooldown.mjs';
@@ -401,6 +402,9 @@ function withChallenge(res, found) {
 function withHint(result, url) {
   const line = url && recipeHint(url);
   if (line) result.content.push({ type: 'text', text: `hint: ${line}` });
+  // Flow notes: what worked on this site in the user's past runs.
+  const learned = url ? notes.hintLines(url) : [];
+  if (learned.length) result.content.push({ type: 'text', text: learned.map(l => `hint: ${l}`).join('\n') });
   return result;
 }
 

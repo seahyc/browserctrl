@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as trace from '../lib/trace.mjs';
+import * as notes from '../lib/notes.mjs';
 import { parseStep, runSteps, formatSteps } from '../lib/steps.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 
@@ -269,5 +270,10 @@ t('every run is traced per tab and `trace` prints it', async () => {
   assert.match(cli, /notice: "Price changed to S\$590"/);
   const json = JSON.parse(execFileSync(process.execPath, [path.join(HERE, '..', 'bin', 'browserctrl.mjs'), 'trace', id.slice(0, 8), '--json'], { env: { ...process.env, BROWSERCTRL_TRACES: TRACES }, encoding: 'utf8' }));
   assert.equal(json.at(-1).steps.length, 3);
+  // The finished run left flow notes for the site: the overlay and the flow that worked.
+  const learned = notes.show('127.0.0.1').facts;
+  assert.ok(learned.some(f => f.kind === 'overlay' && /cookie banner appears/.test(f.text)), JSON.stringify(learned));
+  assert.ok(learned.some(f => f.kind === 'flow' && /click "More filters" → fill "Maximum" → click "Apply"/.test(f.text)), JSON.stringify(learned));
+  assert.ok(notes.hintLines(fixture.url + 'fixtures/steps-shop.html').length > 1);
   await ops.closeTab(conn, id);
 });
