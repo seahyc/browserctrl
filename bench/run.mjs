@@ -372,7 +372,7 @@ const checks = {
       const info = (await fetch(`https://pypi.org/pypi/${encodeURIComponent(g.name)}/json`).then((r) => r.json()).catch(() => ({}))).info || {};
       const lic = info.license_expression || info.license || (info.classifiers || []).find((c) => c.startsWith('License ::'))?.split('::').pop().trim() || '';
       const licOk = !lic ? !g.license || /none|not specified|unknown/i.test(g.license) : norm(lic).includes(norm(g.license)) || norm(g.license).includes(norm(lic).slice(0, 12));
-      out.push({ name: `${g.name}: version, license, requires python`, ok: g.version === info.version && licOk && norm(g.requires_python || '').replace(/\s/g, '') === norm(info.requires_python || '').replace(/\s/g, ''), detail: { version: info.version, license: lic.slice(0, 40), requires_python: info.requires_python } });
+      out.push({ name: `${g.name}: version, license, requires python`, ok: g.version === info.version && licOk && (info.requires_python ? norm(g.requires_python || '').replace(/\s/g, '') === norm(info.requires_python).replace(/\s/g, '') : !g.requires_python || /not shown|none|not specified|n\/a/i.test(g.requires_python)), detail: { version: info.version, license: lic.slice(0, 40), requires_python: info.requires_python } });
     }
     return out;
   },
