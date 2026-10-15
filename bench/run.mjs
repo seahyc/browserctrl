@@ -305,8 +305,10 @@ const checks = {
     const out = [{ name: 'three stories among the 5 highest-scored on the front page', ok: got.length === 3 && got.every((g) => top5.some((t) => t.id === Number(g.item_id))), detail: top5.map((t) => t.id) }];
     for (const g of got) {
       const t = items.find((x) => x && x.id === Number(g.item_id)) || await api(`item/${Number(g.item_id)}`);
-      const first = t?.kids?.length ? await api(`item/${t.kids[0]}`) : null;
-      out.push({ name: `story ${g.item_id}: points, comments, top commenter`, ok: !!t && near(g.points, t.score) && near(g.comments, t.descendants) && (!first || first.deleted || norm(first.by) === norm(g.top_commenter)), detail: { score: t?.score, comments: t?.descendants, first: first?.by } });
+      // Comment ranking moves minute to minute: the reported commenter must be among the top 3.
+      const tops = t?.kids?.length ? await Promise.all(t.kids.slice(0, 3).map((k) => api(`item/${k}`))) : [];
+      const bys = tops.filter((c) => c && !c.deleted).map((c) => norm(c.by));
+      out.push({ name: `story ${g.item_id}: points, comments, top commenter`, ok: !!t && near(g.points, t.score) && near(g.comments, t.descendants) && (!bys.length || bys.includes(norm(g.top_commenter))), detail: { score: t?.score, comments: t?.descendants, top: bys } });
     }
     return out;
   },
@@ -319,10 +321,10 @@ const checks = {
     const got = a.buildings ?? [];
     const pages = got.length ? visitTexts(got.map((b) => b.url)) : [];
     // Matched by article link (names differ from titles: "UOB Plaza" / "United Overseas Bank
-    // Plaza One"); the first 4 rows count because ranks can tie.
+    // Plaza One"); the first 5 rows count: four buildings tie at 280 m for second place.
     const path = (u) => { try { return decodeURIComponent(new URL(u).pathname); } catch { return ''; } };
     const final = (i) => path(pages[i]?.final_url || got[i]?.url);
-    const out = [{ name: 'the 3 tallest in the list', ok: got.length === 3 && got.every((b, i) => top.slice(0, 4).some((t) => t.href === path(b.url) || t.href === final(i) || norm(t.name) === norm(b.name))), detail: top.map((t) => t.href) }];
+    const out = [{ name: 'the 3 tallest in the list', ok: got.length === 3 && got.every((b, i) => top.slice(0, 5).some((t) => t.href === path(b.url) || t.href === final(i) || norm(t.name) === norm(b.name))), detail: top.map((t) => t.href) }];
     got.forEach((b, i) => {
       const text = pages[i]?.text || '';
       out.push({ name: `${b.name}: height and year on its article`, ok: /wikipedia\.org\/wiki\//.test(b.url) && text.includes(String(Math.round(Number(b.height_m)))) && text.includes(String(b.completed)), detail: { height: b.height_m, completed: b.completed, chars: text.length } });
