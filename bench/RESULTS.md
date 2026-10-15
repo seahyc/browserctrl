@@ -26,6 +26,11 @@ which costs retries. The skill already ranks "a URL that carries the filter" abo
 but the D prompt overrides it. In run 43, with the settle fixes below, D's `do` calls took
 1.7-7 s each and its GitLab-author time fell to 86 s (A: 29 s).
 
+**After the round:** with "if the site keeps filters in its URL, nav to that URL" added to the
+skill and the D prompt, one confirmation run of each GitLab task (run 44, passing) took 50 s
+(closed MRs; A median 99 s, −49%) and 31 s (author commits; A median 59 s, −47%). One run
+each, so indicative only.
+
 Fixes made during the round, from traces:
 
 - Settle polled with in-page timers, which Chrome throttles in background tabs (steps waited
