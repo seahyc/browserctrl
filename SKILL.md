@@ -474,8 +474,8 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   `hover`, `key Enter`, `type "<text>"` (into whatever has focus), `scroll down|up`,
   `nav <url>`, `wait <ms>`, `expect <what the page shows>`, and `date YYYY-MM-DD`.
 - `date YYYY-MM-DD` picks a calendar day (open the picker first): it matches any day-cell
-  label format and pages months to the date. A click that names a whole date ("Oct 17,
-  2026") does the same.
+  label or text format, waits for a picker that is still opening, and pages months to the
+  date. A click that names a whole date ("Oct 17, 2026") does the same.
 - A step can name an element directly: `click ref_25` (from your last read), `click i140`
   (an `items` id, unquoted), or a CSS selector `click "#id"` / `click '[data-value="600"]'`.
   These never go to Jev.
@@ -483,7 +483,12 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   pick that lacks a number or date your step names stops instead of guessing. A checkbox
   or radio that didn't change, or a page that shows an error after a step, also stops.
 - `!` matters only on click and select (`click! "Place order"`); typing, ticking boxes and
-  following links never need it.
+  following links never need it. A click by ref or items id (`click ref_3`) is deliberate
+  and never guarded, and "Order Now"-style buttons that only start an order run unless the
+  page shows a bag total or payment step.
+- When several controls share a name, Jev sees each one's row, and an unsure pick stops
+  listing them (`click ref_7 (near "Start time") or click ref_8 (near "End time")`): pick
+  one by ref.
 - `fill` types like a person (select the old text, insert the new), so search-as-you-type
   boxes, comboboxes and token filters react. Plan a token filter the way you would click
   it: open the box, type the field name, pick it, pick the operator if one is offered,
