@@ -31,6 +31,8 @@ Run 63 used the new decision table in SKILL.md ("when to use nav, do, visit or -
 but the machine's load average was about 100 during it (A's HN time doubled), so its
 before/after effect cannot be read from these times.
 
+H-63 on YouTube (298 s, 21 calls) found its start tab still claimed by the harness's own session and worked around it in a new tab; its time is not comparable.
+
 Checker fixes during the round (comment ranking drift, tied heights, relative dates,
 `Requires-Python` wording, chart selectors) were applied to all arms and runs regraded with
 the same answers. npm was replaced by PyPI after Cloudflare challenged npm's package pages.
