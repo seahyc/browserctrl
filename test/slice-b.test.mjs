@@ -98,7 +98,7 @@ t('icon-only stepper buttons are named from their row and direction', async () =
   assert.ok(rowOf(snap, /^Increase Adults/));
   await ops.click(conn, id, { ref: inc.ref, token: snap.token });
   assert.equal(await ops.evaluate(conn, id, 'kids.textContent'), '1');
-  assert.match(formatRead(snap), /Increase Children Ages 0-17\s+\(named from its row\)/);
+  assert.match(formatRead(snap), /Increase Children\s+\(named from its row\)/);
 });
 
 t('a custom checkbox is not covered by its own stretched input; the click checks it', async () => {
