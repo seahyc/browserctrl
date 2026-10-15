@@ -181,6 +181,8 @@ function usage() {
     browserctrl site <site|url> [--json]                 before planning on a site: its recipes (run usage), then flow notes (ids, this page first)
     browserctrl notes [site|url] [--clear] [--json]      flow notes alone; open/nav/read and do steps hint recipes + notes
     browserctrl notes add <site|url> [--path /p] [--api] [--recipe <name>] "<fact>" [--force]
+    browserctrl notes add <site|url> --reveal "<target>" '<step>'... "<fact>"   do runs the steps when it cannot find that target
+    browserctrl notes add <site|url> --on "<situation>" '<step>'... "<fact>"    do runs the steps when Jev sees the situation
                                                          after a task: what would have saved time (Jev rejects answers/values);
                                                          --api: where a page's data comes from (a recipe candidate)
     browserctrl notes confirm <id> | drop <id> --why "…"  a note held / was wrong. --no-notes skips hints once;
@@ -363,7 +365,13 @@ const main = async () => {
       if (recipe && !listRecipes().some(r => r.name === recipe)) throw new Error(`No recipe ${recipe}. See: browserctrl site ${positional[2]}`);
       // --api "<text>": the text is the value of the flag when written before it.
       const restApi = typeof flags.api === 'string' ? [flags.api, ...rest] : rest;
-      const r = await notes.add(positional[2], restApi.join(' '), { path: typeof flags.path === 'string' ? flags.path : undefined, force: Boolean(flags.force), api: Boolean(flags.api), recipe });
+      // --reveal "<target>" / --on "<situation>": the words before the last are do steps, the last is the note.
+      const runFlag = typeof flags.reveal === 'string' ? 'reveal' : typeof flags.on === 'string' ? 'on' : null;
+      if ((flags.reveal || flags.on) && !runFlag) throw new Error('Usage: browserctrl notes add <site|url> --reveal "<target>" \'<step>\'... "<fact>"   or   --on "<situation>" \'<step>\'... "<fact>"');
+      if (runFlag && restApi.length < 2) throw new Error(`--${runFlag} needs at least one do step and then the note, e.g. notes add example.com --${runFlag} "${runFlag === 'reveal' ? 'Pets' : 'a cookie banner'}" 'click "${runFlag === 'reveal' ? 'Guests' : 'Accept'}"' "<what the note says>"`);
+      const text = runFlag ? restApi.at(-1) : restApi.join(' ');
+      const runSpec = runFlag ? { [runFlag]: { [runFlag === 'reveal' ? 'target' : 'situation']: flags[runFlag], steps: restApi.slice(0, -1) } } : {};
+      const r = await notes.add(positional[2], text, { path: typeof flags.path === 'string' ? flags.path : undefined, force: Boolean(flags.force), api: Boolean(flags.api), recipe, ...runSpec });
       if (flags.json) return out(r);
       if (!r.ok) { process.exitCode = 1; return out(`Not added: ${r.reason}`); }
       return out(`Added ${r.id} to ${r.site}${r.p != null ? ` (Jev p=${r.p})` : ''}${r.unchecked ? ` (not checked by Jev: ${r.unchecked})` : ''}`);

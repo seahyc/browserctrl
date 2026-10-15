@@ -284,3 +284,78 @@ t('every run is traced per tab and `trace` prints it', async () => {
   notes.clear('127.0.0.1');
   await ops.closeTab(conn, id);
 });
+
+// Notes act inside do: a reveal note brings out a hidden target, an on note handles a
+// situation Jev sees, the page's notes ride along as context, and the notes that ran are
+// confirmed or contradicted.
+t('a reveal note brings out a hidden target, then do confirms it', async () => {
+  const shop = fixture.url + 'fixtures/steps-shop.html';
+  const n = await notes.add(shop, 'The Maximum price box sits inside More filters', { force: true, reveal: { target: 'Maximum', steps: ['click "More filters"'] } });
+  assert.equal(n.ok, true, n.reason);
+  const ctx = await notes.add(shop, 'Search submits on Enter', { force: true });
+  const id = await open('steps-shop.html');
+  const jev = fakeJev({ targets: { Maximum: /^Maximum$/ } });
+  const r = await runSteps(conn, id, ['fill Search = aeron', 'key Enter', 'fill Maximum = 600'], { jev: jev.opts });
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  const step3 = r.steps[2];
+  assert.match(step3.how, new RegExp(`via note ${n.id}`));
+  assert.deepEqual(step3.via_notes, [{ id: n.id, kind: 'reveal', ok: true }]);
+  assert.deepEqual(r.notes_applied, [{ id: n.id, ok: true }]);
+  // The page's notes went to Jev as context with the grounding request.
+  assert.ok(jev.calls.some(c => c.state.site_notes?.some(x => /Search submits on Enter/.test(x))), JSON.stringify(jev.calls[0]?.state).slice(0, 400));
+  const out = formatSteps(r);
+  console.log(out);
+  assert.match(out, new RegExp(`via note ${n.id} \\(reveal\\): click "More filters"`));
+  assert.match(out, new RegExp(`notes: ${n.id} confirmed`));
+  const stored = notes.show('127.0.0.1').facts.find(f => f.id === n.id);
+  assert.equal(stored.count, 2);
+  assert.ok(notes.show('127.0.0.1').facts.find(f => f.id === ctx.id).count === 1, 'context-only notes are not confirmed');
+  notes.clear('127.0.0.1');
+  await ops.closeTab(conn, id);
+});
+
+t('a reveal note that does not bring the target out is contradicted', async () => {
+  const shop = fixture.url + 'fixtures/steps-shop.html';
+  const n = await notes.add(shop, 'Maximum appears after Search', { force: true, reveal: { target: 'Maximum', steps: ['click Search'] } });
+  const id = await open('steps-shop.html');
+  const r = await runSteps(conn, id, ['fill Maximum = 600'], { jev: fakeJev({ targets: { Maximum: /^Maximum$/ } }).opts });
+  assert.equal(r.done, false);
+  assert.deepEqual(r.notes_applied, [{ id: n.id, ok: false }]);
+  // Worked once (when added), failed once: dropped.
+  assert.equal(notes.show('127.0.0.1').facts.find(f => f.id === n.id), undefined);
+  notes.clear('127.0.0.1');
+  await ops.closeTab(conn, id);
+});
+
+t('an on note handles the situation Jev sees and the plan carries on', async () => {
+  const shop = fixture.url + 'fixtures/steps-shop.html';
+  const n = await notes.add(shop, 'A cookie popup covers the shop on first visit', { force: true, on: { situation: 'a cookie consent popup covers the page', steps: ['click "Accept cookies"'] } });
+  const id = await open('steps-shop.html?overlay=cookie');
+  const jev = fakeJev({ nouls: { 'a cookie consent popup': text => /We use cookies/.test(text) } });
+  // No --dismiss: without the note this plan would stop at the popup.
+  const r = await runSteps(conn, id, ['fill Search = aeron', 'key Enter'], { jev: jev.opts });
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.deepEqual(await ops.evaluate(conn, id, 'window.clicked'), ['accept']);
+  assert.deepEqual(r.steps[0].via_notes, [{ id: n.id, kind: 'on', ok: true }]);
+  assert.ok(r.events.some(e => e.type === 'note' && e.id === n.id && e.ok));
+  assert.deepEqual(r.notes_applied, [{ id: n.id, ok: true }]);
+  console.log(formatSteps(r));
+  assert.equal(notes.show('127.0.0.1').facts.find(f => f.id === n.id).count, 2);
+  notes.clear('127.0.0.1');
+  await ops.closeTab(conn, id);
+});
+
+t('a URL note that covers a planned click is suggested, the plan untouched', async () => {
+  const id = await open('steps-shop.html');
+  const url = await ops.evaluate(conn, id, 'location.href');
+  notes.record([{ site: '127.0.0.1', key: `url ${notes.pathTemplate(url)} more filters`, kind: 'url', path: notes.pathTemplate(url), ok: true,
+    text: `on ${notes.pathTemplate(url)}, click "More filters" sets ?panel=open in the URL; nav to it directly` }]);
+  const r = await runSteps(conn, id, ['click "More filters"'], { jev: fakeJev().opts });
+  assert.equal(r.done, true);
+  assert.equal(r.suggestions?.length, 1);
+  assert.match(formatSteps(r), /note \w{5}: on .*click "More filters" sets \?panel=open/);
+  const r2 = await runSteps(conn, id, ['click "More filters"'], { jev: fakeJev().opts, noNotes: true });
+  assert.equal(r2.suggestions, undefined);
+  notes.clear('127.0.0.1');
+  await ops.closeTab(conn, id);
+});

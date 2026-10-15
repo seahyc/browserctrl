@@ -201,3 +201,44 @@ test('browserctrl notes adds, lists, shows, confirms, drops and clears without a
   assert.match((await run('example.com', '--clear')).stdout, /Cleared flow notes: example\.com/);
   assert.match((await run()).stdout, /no flow notes yet/);
 });
+
+test('runnable notes: reveal and on steps are validated, matched and contradicted', async () => {
+  const bad = await notes.add('shop.sg', 'x', { force: true, reveal: { target: 'Pets', steps: ['fill Search = dog'] } });
+  assert.equal(bad.ok, false); assert.match(bad.reason, /types a value/);
+  const commit = await notes.add('shop.sg', 'x', { force: true, on: { situation: 'a popup', steps: ['click! "Buy"'] } });
+  assert.equal(commit.ok, false); assert.match(commit.reason, /commits/);
+  const both = await notes.add('shop.sg', 'x', { force: true, reveal: { target: 'a', steps: ['click b'] }, on: { situation: 'c', steps: ['click d'] } });
+  assert.equal(both.ok, false);
+  const r = await notes.add('https://shop.sg/search', 'Pets sits under Guests', { force: true, reveal: { target: 'Pets', steps: ['click "Guests"'] } });
+  assert.equal(r.ok, true, r.reason);
+  const o = await notes.add('shop.sg', 'A cookie banner appears on first visit', { force: true, on: { situation: 'a cookie banner', steps: ['click Accept'] } });
+  const run = notes.runnable('https://shop.sg/search?q=1');
+  assert.deepEqual(run.map(f => f.id).sort(), [r.id, o.id].sort());
+  assert.deepEqual(notes.runnable('https://shop.sg/other').map(f => f.id), [o.id]);
+  assert.equal(notes.revealFor(run, 'the Pets stepper').id, r.id);
+  assert.equal(notes.revealFor(run, 'Price'), null);
+  assert.match(notes.line(run.find(f => f.id === r.id)), /do runs it: to reach "Pets": click "Guests"/);
+  // The leak check sees the steps too.
+  const seen = [];
+  await notes.add('shop.sg', 'Pets sits under Guests', { reveal: { target: 'Pets', steps: ['click "Guests"'] }, cfg: { key: 'k', model: 'm' },
+    fetchImpl: async (u, init) => { seen.push(JSON.parse(init.body).state.note); return { ok: true, json: async () => ({ answers: { reusable: { noul: 0.9 } } }) }; } });
+  assert.match(seen[0], /steps it runs: click "Guests"/);
+  assert.equal(notes.contradict(o.id).ok, true);
+  assert.equal(notes.show('shop.sg').facts.find(f => f.id === o.id), undefined, 'worked once, failed once: dropped');
+  process.env.BROWSERCTRL_NOTES = 'quiet';
+  assert.deepEqual(notes.runnable('https://shop.sg/search'), [], 'quiet: notes never act');
+});
+
+test('www. and two-level suffixes share one site, and old www. files are merged', async () => {
+  fs.mkdirSync(DIR, { recursive: true });
+  const now = new Date().toISOString();
+  fs.writeFileSync(path.join(DIR, 'www.gov.uk.json'), JSON.stringify({ site: 'www.gov.uk', facts: [
+    { id: 'aaaaa', key: 'agent  the checker asks about savings', kind: 'agent', author: 'agent', v: 2, text: 'The checker asks about savings', count: 1, fails: 0, first: now, last: now }] }));
+  assert.equal(notes.siteOfUrl('https://www.gov.uk/check-benefits'), 'gov.uk');
+  const shown = notes.show('gov.uk');
+  assert.equal(shown.facts.length, 1);
+  assert.equal(shown.facts[0].text, 'The checker asks about savings');
+  assert.ok(!fs.existsSync(path.join(DIR, 'www.gov.uk.json')));
+  assert.equal(notes.show('https://www.gov.uk/x').facts.length, 1);
+  assert.equal(notes.siteOfUrl('https://www.bbc.co.uk/news'), 'bbc.co.uk');
+});

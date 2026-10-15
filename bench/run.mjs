@@ -484,6 +484,7 @@ Before planning, look the site up: ${prefix} browserctrl site <site or start URL
 When you have your answer, and before your final message, reflect: what would have saved you the most time on this site? Add up to 3 one-line facts about how the site works that would help a different task on it, never the answer or this task's values:
   ${prefix} browserctrl notes add <site or page URL> "<fact>"
 If you saw where a page's data comes from (an API endpoint), add it with --api: notes add <site> --api "<data> comes from <endpoint>".
+If the lesson is how to reach a control hidden behind another, write it so do runs it next time: notes add <site> --reveal "<the hidden control>" '<do step>'... "<fact>" (e.g. --reveal "Pets" 'click "Guests"'). If it is how to clear a recurring interruption: notes add <site> --on "<the situation>" '<do step>'... "<fact>" (e.g. --on "a cookie banner covers the page" 'click "Accept"'). Their steps only click, select, hover, press keys, scroll or wait.
 Confirm each note you relied on that held (notes confirm <id>) and drop each one that was wrong (notes drop <id> --why "<what was wrong>").
 Add "notes_added": <number of notes you added> to your JSON.`;
 }

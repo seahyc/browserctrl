@@ -375,7 +375,7 @@ const TOOLS = [
   {
     name: 'browser_notes',
     description:
-      'Flow notes: short facts about how a site works, hinted on open, navigate, read and do steps with an id. After finishing a task on a site, add up to 3 one-line facts that would have saved you the most time on a different task there (never the answer or the task\'s values; Jev rejects those). confirm a note you relied on that held; drop one that was wrong, with why. action=add (site or url, text, optional path template like /search), confirm (id), drop (id, why), list (optional site).',
+      'Flow notes: short facts about how a site works, hinted on open, navigate, read and do steps with an id. After finishing a task on a site, add up to 3 one-line facts that would have saved you the most time on a different task there (never the answer or the task\'s values; Jev rejects those). confirm a note you relied on that held; drop one that was wrong, with why. When the lesson is how to reach a control hidden behind another (Pets under Guests) or how to clear a recurring interruption, add it with reveal or on so do runs it next time. action=add (site or url, text, optional path template like /search), confirm (id), drop (id, why), list (optional site).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -385,6 +385,8 @@ const TOOLS = [
         force: { type: 'boolean', description: 'Store even if Jev judges it task-specific.' },
         api: { type: 'boolean', description: 'The note says where a page\'s data comes from (an endpoint): a recipe candidate.' },
         recipe: { type: 'string', description: 'Name of a recipe this note points to.' },
+        reveal: { type: 'object', description: 'A note do can run: when a step\'s target cannot be found and matches this target, run these do steps, then retry. {target, steps}', properties: { target: { type: 'string' }, steps: { type: 'array', items: { type: 'string' } } } },
+        on: { type: 'object', description: 'A note do can run: when Jev sees this situation during a do step, run these do steps and carry on. {situation, steps}', properties: { situation: { type: 'string' }, steps: { type: 'array', items: { type: 'string' } } } },
       },
       required: ['action'],
     },
@@ -820,7 +822,7 @@ const handlers = {
   browser_notes: async args => {
     if (args.action === 'add') {
       if (args.recipe && !listRecipes().some(r => r.name === args.recipe)) return fail(`No recipe ${args.recipe}`);
-      const r = await notes.add(args.site, args.text, { path: args.path, force: Boolean(args.force), api: Boolean(args.api), recipe: args.recipe });
+      const r = await notes.add(args.site, args.text, { path: args.path, force: Boolean(args.force), api: Boolean(args.api), recipe: args.recipe, reveal: args.reveal, on: args.on });
       return r.ok ? text(r) : fail(`Not added: ${r.reason}`);
     }
     if (args.action === 'confirm' || args.action === 'drop') {

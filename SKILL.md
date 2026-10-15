@@ -509,6 +509,13 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   Treat them as advice: if a note says a filter is in the URL, try one `nav` to it
   before driving the filter UI. One rule also writes notes for you: a control that put a
   filter in the URL (task values masked as `…`).
+- **Notes act inside `do`.** The current page's notes go to Jev as context with every
+  step. A **reveal** note runs its steps when a step's target cannot be found, then
+  retries (`✓ 3. fill Maximum = 600 → … (exact, via note 54843)`). An **on** note runs
+  its steps when Jev sees its situation, then carries on. A URL note that covers a
+  planned click is printed as `note <id>: … nav to it directly`. Notes that ran are
+  confirmed when they worked and contradicted when they did not (`notes: 54843
+  confirmed`); a note that only informed Jev is not.
 - **After finishing a task on a site, reflect:** what would have saved you the most
   time? Add up to 3 one-line facts about how the site works that would help a
   *different* task there, never the answer or this task's values (products, prices,
@@ -518,7 +525,12 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   rephrase rather than `--force`. Then `notes confirm <id>` each note you relied on that
   held, and `notes drop <id> --why "…"` each one that was wrong. Good notes name where a
   control hides, which filter lives in the URL, what a site does by default (currency,
-  location, sort), and fine print that changes an answer. If you spot where a page's
+  location, sort), and fine print that changes an answer. When the lesson is how to
+  reach a hidden control or clear a recurring interruption, write it so `do` runs it:
+  `notes add <site> --reveal "Pets" 'click "Guests"' "Pets sits under the Guests picker"`
+  or `notes add <site> --on "a cookie banner covers the page" 'click "Accept"' "…"`
+  (steps only click, select, hover, press keys, scroll or wait; never commit or type).
+  If you spot where a page's
   data comes from (a JSON endpoint in `recipe endpoints <host>` or the network), record
   it: `notes add <site> --api "Order list comes from GET /api/v4/orders?offset="`; `site`
   flags these as recipe candidates. A note can point at a recipe with

@@ -157,7 +157,7 @@ t('a recipe waits for a challenge on its tab to clear before calling', async () 
   // Clear well after the recipe starts checking, even on a slow runner.
   await ops.evaluate(conn, human.targetId, "setTimeout(() => history.replaceState(null, '', '/shop'), 2500), 1");
   const res = await runRecipe(conn, recipe);
-  assert.equal(res.challenge.captcha, 'shopee-verify');
+  assert.equal(res.challenge.captcha, 'verification-page'); // the general /verify/captcha check (4f6ccc5), not a site name
   assert.equal(res.challenge.solvedBy, 'human');
   assert.ok(res.challenge.waitedMs > 0);
   assert.equal(res.items.length, 5);

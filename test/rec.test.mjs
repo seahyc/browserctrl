@@ -121,6 +121,8 @@ test('a recording follows the tab across a navigation and replays', async () => 
   await rec.still(conn, tab.targetId, 'click #go');
   await ops.navigate(conn, tab.targetId, new URL('/slow', fixture.url).href, { waitUntil: 'load' });
   await rec.still(conn, tab.targetId, `nav /slow`);
+  const failed = rec.readJsonl(path.join(dir, 'steps.jsonl')).filter(r => r.error);
+  assert.deepEqual(failed, [], 'every still was captured');
   assert.equal(await rec.still(conn, tab.targetId, 'read', { ifChanged: true }), null, 'a read on an unchanged page takes no still');
 
   const res = await rec.stop(conn, tab.targetId);

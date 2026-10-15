@@ -72,6 +72,7 @@ Before planning, look the site up: ${prefix} browserctrl site <site or start URL
 When you have your answer, and before your final message, reflect: what would have saved you the most time on this site? Add up to 3 one-line facts about how the site works that would help a different task on it, never the answer or this task's values:
   ${prefix} browserctrl notes add <site or page URL> "<fact>"
 If you saw where a page's data comes from (an API endpoint), add it with --api: notes add <site> --api "<data> comes from <endpoint>".
+If the lesson is how to reach a control hidden behind another, write it so do runs it next time: notes add <site> --reveal "<the hidden control>" '<do step>'... "<fact>" (e.g. --reveal "Pets" 'click "Guests"'). If it is how to clear a recurring interruption: notes add <site> --on "<the situation>" '<do step>'... "<fact>" (e.g. --on "a cookie banner covers the page" 'click "Accept"'). Their steps only click, select, hover, press keys, scroll or wait.
 Confirm each note you relied on that held (notes confirm <id>) and drop each one that was wrong (notes drop <id> --why "<what was wrong>").
 Add "notes_added": <number of notes you added> to your JSON.`;
 }
@@ -195,11 +196,13 @@ function finish(runId) {
   return run;
 }
 
-function recBytes(dir) {
+// Sizes as `rec stop` reported them after compressing; measured from disk when the stop failed.
+function recBytes(dir, stopped) {
+  if (stopped?.rrweb_bytes != null) return { events: stopped.rrweb_bytes, stills: stopped.stills_bytes, stills_count: stopped.stills };
   const size = (p) => { try { return fs.statSync(p).size; } catch { return 0; } };
   const traj = path.join(dir, 'trajectory');
   const stills = fs.existsSync(traj) ? fs.readdirSync(traj).reduce((s, f) => s + size(path.join(traj, f)), 0) : 0;
-  const events = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^(rrweb|events)/.test(f)).reduce((s, f) => s + size(path.join(dir, f)), 0) : 0;
+  const events = ['rrweb.ndjson.br', 'rrweb.ndjson'].reduce((s, f) => s + size(path.join(dir, f)), 0);
   return { events, stills, stills_count: fs.existsSync(traj) ? fs.readdirSync(traj).length : 0 };
 }
 
@@ -211,7 +214,8 @@ function row(run) {
     tool_calls: run.agent?.tools ?? null, tokens: run.agent?.tokens ?? null, output_tokens: run.agent?.output_tokens ?? null,
     answer: run.answer?.answer ?? null, agent_notes: run.answer?.notes ?? null,
     success: run.judge?.success ?? null, judge: run.judge ? { key_points: run.judge.key_points, images_used: run.judge.images_used, thoughts: run.judge.thoughts } : null,
-    run_dir: path.relative(here, runPath(run.runId)), rec: recBytes(runPath(run.runId, 'rec')),
+    run_dir: path.relative(here, runPath(run.runId)), rec: recBytes(runPath(run.runId, 'rec'), run.rec_stopped),
+    ...(run.smoke ? { smoke: true } : {}),
   };
 }
 function readRows() {
@@ -378,7 +382,7 @@ async function runOne(taskId, arm, notesArm, { noJudge = false, parallel = false
 }
 
 function report() {
-  const rows = readRows();
+  const rows = readRows().filter((r) => !r.smoke); // harness checks, not benchmark runs
   const median = (xs) => { const s = xs.filter((x) => x != null).sort((a, b) => a - b), m = s.length >> 1; return !s.length ? '' : s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
   const groups = new Map();
   for (const r of rows) {
