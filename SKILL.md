@@ -295,28 +295,36 @@ file:
 
 ## Fastest way through a task
 
-Pick the first that fits; each step down costs more agent turns:
+Every agent turn costs a few seconds of thinking plus the tool's own time, so the fastest
+route is the one with the fewest calls. Choose by what the task needs:
 
-1. A recipe for the site (`browserctrl recipe find <url>`): one call, no page at all.
-2. A URL that already carries the filter or search, when the site keeps them in its
-   address (`?q=`, `?state=closed`, `?sort=price_asc`): `nav` to it, or start the plan with
-   a `nav` step. Check this before driving a filter box: after one click the address often
-   shows the parameter names, and filters built from tokens or chips take several steps in
-   the UI but one in the URL. In the benchmark this halved the time on such tasks.
-3. **`do` with the whole plan and `--then items`** (see [below](#plan-several-steps-in-one-call-with-do)):
-   send every step you can foresee in one call. In benchmarks on marketplaces, code hosts,
-   dashboards and news sites it took 30–70% less time than reading and clicking step by
-   step on most tasks, with the same success rate (bench/RESULTS.md).
-4. To drill into a list (each item's details), take the links from `items` and open them
-   all at once: `browserctrl visit /item/1 /item/2 … --from <tab> --grep "<label>|<label>"`
-   opens them in parallel background tabs and returns only the matching lines (with one
-   line either side) per page; `--then items` returns each page's items instead. A dozen
-   pages take about 15 s.
-   Or chain it onto the plan: `do <tab> '<steps>' --open 5 --grep "<label>|<label>"` runs
-   the plan, takes the first 5 items of the main list (ads, Sponsored and Spotlight items
-   skipped), opens them in parallel and returns the matching lines: the list and its
-   drill-down in one call.
-5. `read` and single actions, only for what `do` reports it could not do.
+| The task needs | Use | Not |
+| --- | --- | --- |
+| A site's data that a recipe covers | `browserctrl recipe find <url>`, then `recipe run`: no page at all | |
+| A page whose address you know or can build (search, sort, filter, item pages) | `nav` to it, then `items` or `text` | `do` clicking through filters |
+| Two or more interactions you can foresee (type, pick, sort, filter, page through) | one `do` call with the whole plan and `--then items` | a read before each click |
+| Details from several items of a list | `visit` with their links and `--grep` (parallel) | clicking into each item |
+| The first N items of a list your `do` plan produces, in list order | `--open N --grep …` on that `do` call | a second call for the drill-down |
+| One click, one fill or one read | the single command | `do` |
+| Controls whose names you cannot guess | `read` once, then plan | repeated reads |
+
+- **Address first.** Before driving a filter box, look for the address that does the same:
+  `do` and `read` end with `url params` (the parameters this page uses), and each step
+  shows how it changed the address (`url: +state=closed`). Filters built from tokens or
+  chips take several steps in the UI but one in the URL; in the benchmark that halved the
+  time on such tasks.
+- **`do` pays off on interaction.** In benchmarks on marketplaces, dashboards and news
+  sites, a `do` plan took 30–70% less time than reading and clicking step by step. On
+  tasks that were only "open a known page and read it", it added a model call and a wait
+  for nothing: use `nav` and `items` there.
+- **`visit` for drill-downs:** `browserctrl visit /item/1 /item/2 … --from <tab> --grep
+  "<label>|<label>"` opens the pages in parallel background tabs and returns only the
+  matching lines (with one line either side) per page; `--then items` returns each page's
+  items instead. A dozen pages take about 15 s.
+- **`--open N` only for the first N in list order:** `do <tab> '<steps>' --open 5 --grep
+  "<label>"` takes the first 5 items of the main list (ads, Sponsored and Spotlight items
+  skipped) and opens them in the same call. When you must choose the items first (the 3
+  with the most points, the ones matching a condition), read the list, then `visit`.
 
 Fewer, cheaper turns:
 
