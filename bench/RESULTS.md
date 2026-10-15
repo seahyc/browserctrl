@@ -1,4 +1,39 @@
-# Jev benchmark results, 2026-10-14
+# Jev benchmark results, 2026-10-15
+
+## Round 6: six new sites and task types, three arms
+
+Sites never used before: Hacker News, Wikipedia, Stack Overflow, PyPI, YouTube, IMDb. Each
+task finds a list and drills into a few items. Arms: A plain browserctrl (no `do`/Jev),
+D `do` + `visit` on Sonnet, H the same method on Haiku. Runs 61-63; medians of passing runs.
+Every agent read its prompt from a file and wrote its answer to a file (two tool calls in
+every arm). Truth from public APIs (HN, Stack Exchange, PyPI) or by re-reading the pages.
+
+| Task | A | D | H | D vs A |
+| --- | --- | --- | --- | --- |
+| Wikipedia: tallest 3, infobox facts | 100 s, 14 calls | 40 s, 8 calls | 72 s, 12 calls | −60% |
+| PyPI: search, open 3 packages | 84 s, 15 calls | 47 s, 7 calls | 55 s, 11 calls | −44% |
+| IMDb: top 3 of the chart | 98 s, 9 calls | 72 s, 8 calls | 98 s, 11 calls | −27% |
+| YouTube: channel → Popular → 5 + 2 dates | 144 s, 12 calls | 152 s, 9 calls | 161 s, 14 calls | +6% |
+| Hacker News: top 3 by points, comments | 38 s, 7 calls | 50 s, 9 calls | 56 s, 11 calls | +32% |
+| Stack Overflow: top 3 voted, accepted answers | 63 s (1/3 passed) | 90 s (3/3) | 102 s (1/3) | slower, more accurate |
+
+Passes: D 18/18, A 16/18, H 16/18. Failures were wrong facts: A named an accepted-answer
+author where there is none (twice); H took an answer's editor for its author (twice).
+
+**Reading:** `do` + `visit` wins where the plain route needs many reads (a table plus
+articles, search plus package pages) and is never less accurate. It loses on pages reached
+by a guessable address (HN items, SO tag pages), where the plain agent goes straight there
+and `do` adds a model call and a wait. Haiku running the same method passes most tasks at
+about the plain arm's speed, so the fast-executor idea holds for mechanical steps but not
+for judging which name is which. No agent used `--open`; they went to a URL, then `visit`.
+
+Run 63 used the new decision table in SKILL.md ("when to use nav, do, visit or --open"),
+but the machine's load average was about 100 during it (A's HN time doubled), so its
+before/after effect cannot be read from these times.
+
+Checker fixes during the round (comment ranking drift, tied heights, relative dates,
+`Requires-Python` wording, chart selectors) were applied to all arms and runs regraded with
+the same answers. npm was replaced by PyPI after Cloudflare challenged npm's package pages.
 
 ## Round 5: harder drill-down tasks, `do` + `visit`
 
