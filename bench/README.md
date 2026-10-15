@@ -81,3 +81,16 @@ personal data and are not committed.
 The one write task never checks out: it adds one fixed item to the cart, and
 `finish` deletes it. Chat tasks only read, so nothing is ever sent to another
 person.
+
+## Flow-note arms
+
+`start ... --notes reflect` and `--notes off` test whether agent-written flow notes help.
+`reflect` shows hints and adds a reflection step to the prompt: after the task, the agent
+adds up to 3 one-line facts about the site (never the answer), confirms notes it relied on
+and drops wrong ones, and reports `notes_added`. `off` runs with `BROWSERCTRL_NOTES=quiet`
+and no reflection. Each arm keeps its own store in `runs/notes-<arm>/`, so the user's notes
+are untouched and the arms never share notes; the prompt tells the agent to prefix every
+browserctrl command with the arm's settings. Protocol: run exploration tasks in the
+`reflect` arm to write notes, then run different test tasks on the same sites in both
+arms and compare pass rate, time and tool calls. Results rows carry `notes_arm` and
+`notes_added`.

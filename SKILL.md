@@ -489,16 +489,26 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   with p, dismissed overlays and notices. Review traces after the task, or when a
   result looks wrong, instead of adding read steps to the plan. Traces live in
   `~/.local/share/browserctrl/traces/` (`BROWSERCTRL_TRACES` overrides).
-- Each run also updates the site's **flow notes**: short facts learned from what
-  worked, such as a control that puts a filter in the URL, a field that submits on
-  Enter, the control that closed an overlay, a sequence of steps that finished, or
-  pages that drew a challenge when `visit` opened them together. `open`, `nav` and
-  `read` print the best five as `hint:` lines after any recipe hint. Treat them as
-  advice: if a note says a filter is in the URL, try one `nav` to it before driving
-  the filter UI. A failed run counts against the notes it contradicts, so stale ones
-  drop out. `browserctrl notes [site] [--clear]` shows or clears them; `--no-notes`
-  skips the hint once, `BROWSERCTRL_NOTES=quiet` records without hinting, `=off`
-  disables them (`BROWSERCTRL_NOTES_DIR` moves the store).
+- **Flow notes** are short facts about how a site works, written by agents after
+  earlier tasks. `open`, `nav`, `read` and each `do` step that lands on a new kind of
+  page print the best five as `hint:` lines with an id, e.g.
+  `hint:   3f9a1 Total price with fees is behind the "Display total" toggle (worked 2×, …)`.
+  Treat them as advice: if a note says a filter is in the URL, try one `nav` to it
+  before driving the filter UI. One rule also writes notes for you: a control that put a
+  filter in the URL (task values masked as `…`).
+- **After finishing a task on a site, reflect:** what would have saved you the most
+  time? Add up to 3 one-line facts about how the site works that would help a
+  *different* task there, never the answer or this task's values (products, prices,
+  dates, names, search terms) or personal data:
+  `browserctrl notes add <site or page URL> "<fact>"` (`--path /search` scopes it to a
+  kind of page; a URL does that for you). Jev rejects notes that read as task-specific;
+  rephrase rather than `--force`. Then `notes confirm <id>` each note you relied on that
+  held, and `notes drop <id> --why "…"` each one that was wrong. Good notes name where a
+  control hides, which filter lives in the URL, what a site does by default (currency,
+  location, sort), and fine print that changes an answer.
+  `browserctrl notes [site] [--clear]` lists or clears them; `--no-notes` skips hints
+  once, `BROWSERCTRL_NOTES=quiet` records without hinting, `=off` disables them
+  (`BROWSERCTRL_NOTES_DIR` moves the store). MCP: `browser_notes`.
 - Intent targets, expectations, `--until` and `--dismiss` need `TYPESAFE_API_KEY` (see
   [Jev](#jev)). Exact names work without it; overlay checks are then skipped.
 

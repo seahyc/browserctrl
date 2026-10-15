@@ -366,6 +366,21 @@ const TOOLS = [
     },
   },
   {
+    name: 'browser_notes',
+    description:
+      'Flow notes: short facts about how a site works, hinted on open, navigate, read and do steps with an id. After finishing a task on a site, add up to 3 one-line facts that would have saved you the most time on a different task there (never the answer or the task\'s values; Jev rejects those). confirm a note you relied on that held; drop one that was wrong, with why. action=add (site or url, text, optional path template like /search), confirm (id), drop (id, why), list (optional site).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['add', 'confirm', 'drop', 'list'] },
+        site: { type: 'string', description: 'example.com or a page URL (its path becomes the note\'s page)' },
+        text: { type: 'string' }, path: { type: 'string' }, id: { type: 'string' }, why: { type: 'string' },
+        force: { type: 'boolean', description: 'Store even if Jev judges it task-specific.' },
+      },
+      required: ['action'],
+    },
+  },
+  {
     name: 'browser_recording',
     description:
       'Read a recording: its steps, and any moments the human marked on the video resolved to the nearest real event, so a mark comes back as "click on button Confirm and apply", not a frame number.',
@@ -791,6 +806,18 @@ const handlers = {
       if (args.action === 'start') return text(await rec.start(conn, tab.targetId, { out: args.out, label: args.label }));
       return text(await rec.stop(conn, tab.targetId));
     });
+  },
+
+  browser_notes: async args => {
+    if (args.action === 'add') {
+      const r = await notes.add(args.site, args.text, { path: args.path, force: Boolean(args.force) });
+      return r.ok ? text(r) : fail(`Not added: ${r.reason}`);
+    }
+    if (args.action === 'confirm' || args.action === 'drop') {
+      const r = args.action === 'confirm' ? notes.confirm(args.id) : notes.drop(args.id, { why: args.why });
+      return r.ok ? text(r) : fail(r.reason);
+    }
+    return text(args.site ? notes.format(notes.show(args.site)) : notes.sites());
   },
 
   browser_recording: async args => {

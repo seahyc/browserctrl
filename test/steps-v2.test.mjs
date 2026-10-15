@@ -270,10 +270,17 @@ t('every run is traced per tab and `trace` prints it', async () => {
   assert.match(cli, /notice: "Price changed to S\$590"/);
   const json = JSON.parse(execFileSync(process.execPath, [path.join(HERE, '..', 'bin', 'browserctrl.mjs'), 'trace', id.slice(0, 8), '--json'], { env: { ...process.env, BROWSERCTRL_TRACES: TRACES }, encoding: 'utf8' }));
   assert.equal(json.at(-1).steps.length, 3);
-  // The finished run left flow notes for the site: the overlay and the flow that worked.
-  const learned = notes.show('127.0.0.1').facts;
-  assert.ok(learned.some(f => f.kind === 'overlay' && /cookie banner appears/.test(f.text)), JSON.stringify(learned));
-  assert.ok(learned.some(f => f.kind === 'flow' && /click "More filters" → fill "Maximum" → click "Apply"/.test(f.text)), JSON.stringify(learned));
-  assert.ok(notes.hintLines(fixture.url + 'fixtures/steps-shop.html').length > 1);
+  // Flows, Enter submits and overlays are no longer written by rule; agents write notes.
+  assert.ok(!notes.show('127.0.0.1').facts.some(f => ['overlay', 'flow', 'enter'].includes(f.kind)));
+  // A step that lands on a kind of page not yet hinted in the run prints that page's notes.
+  const form = fixture.url + 'fixtures/steps-form.html';
+  const added = await notes.add(form, 'The form keeps its fields after a failed submit', { force: true });
+  const r4 = await runSteps(conn, id, [`nav ${form}`], { jev: fakeJev().opts });
+  assert.equal(r4.done, true, JSON.stringify(r4.stopped));
+  assert.ok(r4.steps[0].hints?.some(h => h.includes(added.id)), JSON.stringify(r4.steps[0]));
+  assert.match(formatSteps(r4), new RegExp(`hint: +${added.id} The form keeps its fields`));
+  const r5 = await runSteps(conn, id, [`nav ${form}?again=1`], { jev: fakeJev().opts, noNotes: true });
+  assert.equal(r5.steps[0].hints, undefined);
+  notes.clear('127.0.0.1');
   await ops.closeTab(conn, id);
 });

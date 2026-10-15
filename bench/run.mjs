@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Jev benchmark harness. See bench/README.md for the protocol.
-//   node bench/run.mjs start <task> <A|B> <n> [--tab ID] [--no-rec]   prepare a run, print the agent prompt
+//   node bench/run.mjs start <task> <A|B> <n> [--tab ID] [--no-rec] [--notes reflect|off]   prepare a run, print the agent prompt
 //     (the start tab is recorded into runs/<run>/rec/ until finish; `browserctrl replay` plays it)
+//     --notes reflect: hints on and the agent writes notes after the task; --notes off: no hints, no reflection.
+//     Each arm keeps its own store under runs/notes-<arm>/, so the user's notes are untouched.
 //   node bench/run.mjs finish <run> <answer.json> --ms N --tokens N --tools N
 //   node bench/run.mjs report
 import { execFileSync } from 'node:child_process';
@@ -464,6 +466,27 @@ const undo = {
   },
 };
 
+// Flow-note arms. The agent runs browserctrl itself, so the arm's settings go into every
+// command it types: prefix each browserctrl call with the env below.
+const NOTE_ARMS = ['reflect', 'off'];
+function notesEnv(notesArm) {
+  if (!notesArm) return null;
+  const dir = path.join(runsDir, `notes-${notesArm}`);
+  return notesArm === 'reflect' ? { BROWSERCTRL_NOTES: 'on', BROWSERCTRL_NOTES_DIR: dir } : { BROWSERCTRL_NOTES: 'quiet', BROWSERCTRL_NOTES_DIR: dir };
+}
+function notesPrompt(notesArm, env) {
+  if (!notesArm) return '';
+  const prefix = Object.entries(env).map(([k, v]) => `${k}=${v}`).join(' ');
+  const run = `\n\nRun every browserctrl command with this prefix: ${prefix} browserctrl ...`;
+  if (notesArm === 'off') return run;
+  return `${run}
+Flow notes: open, nav, read and do print "hint:" lines with note ids for this site. Use them when they fit the task.
+When you have your answer, and before your final message, reflect: what would have saved you the most time on this site? Add up to 3 one-line facts about how the site works that would help a different task on it, never the answer or this task's values:
+  ${prefix} browserctrl notes add <site or page URL> "<fact>"
+Confirm each note you relied on that held (notes confirm <id>) and drop each one that was wrong (notes drop <id> --why "<what was wrong>").
+Add "notes_added": <number of notes you added> to your JSON.`;
+}
+
 function agentPrompt(task, arm, tab) {
   const allow = task.jev_allow_controls.map((c) => ` --allow-control '${JSON.stringify(c)}'`).join('');
   const common = `You are one run of a timed browser benchmark. Work quickly and stop as soon as you have a verified answer.
@@ -504,9 +527,11 @@ const flag = (name) => { const i = rest.indexOf(name); return i < 0 ? undefined 
 
 if (cmd === 'start') {
   const [taskId, arm, n] = rest;
+  const notesArm = flag('--notes');
+  if (notesArm && !NOTE_ARMS.includes(notesArm)) throw new Error('--notes takes reflect or off');
   const task = tasks.find((t) => t.id === taskId);
   if (!task || !['A', 'B', 'C', 'D', 'H'].includes(arm)) throw new Error('usage: start <task> <A|B|C|D|H> <n> [--tab ID]');
-  const runId = `${taskId}-${arm}-${n}`;
+  const runId = `${taskId}-${arm}${notesArm ? `-${notesArm}` : ''}-${n}`;
   const pre = (await prepare[taskId]?.()) ?? {};
   let tab = flag('--tab');
   if (!tab) {
@@ -521,9 +546,10 @@ if (cmd === 'start') {
     try { rec = bcJson('rec', 'start', tab, '--out', path.join(runsDir, runId, 'rec'), '--label', runId).recording; }
     catch (e) { console.error(`recording not started: ${String(e.stderr || e).trim()}`); }
   }
-  const run = { runId, task: taskId, arm, n: Number(n), tab, tabsBefore: tabIds(), pre, startedAt: new Date().toISOString(), load: os.loadavg()[0], rec };
+  const run = { runId, task: taskId, arm, n: Number(n), tab, tabsBefore: tabIds(), pre, startedAt: new Date().toISOString(), load: os.loadavg()[0], rec,
+    notes_arm: notesArm || null, notes_env: notesEnv(notesArm) };
   fs.writeFileSync(path.join(runsDir, runId, 'run.json'), JSON.stringify(run, null, 2));
-  process.stdout.write(agentPrompt(task, arm, tab) + '\n');
+  process.stdout.write(agentPrompt(task, arm, tab) + notesPrompt(notesArm, run.notes_env) + '\n');
 } else if (cmd === 'finish') {
   const [runId, answerFile] = rest;
   const run = JSON.parse(fs.readFileSync(path.join(runsDir, runId, 'run.json'), 'utf8'));
@@ -549,7 +575,8 @@ if (cmd === 'start') {
     run: runId, task: run.task, arm: run.arm, n: run.n, at: run.startedAt, load: run.load,
     pass: results.every((r) => r.ok), checks: results,
     agent_ms: Number(flag('--ms')), agent_tokens: Number(flag('--tokens')), tool_uses: Number(flag('--tools')),
-    jev: answer?.jev ?? null, notes: answer?.notes ?? null, undo: undone, closed_tabs: closed.length,
+    jev: answer?.jev ?? null, notes: answer?.notes ?? null,
+    notes_arm: run.notes_arm ?? null, notes_added: answer?.notes_added ?? null, undo: undone, closed_tabs: closed.length,
     rec: rec ? { dir: path.relative(here, rec.recording), steps: rec.steps, bytes: rec.total_bytes } : null,
   };
   fs.appendFileSync(resultsFile, JSON.stringify(row) + '\n');

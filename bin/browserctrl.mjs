@@ -180,8 +180,9 @@ function usage() {
                                                    [--repeat 'click Next' --until "<condition>" --max 10 --collect items|text]
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
     browserctrl trace <tab> [--last N] [--json]          what recent do runs did: targets, expectations, overlays, notices
-    browserctrl notes [site] [--clear] [--json]          flow notes learned from do runs (URL filters, Enter submits, overlays,
-                                                         flows that worked); open/nav/read hint them. --no-notes skips the hint;
+    browserctrl notes [site] [--clear] [--json]          flow notes: facts about how a site works; open/nav/read and do steps hint them
+    browserctrl notes add <site|url> [--path /p] "<fact>" [--force]   after a task: what would have saved time (Jev rejects answers/values)
+    browserctrl notes confirm <id> | drop <id> --why "…"  a note held / was wrong. --no-notes skips hints once;
                                                          BROWSERCTRL_NOTES=quiet records without hints, =off disables
     browserctrl check <tab> [--expect "…"]               Jev yes/no checks: challenge, login, error, dialog, empty
     browserctrl click <tab> --ref ref_3 [--button right] [--count 2] [--mod cmd,shift]
@@ -347,12 +348,29 @@ const main = async () => {
     return out(flags.json ? runs : trace.format(runs));
   }
   if (cmd === 'notes') {
-    const what = positional[1];
+    const sub = positional[1];
+    if (sub === 'add') {
+      // A boolean flag written before the text swallows it (--force "text"); take it back.
+      const rest = [...positional.slice(3), ...(typeof flags.force === 'string' ? [flags.force] : [])];
+      if (!positional[2] || !rest.length) throw new Error('Usage: browserctrl notes add <site|url> [--path /search] "<one-line fact about how the site works>" [--force]');
+      const r = await notes.add(positional[2], rest.join(' '), { path: typeof flags.path === 'string' ? flags.path : undefined, force: Boolean(flags.force) });
+      if (flags.json) return out(r);
+      if (!r.ok) { process.exitCode = 1; return out(`Not added: ${r.reason}`); }
+      return out(`Added ${r.id} to ${r.site}${r.p != null ? ` (Jev p=${r.p})` : ''}${r.unchecked ? ` (not checked by Jev: ${r.unchecked})` : ''}`);
+    }
+    if (sub === 'confirm' || sub === 'drop') {
+      if (!positional[2]) throw new Error(`Usage: browserctrl notes ${sub} <id>${sub === 'drop' ? ' --why "what was wrong"' : ''}`);
+      const r = sub === 'confirm' ? notes.confirm(positional[2]) : notes.drop(positional[2], { why: typeof flags.why === 'string' ? flags.why : '' });
+      if (flags.json) return out(r);
+      if (!r.ok) { process.exitCode = 1; return out(r.reason); }
+      return out(sub === 'confirm' ? `Confirmed ${r.id} on ${r.site} (worked ${r.count}×)` : `Dropped ${r.id} from ${r.site}: ${r.text}`);
+    }
+    const what = sub;
     if (flags.clear) return out(`Cleared flow notes: ${notes.clear(what)}`);
     if (!what) {
       const all = notes.sites();
       if (flags.json) return out(all);
-      return out(all.map(s => `${s.site}  ${s.facts} notes, last ${s.last.slice(0, 10)}`).join('\n') || `(no flow notes yet; they are written from do runs into ${notes.dir()})`);
+      return out(all.map(s => `${s.site}  ${s.facts} notes, last ${s.last.slice(0, 10)}`).join('\n') || `(no flow notes yet; add one with notes add <site> "…"; stored in ${notes.dir()})`);
     }
     const note = notes.show(what);
     return out(flags.json ? note : notes.format(note));
@@ -739,7 +757,7 @@ const main = async () => {
         const lines = positional.slice(2);
         if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text] [--open N --grep "label|label"]');
         const recording = rec.get(targetId);
-        const r = await runSteps(conn, targetId, lines, { show: show.showing(flags),
+        const r = await runSteps(conn, targetId, lines, { show: show.showing(flags), noNotes: Boolean(flags['no-notes']),
           onStep: recording ? row => rec.still(conn, targetId, `do: ${row.do}`, { status: row.stopped ? 'FAILED' : row.skipped ? 'SKIPPED' : 'SUCCESS' }) : undefined,
           then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
           force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),

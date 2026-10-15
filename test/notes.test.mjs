@@ -1,5 +1,5 @@
-// Flow notes: facts derived from do traces (URL filters, Enter submits, overlays, flows),
-// counted, contradicted and dropped, ranked for a page, hinted, and shown by the CLI.
+// Flow notes: agent notes checked by Jev, the URL rule from do traces, bookkeeping (counts,
+// contradictions, decay, purging retired rules), ranked hints with ids, and the CLI.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -35,19 +35,49 @@ test('path templates hide ids', () => {
   assert.equal(notes.pathTemplate('https://shop.sg/'), '/');
 });
 
-test('a do run yields URL, Enter, overlay and flow facts, with typed values templated', () => {
+test('a do run yields only the URL fact, with typed values templated', () => {
   const facts = notes.derive(closedRun());
-  const kinds = facts.map(f => f.kind).sort();
-  assert.deepEqual(kinds, ['enter', 'flow', 'overlay', 'url']);
-  const url = facts.find(f => f.kind === 'url');
+  assert.deepEqual(facts.map(f => f.kind), ['url']);
+  const url = facts[0];
   assert.equal(url.site, 'example.com');
-  assert.match(url.text, /click "Closed" sets \?sort=merged_at_desc&state=closed&first_page_size=20 in the URL/);
-  const enter = facts.find(f => f.kind === 'enter');
-  assert.match(enter.text, /"Search or filter results" submits on Enter → .*\?search=<text>; nav there directly/);
-  assert.match(facts.find(f => f.kind === 'overlay').text, /cookie banner appears .*button "Accept all" closes it/);
-  const flow = facts.find(f => f.kind === 'flow');
-  assert.equal(flow.text, 'on /acme/web/-/merge_requests, worked: click "Closed" (tab "Closed 12") → fill "Search or filter results" → key Enter');
+  // Short enums stay (they are the site's vocabulary); numbers could be a task's price or id.
+  assert.match(url.text, /click "Closed" sets \?sort=merged_at_desc&state=closed&first_page_size=… in the URL/);
   assert.ok(!facts.some(f => f.text.includes('jane')), 'the typed value is the task, not the site');
+});
+
+// Regression: on PyPI a select for the sort order produced a note carrying the previous
+// task's classifier filter, because a repeated parameter (?c=a&c=b) looked newly added.
+test('the URL rule records only what this step changed, and hides task values', () => {
+  const base = 'https://pypi.org/search/?q=&c=Programming+Language+%3A%3A+Python&c=License+%3A%3A+OSI+Approved+%3A%3A+MIT+License';
+  const sorted = notes.derive([
+    step(1, { do: 'select "Order by" = "Date last updated"', action: 'select', url_before: base, url_after: `${base}&o=-created` }),
+    runLine({ done: true, url: `${base}&o=-created` }),
+  ]);
+  assert.equal(sorted.length, 1);
+  assert.match(sorted[0].text, /sets \?o=-created in the URL/);
+  assert.ok(!/License|MIT|Python/.test(sorted[0].text.replace(/select "Order by = Date last updated"/, '')), sorted[0].text);
+  const filtered = notes.derive([
+    step(1, { do: 'click "Web Environment"', action: 'click', url_before: base, url_after: `${base}&c=Environment+%3A%3A+Web+Environment` }),
+    runLine({ done: true, url: base }),
+  ]);
+  assert.match(filtered[0].text, /sets \?c=… in the URL/);
+  const priced = notes.derive([
+    step(1, { do: 'click "Under $40"', action: 'click', url_before: 'https://wine.example.com/list', url_after: 'https://wine.example.com/list?price=0-40' }),
+    runLine({ done: true }),
+  ]);
+  assert.match(priced[0].text, /sets \?price=… in the URL/);
+});
+
+test('notes from retired rules or older rule versions are purged on load; agent notes stay', () => {
+  fs.mkdirSync(DIR, { recursive: true });
+  const f = (kind, extra = {}) => ({ key: `${kind} k`, kind, text: kind, count: 1, fails: 0, first: '2026-10-15T00:00:00Z', last: new Date().toISOString(), ...extra });
+  fs.writeFileSync(path.join(DIR, 'pypi.org.json'), JSON.stringify({ site: 'pypi.org', facts: [
+    f('flow'), f('enter'), f('overlay'), f('url'), f('url', { key: 'url v2', v: 2 }), f('agent', { author: 'agent' }), f('challenge', { v: 2 }),
+  ] }));
+  const note = notes.show('pypi.org');
+  assert.deepEqual(note.facts.map(x => x.kind).sort(), ['agent', 'challenge', 'url']);
+  assert.equal(note.purged, 4);
+  assert.ok(note.facts.every(x => /^[0-9a-f]{5}$/.test(x.id)));
 });
 
 test('a failed run contradicts facts but never creates them', () => {
@@ -85,7 +115,8 @@ test('hints list this page\'s facts first, capped, and respect BROWSERCTRL_NOTES
   const lines = notes.hintLines(`${MRS}?state=opened`);
   assert.equal(lines.length, 6);
   assert.match(lines[0], /^Flow notes for example\.com/);
-  assert.ok(lines.slice(1, 4).every(l => l.includes('/acme/web/-/merge_requests')), lines.join('\n'));
+  assert.match(lines[1], /^ {2}[0-9a-f]{5} on \/acme/);
+  assert.ok(lines[1].includes('/acme/web/-/merge_requests') && lines.slice(2).every(l => l.includes('elsewhere')), lines.join('\n'));
   process.env.BROWSERCTRL_NOTES = 'quiet';
   assert.deepEqual(notes.hintLines(MRS), []);
   notes.record([{ site: 'example.com', key: 'quiet', kind: 'url', text: 'recorded while quiet', ok: true }]);
@@ -95,13 +126,77 @@ test('hints list this page\'s facts first, capped, and respect BROWSERCTRL_NOTES
   assert.ok(!notes.show('example.com').facts.some(x => x.key === 'off'));
 });
 
-test('browserctrl notes lists, shows and clears without a browser', async () => {
+// A fake System One answering the leak question with a fixed probability.
+const judgeWith = (p) => ({ cfg: { key: 'k', model: 'm' }, fetchImpl: async (url, init) => {
+  const body = JSON.parse(init.body);
+  assert.match(body.questions.reusable.instructions, /reusable fact about how the website works/);
+  return { ok: true, json: async () => ({ answers: { reusable: { noul: p } } }) };
+} });
+
+test('an agent note is stored only when Jev judges it a reusable site fact', async () => {
+  const good = await notes.add('https://www.airbnb.com/s/Cleveland/homes', 'The total price with fees is behind the "Display total before taxes" toggle', judgeWith(0.91));
+  assert.equal(good.ok, true);
+  assert.equal(good.p, 0.91);
+  const stored = notes.show('airbnb.com').facts;
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].author, 'agent');
+  assert.equal(stored[0].path, '/s/Cleveland/homes');
+  assert.equal(stored[0].id, good.id);
+
+  const leak = await notes.add('airbnb.com', 'The cheapest pet-friendly place in Cleveland is "Cozy Loft", $142 a night', judgeWith(0.08));
+  assert.equal(leak.ok, false);
+  assert.match(leak.reason, /task-specific \(p=0\.08/);
+  assert.equal(notes.show('airbnb.com').facts.length, 1);
+
+  assert.match((await notes.add('airbnb.com', 'x'.repeat(201), judgeWith(0.9))).reason, /at most 200 characters/);
+  assert.match((await notes.add('airbnb.com', 'line one\nline two', judgeWith(0.9))).reason, /one line/);
+  const forced = await notes.add('airbnb.com', 'Prices default to the visitor\'s local currency', { ...judgeWith(0.1), force: true });
+  assert.equal(forced.ok, true);
+});
+
+test('hints rank this page\'s notes, then site-wide ones, then other pages\'', async () => {
+  await notes.add('https://example.com/login', 'Login accepts SSO', { force: true });
+  await notes.add('example.com', 'Search submits on Enter', { force: true });
+  await notes.add('https://example.com/cart', 'The cart keeps items for 30 minutes', { force: true });
+  const order = (url) => notes.hintLines(url).slice(1).map(l => l.replace(/^ +[0-9a-f]{5} | \(worked.*$/g, ''));
+  assert.deepEqual(order('https://example.com/'), ['Search submits on Enter', 'The cart keeps items for 30 minutes', 'Login accepts SSO']);
+  assert.equal(order('https://example.com/login')[0], 'Login accepts SSO');
+});
+
+test('an agent note is kept but marked unchecked when Jev cannot be asked', async () => {
+  const r = await notes.add('example.com', 'Search submits on Enter', { cfg: { key: 'k', model: 'm' }, fetchImpl: async () => { throw new Error('network down'); } });
+  assert.equal(r.ok, true);
+  assert.match(r.unchecked, /network down/);
+  assert.equal(notes.show('example.com').facts[0].verified, false);
+  assert.match(notes.hintLines('https://example.com/')[1], /unchecked/);
+});
+
+test('confirm counts a note that held; drop removes a wrong one and keeps why', async () => {
+  const { id } = await notes.add('example.com', 'Filters live under "More filters"', { force: true });
+  assert.equal(notes.confirm(id).count, 2);
+  assert.equal(notes.confirm(`#${id}`).count, 3);
+  assert.equal(notes.show('example.com').facts[0].count, 3);
+  const d = notes.drop(id, { why: 'the button is now called "All filters"' });
+  assert.equal(d.ok, true);
+  assert.equal(notes.show('example.com').facts.length, 0);
+  assert.equal(notes.confirm(id).ok, false);
+});
+
+test('browserctrl notes adds, lists, shows, confirms, drops and clears without a browser', async () => {
   notes.record(notes.derive(closedRun()));
-  const run = (...a) => promisify(execFile)('node', [path.join(ROOT, 'bin/browserctrl.mjs'), 'notes', ...a], { env: process.env });
-  assert.match((await run()).stdout, /^example\.com {2}4 notes/);
+  const env = { ...process.env, TYPESAFE_API_KEY: '', BROWSERCTRL_JEV_ENV: path.join(DIR, 'missing.env') };
+  const run = (...a) => promisify(execFile)('node', [path.join(ROOT, 'bin/browserctrl.mjs'), 'notes', ...a], { env });
+  const added = (await run('add', 'example.com', '--force', 'Sorting is a dropdown called "Sort by"')).stdout;
+  const id = added.match(/Added ([0-9a-f]{5}) to example\.com/)?.[1];
+  assert.ok(id, added);
+  // Without a Jev key the note is kept and marked unchecked.
+  assert.match((await run('add', 'example.com', 'Search submits on Enter')).stdout, /not checked by Jev/);
+  assert.match((await run()).stdout, /^example\.com {2}3 notes/);
   const shown = (await run('https://gitlab.example.com/x')).stdout;
-  assert.match(shown, /\[url\] on \/acme\/web\/-\/merge_requests, click "Closed" sets/);
-  assert.match(shown, /worked 1×, first 20\d\d-/);
+  assert.match(shown, /[0-9a-f]{5} \[url\] on \/acme\/web\/-\/merge_requests, click "Closed" sets/);
+  assert.match(shown, new RegExp(`${id} \\[agent\\] Sorting is a dropdown`));
+  assert.match((await run('confirm', id)).stdout, /Confirmed .* \(worked 2×\)/);
+  assert.match((await run('drop', id, '--why', 'renamed')).stdout, new RegExp(`Dropped ${id} from example\\.com`));
   assert.match((await run('example.com', '--clear')).stdout, /Cleared flow notes: example\.com/);
   assert.match((await run()).stdout, /no flow notes yet/);
 });
