@@ -1,0 +1,81 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Friction fixture, round 2</title>
+<style>
+  body { font: 14px sans-serif; margin: 20px; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+  #cal { border: 1px solid #999; padding: 8px; width: 360px; }
+  #cal .days { display: grid; grid-template-columns: repeat(7, 46px); gap: 2px; }
+  #cal .days button { width: 46px; height: 28px; overflow: hidden; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  [role=checkbox], [role=radio] { display: inline-block; padding: 4px 8px; border: 1px solid #999; cursor: pointer; }
+  [aria-checked=true] { background: #cfc; }
+</style></head>
+<body>
+<!-- A restaurant's entry button: it starts an order, nothing is bought until checkout. -->
+<header><button id="orderNow" onclick="document.getElementById('started').textContent = 'order started'">Order Now</button></header>
+<p id="started"></p>
+
+<section id="cart" hidden>
+  <h2>Your bag</h2>
+  <p>Order total $12.40</p>
+  <label>Card number <input autocomplete="cc-number"></label>
+  <button onclick="document.getElementById('placed').textContent = 'placed'">Place order</button>
+</section>
+<p id="placed"></p>
+
+<!-- Ionic-style controls: a single-choice group drawn as checkboxes (clicking the chosen
+     one keeps it chosen), and a radio whose aria-checked updates a moment later. -->
+<section>
+  <h2>Drink</h2>
+  <div role="checkbox" id="milk" aria-checked="true" tabindex="0" onclick="pick(this)">Milk, 110 Cal</div>
+  <div role="checkbox" id="juice" aria-checked="false" tabindex="0" onclick="pick(this)">Apple juice, 90 Cal</div>
+  <h2>Order type</h2>
+  <div role="radio" id="pickup" aria-checked="false" tabindex="0" onclick="later(this)">PICKUP</div>
+  <div role="radio" id="delivery" aria-checked="false" tabindex="0" onclick="later(this)">DELIVERY</div>
+</section>
+
+<!-- A date picker that opens a moment after its button, with day cells named only by
+     their text ("October 16, 2026 16"). -->
+<section>
+  <button id="when" onclick="setTimeout(openCal, 900)">Pick dates</button>
+  <div id="cal" hidden>
+    <div class="row"><button aria-label="Previous month" onclick="move(-1)">‹</button><b id="month"></b><button aria-label="Next month" onclick="move(1)">›</button></div>
+    <div class="days" id="days"></div>
+  </div>
+  <p id="picked"></p>
+</section>
+
+<!-- Two controls with the same name in different rows. -->
+<section>
+  <div class="row"><h3>Start time</h3><button onclick="edited('start')">Edit</button></div>
+  <div class="row"><h3>End time</h3><button onclick="edited('end')">Edit</button></div>
+  <p id="edited"></p>
+</section>
+
+<script>
+  function pick(el) {
+    for (const b of document.querySelectorAll('[role=checkbox]')) b.setAttribute('aria-checked', String(b === el));
+  }
+  function later(el) {
+    setTimeout(() => { for (const b of document.querySelectorAll('[role=radio]')) b.setAttribute('aria-checked', String(b === el)); }, 250);
+  }
+  function edited(which) { document.getElementById('edited').textContent = 'edit ' + which; }
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  let shown = new Date(2026, 9, 1);
+  function openCal() { document.getElementById('cal').hidden = false; render(); }
+  function move(d) { shown = new Date(shown.getFullYear(), shown.getMonth() + d, 1); render(); }
+  function render() {
+    document.getElementById('month').textContent = MONTHS[shown.getMonth()] + ' ' + shown.getFullYear();
+    const days = document.getElementById('days');
+    days.innerHTML = '';
+    const n = new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate();
+    for (let d = 1; d <= n; d++) {
+      const b = document.createElement('button');
+      const label = MONTHS[shown.getMonth()] + ' ' + d + ', ' + shown.getFullYear();
+      b.innerHTML = '<span class="sr">' + label + '</span> ' + d;
+      b.onclick = () => { document.getElementById('picked').textContent = 'Picked ' + label; };
+      days.appendChild(b);
+    }
+  }
+</script>
+</body></html>
