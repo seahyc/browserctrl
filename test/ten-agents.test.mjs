@@ -30,7 +30,8 @@ after(async () => {
   }
   fs.rmSync(dir, { recursive: true, force: true });
 });
-const options = { skip: !chromeBinary(), timeout: 120000 };
+// Windows runners took 83-120 s for ten agents (each fills, clicks and scrolls); give them headroom.
+const options = { skip: !chromeBinary(), timeout: process.platform === 'win32' ? 240000 : 120000 };
 
 test('ten independent agents operate distinct tabs through one shared daemon', options, async () => {
   const results = await Promise.all(Array.from({ length: 10 }, (_, n) => exec(process.execPath, ['--input-type=module', '-e', `
