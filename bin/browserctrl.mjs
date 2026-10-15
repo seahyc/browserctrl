@@ -61,22 +61,38 @@ async function waitToRead(conn, targetId, flags, { quiet = false } = {}) {
   return st;
 }
 
-// --recover: a read of a page that stopped responding reloads it (restarting its renderer
-// if a reload cannot run) and reads it once more. Without the flag the error says why it
-// stopped and what to run.
+// --recover: a read of a page that stopped responding recovers it (stops its script and
+// reloads; failing that restarts its renderer; failing that replaces the tab) and reads it
+// once more. Without the flag the error says why it stopped and what to run.
 async function recovering(conn, targetId, flags, read) {
-  try { return await read(); }
+  try { return await read(targetId); }
   catch (e) {
     if (!flags.recover || e.code !== 'timeout' || !['hung', 'crashed'].includes(e.diagnosis?.kind)) throw e;
-    let how = 'reloaded';
-    try { await ops.reload(conn, targetId, { waitUntil: 'load', timeoutMs: 20000 }); }
-    catch { await ops.hardReload(conn, targetId, { timeoutMs: 30000 }); how = 'restarted its renderer'; }
-    const r = await read();
-    const note = `the page had stopped responding (${e.diagnosis.kind}); --recover ${how} it`;
-    if (r && typeof r === 'object' && !Array.isArray(r)) r.recovered = note;
+    const rc = await recoverTab(conn, targetId);
+    const r = await read(rc.targetId || targetId);
+    const note = `the page had stopped responding (${e.diagnosis.kind}); --recover ${recoveryNote(rc)}`;
+    if (r && typeof r === 'object' && !Array.isArray(r)) { r.recovered = note; if (rc.replaced) r.recoveredTab = rc.tab; }
     else console.error(`(${note})`);
     return r;
   }
+}
+
+// ops.recoverTab, plus what the CLI keeps per tab: a recording of a tab that had to be
+// replaced is closed off, with the command to continue it on the new tab.
+async function recoverTab(conn, targetId, opts) {
+  const recording = rec.get(targetId);
+  const rc = await ops.recoverTab(conn, targetId, opts);
+  if (rc.replaced && recording) {
+    rec.update(targetId, null);
+    try { rec.finish(recording.dir); } catch {}
+    rc.recording = `recording ${recording.dir} stopped with the old tab; continue it: browserctrl rec start ${rc.tab} --out ${recording.dir}`;
+  }
+  return rc;
+}
+function recoveryNote(rc) {
+  return rc.replaced
+    ? `replaced the tab: ${rc.oldTab} is closed and the page is open in tab ${rc.tab}; use ${rc.tab} from now on (old refs are gone)${rc.recording ? `. ${rc.recording}` : ''}`
+    : `${rc.recovered} it`;
 }
 
 // The action line a recording shows for a command: what was done, to what.
@@ -845,7 +861,7 @@ const main = async () => {
       }
       case 'items': {
         await waitToRead(conn, targetId, flags);
-        const r = await recovering(conn, targetId, flags, () => ops.evaluate(conn, targetId, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }), { retry: true }));
+        const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }), { retry: true }));
         if (flags.group) r.groups = r.groups.filter(g => g.id === flags.group);
         if (!flags['no-prefetch']) await prefetch.start(conn, mainLinks(r, 3, r.url)).catch(() => {});
         return out(flags.json ? r : formatItems(r, { full: Boolean(flags.group), grep: flags.grep }));
@@ -858,23 +874,24 @@ const main = async () => {
       }
       case 'read': {
         const settled = await waitToRead(conn, targetId, flags, { quiet: true });
-        const snap = await recovering(conn, targetId, flags, () => ops.readPage(conn, targetId, {
+        const snap = await recovering(conn, targetId, flags, (id) => ops.readPage(conn, id, {
           maxText: flags.text === 'none' ? 0 : Number(flags['max-text'] || 20000),
           max: Number(flags.max || 400),
           includeHidden: Boolean(flags['include-hidden']),
           all: Boolean(flags.all),
         }));
-        readtokens.remember(port, targetId, snap.token);
+        const readId = snap.recoveredTab ? (await ops.resolveTab(conn, snap.recoveredTab)).targetId : targetId;
+        readtokens.remember(port, readId, snap.token);
         if (settled) { snap.settled = settled; snap.waitNote = ops.describeSettle(settled); }
         if (snap.recovered) snap.waitNote = [snap.waitNote, snap.recovered].filter(Boolean).join('; ');
         hint(snap.url, flags);
-        snap.params = await ops.evaluate(conn, targetId, PAGE_PARAMS).catch(() => []);
+        snap.params = await ops.evaluate(conn, readId, PAGE_PARAMS).catch(() => []);
         if (flags.json) return out(snap);
         return out(formatRead(snap) + (snap.params?.length ? `\nurl params (set them with a nav step): ${formatParams(snap.params)}` : ''));
       }
       case 'text': {
         await waitToRead(conn, targetId, flags);
-        const raw = await recovering(conn, targetId, flags, () => ops.evaluate(conn, targetId, 'document.body ? document.body.innerText : ""', { retry: true }));
+        const raw = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, 'document.body ? document.body.innerText : ""', { retry: true }));
         const source = String(raw || '');
         let selected = source;
         if (flags.match) {
@@ -1003,7 +1020,15 @@ const main = async () => {
       case 'reload':
       case 'refresh':
         if (flags.hard) return out(await ops.hardReload(conn, targetId, { timeoutMs: timeoutMs || 30000 }));
-        return out(await ops.reload(conn, targetId, {waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000}));
+        try {
+          return out(await ops.reload(conn, targetId, {waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000}));
+        } catch (e) {
+          // A stuck page cannot run a reload: recover it instead (see ops.recoverTab).
+          const d = await ops.diagnoseTab(conn, targetId);
+          if (!['hung', 'crashed'].includes(d.kind)) throw e;
+          const rc = await recoverTab(conn, targetId, { timeoutMs: Math.min(timeoutMs || 20000, 20000) });
+          return out({ ...rc, note: `the page was not responding (${d.kind}); ${recoveryNote(rc)}` });
+        }
       case 'dialog': {
         if (!flags.accept && !flags.dismiss) throw new Error(`Usage: browserctrl dialog ${tab.id} --accept | --dismiss [--text "prompt answer"]`);
         const open = (await conn.events(targetId, { limit: 1 }).catch(() => null))?.dialog;

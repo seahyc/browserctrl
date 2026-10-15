@@ -1,0 +1,8 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Always hangs</title></head><body>
+<p>Loading forever.</p>
+<script>
+  // Every load wedges its main thread a moment after it starts.
+  setTimeout(function () { for (;;) {} }, 300);
+</script>
+</body></html>
