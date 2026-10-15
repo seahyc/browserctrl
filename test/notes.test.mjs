@@ -113,10 +113,9 @@ test('hints list this page\'s facts first, capped, and respect BROWSERCTRL_NOTES
   notes.record(notes.derive(closedRun()));
   for (let i = 0; i < 8; i++) notes.record([{ site: 'example.com', key: `k${i}`, kind: 'url', path: '/other', text: `elsewhere ${i}`, ok: true }]);
   const lines = notes.hintLines(`${MRS}?state=opened`);
-  assert.equal(lines.length, 6);
-  assert.match(lines[0], /^Flow notes for example\.com/);
-  assert.match(lines[1], /^ {2}[0-9a-f]{5} on \/acme/);
-  assert.ok(lines[1].includes('/acme/web/-/merge_requests') && lines.slice(2).every(l => l.includes('elsewhere')), lines.join('\n'));
+  assert.equal(lines.length, 5);
+  assert.match(lines[0], /^ {2}[0-9a-f]{5} on \/acme/);
+  assert.ok(lines.slice(1).every(l => l.includes('elsewhere')), lines.join('\n'));
   process.env.BROWSERCTRL_NOTES = 'quiet';
   assert.deepEqual(notes.hintLines(MRS), []);
   notes.record([{ site: 'example.com', key: 'quiet', kind: 'url', text: 'recorded while quiet', ok: true }]);
@@ -155,10 +154,12 @@ test('an agent note is stored only when Jev judges it a reusable site fact', asy
 });
 
 test('hints rank this page\'s notes, then site-wide ones, then other pages\'', async () => {
-  await notes.add('https://example.com/login', 'Login accepts SSO', { force: true });
-  await notes.add('example.com', 'Search submits on Enter', { force: true });
-  await notes.add('https://example.com/cart', 'The cart keeps items for 30 minutes', { force: true });
-  const order = (url) => notes.hintLines(url).slice(1).map(l => l.replace(/^ +[0-9a-f]{5} | \(worked.*$/g, ''));
+  // Distinct times: among equally proven notes, the most recent comes first.
+  const t0 = Date.now() - 60_000;
+  await notes.add('https://example.com/login', 'Login accepts SSO', { force: true, now: t0 });
+  await notes.add('example.com', 'Search submits on Enter', { force: true, now: t0 + 1000 });
+  await notes.add('https://example.com/cart', 'The cart keeps items for 30 minutes', { force: true, now: t0 + 2000 });
+  const order = (url) => notes.hintLines(url).map(l => l.replace(/^ +[0-9a-f]{5} | \(worked.*$/g, ''));
   assert.deepEqual(order('https://example.com/'), ['Search submits on Enter', 'The cart keeps items for 30 minutes', 'Login accepts SSO']);
   assert.equal(order('https://example.com/login')[0], 'Login accepts SSO');
 });
@@ -168,7 +169,7 @@ test('an agent note is kept but marked unchecked when Jev cannot be asked', asyn
   assert.equal(r.ok, true);
   assert.match(r.unchecked, /network down/);
   assert.equal(notes.show('example.com').facts[0].verified, false);
-  assert.match(notes.hintLines('https://example.com/')[1], /unchecked/);
+  assert.match(notes.hintLines('https://example.com/')[0], /unchecked/);
 });
 
 test('confirm counts a note that held; drop removes a wrong one and keeps why', async () => {

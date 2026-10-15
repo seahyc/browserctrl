@@ -21,7 +21,7 @@ import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
-import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint, listTaps, tapAdd, tapUpdate, tapRemove } from '../lib/recipes.mjs';
+import { listRecipes, loadRecipe, runRecipe, findRecipes, listTaps, tapAdd, tapUpdate, tapRemove } from '../lib/recipes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
 import * as cooldown from '../lib/cooldown.mjs';
@@ -36,6 +36,7 @@ import { visit, formatVisits } from '../lib/visit.mjs';
 import * as show from '../lib/show.mjs';
 import * as trace from '../lib/trace.mjs';
 import * as notes from '../lib/notes.mjs';
+import * as site from '../lib/site.mjs';
 import * as rec from '../lib/rec.mjs';
 
 // Commands that act on a page take a still when their tab is being recorded; reads
@@ -75,13 +76,10 @@ function parseArgs(argv) {
 
 const out = v => console.log(typeof v === 'string' ? v : JSON.stringify(v, null, 2));
 
-// A matching recipe is usually much faster than the UI the agent is about to
-// drive. Hints go to stderr so stdout stays parseable.
-// Flow notes (lib/notes.mjs) follow: what worked on this site in past runs.
+// What browserctrl knows about the site the agent is about to drive: recipes (faster than
+// the UI), then flow notes. Hints go to stderr so stdout stays parseable.
 function hint(url, flags = {}) {
-  const line = recipeHint(url);
-  if (line) console.error(`hint: ${line}`);
-  if (!flags['no-notes']) for (const l of notes.hintLines(url)) console.error(`hint: ${l}`);
+  for (const l of site.hintBlock(url, { notes: !flags['no-notes'] })) console.error(`hint: ${l}`);
 }
 
 // After a page load: a challenge starts the site's cool-down; say so on stderr.
@@ -180,8 +178,11 @@ function usage() {
                                                    [--repeat 'click Next' --until "<condition>" --max 10 --collect items|text]
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
     browserctrl trace <tab> [--last N] [--json]          what recent do runs did: targets, expectations, overlays, notices
-    browserctrl notes [site] [--clear] [--json]          flow notes: facts about how a site works; open/nav/read and do steps hint them
-    browserctrl notes add <site|url> [--path /p] "<fact>" [--force]   after a task: what would have saved time (Jev rejects answers/values)
+    browserctrl site <site|url> [--json]                 before planning on a site: its recipes (run usage), then flow notes (ids, this page first)
+    browserctrl notes [site|url] [--clear] [--json]      flow notes alone; open/nav/read and do steps hint recipes + notes
+    browserctrl notes add <site|url> [--path /p] [--api] [--recipe <name>] "<fact>" [--force]
+                                                         after a task: what would have saved time (Jev rejects answers/values);
+                                                         --api: where a page's data comes from (a recipe candidate)
     browserctrl notes confirm <id> | drop <id> --why "…"  a note held / was wrong. --no-notes skips hints once;
                                                          BROWSERCTRL_NOTES=quiet records without hints, =off disables
     browserctrl check <tab> [--expect "…"]               Jev yes/no checks: challenge, login, error, dialog, empty
@@ -347,13 +348,22 @@ const main = async () => {
     const runs = trace.read(positional[1], { last: Number(flags.last || 5) });
     return out(flags.json ? runs : trace.format(runs));
   }
+  if (cmd === 'site') {
+    if (!positional[1]) throw new Error('Usage: browserctrl site <site|url> [--json]   recipes, then flow notes, for a site or page');
+    const info = site.lookup(positional[1]);
+    return out(flags.json ? info : site.format(info));
+  }
   if (cmd === 'notes') {
     const sub = positional[1];
     if (sub === 'add') {
       // A boolean flag written before the text swallows it (--force "text"); take it back.
       const rest = [...positional.slice(3), ...(typeof flags.force === 'string' ? [flags.force] : [])];
-      if (!positional[2] || !rest.length) throw new Error('Usage: browserctrl notes add <site|url> [--path /search] "<one-line fact about how the site works>" [--force]');
-      const r = await notes.add(positional[2], rest.join(' '), { path: typeof flags.path === 'string' ? flags.path : undefined, force: Boolean(flags.force) });
+      if (!positional[2] || (!rest.length && typeof flags.api !== 'string')) throw new Error('Usage: browserctrl notes add <site|url> [--path /search] [--api] [--recipe <name>] "<one-line fact about how the site works>" [--force]');
+      const recipe = typeof flags.recipe === 'string' ? flags.recipe : undefined;
+      if (recipe && !listRecipes().some(r => r.name === recipe)) throw new Error(`No recipe ${recipe}. See: browserctrl site ${positional[2]}`);
+      // --api "<text>": the text is the value of the flag when written before it.
+      const restApi = typeof flags.api === 'string' ? [flags.api, ...rest] : rest;
+      const r = await notes.add(positional[2], restApi.join(' '), { path: typeof flags.path === 'string' ? flags.path : undefined, force: Boolean(flags.force), api: Boolean(flags.api), recipe });
       if (flags.json) return out(r);
       if (!r.ok) { process.exitCode = 1; return out(`Not added: ${r.reason}`); }
       return out(`Added ${r.id} to ${r.site}${r.p != null ? ` (Jev p=${r.p})` : ''}${r.unchecked ? ` (not checked by Jev: ${r.unchecked})` : ''}`);

@@ -480,9 +480,10 @@ function notesPrompt(notesArm, env) {
   const run = `\n\nRun every browserctrl command with this prefix: ${prefix} browserctrl ...`;
   if (notesArm === 'off') return run;
   return `${run}
-Flow notes: open, nav, read and do print "hint:" lines with note ids for this site. Use them when they fit the task.
+Before planning, look the site up: ${prefix} browserctrl site <site or start URL>. It lists the site's recipes and its flow notes (facts earlier runs wrote about how the site works, with ids). Use them to pick your plan. open, nav, read and do also print the top ones as "hint:" lines.
 When you have your answer, and before your final message, reflect: what would have saved you the most time on this site? Add up to 3 one-line facts about how the site works that would help a different task on it, never the answer or this task's values:
   ${prefix} browserctrl notes add <site or page URL> "<fact>"
+If you saw where a page's data comes from (an API endpoint), add it with --api: notes add <site> --api "<data> comes from <endpoint>".
 Confirm each note you relied on that held (notes confirm <id>) and drop each one that was wrong (notes drop <id> --why "<what was wrong>").
 Add "notes_added": <number of notes you added> to your JSON.`;
 }

@@ -13,8 +13,9 @@ import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
 import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
-import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint } from '../lib/recipes.mjs';
+import { listRecipes, loadRecipe, runRecipe, findRecipes } from '../lib/recipes.mjs';
 import * as notes from '../lib/notes.mjs';
+import * as site from '../lib/site.mjs';
 import * as rec from '../lib/rec.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
@@ -366,6 +367,12 @@ const TOOLS = [
     },
   },
   {
+    name: 'browser_site',
+    description:
+      'Before planning a task on a site: everything browserctrl knows about it. Recipes first (the site\'s own API calls, faster than any UI, with run usage for browser_recipe), then flow notes (facts about how its UI works, with ids; a page URL puts that page\'s notes first). api notes are recipe candidates.',
+    inputSchema: { type: 'object', properties: { site: { type: 'string', description: 'example.com or a page URL' } }, required: ['site'] },
+  },
+  {
     name: 'browser_notes',
     description:
       'Flow notes: short facts about how a site works, hinted on open, navigate, read and do steps with an id. After finishing a task on a site, add up to 3 one-line facts that would have saved you the most time on a different task there (never the answer or the task\'s values; Jev rejects those). confirm a note you relied on that held; drop one that was wrong, with why. action=add (site or url, text, optional path template like /search), confirm (id), drop (id, why), list (optional site).',
@@ -376,6 +383,8 @@ const TOOLS = [
         site: { type: 'string', description: 'example.com or a page URL (its path becomes the note\'s page)' },
         text: { type: 'string' }, path: { type: 'string' }, id: { type: 'string' }, why: { type: 'string' },
         force: { type: 'boolean', description: 'Store even if Jev judges it task-specific.' },
+        api: { type: 'boolean', description: 'The note says where a page\'s data comes from (an endpoint): a recipe candidate.' },
+        recipe: { type: 'string', description: 'Name of a recipe this note points to.' },
       },
       required: ['action'],
     },
@@ -425,12 +434,10 @@ function withChallenge(res, found) {
     next: `Do not reload or retry. Hand the tab to the human with browser_captcha (tab ${res.targetId ? res.targetId.slice(0, 8) : 'this tab'}).` };
 }
 
+// Recipes, then flow notes, for the site the page is on.
 function withHint(result, url) {
-  const line = url && recipeHint(url);
-  if (line) result.content.push({ type: 'text', text: `hint: ${line}` });
-  // Flow notes: what worked on this site in the user's past runs.
-  const learned = url ? notes.hintLines(url) : [];
-  if (learned.length) result.content.push({ type: 'text', text: learned.map(l => `hint: ${l}`).join('\n') });
+  const block = url ? site.hintBlock(url) : [];
+  if (block.length) result.content.push({ type: 'text', text: block.map(l => `hint: ${l}`).join('\n') });
   return result;
 }
 
@@ -808,9 +815,12 @@ const handlers = {
     });
   },
 
+  browser_site: async args => text(site.format(site.lookup(args.site))),
+
   browser_notes: async args => {
     if (args.action === 'add') {
-      const r = await notes.add(args.site, args.text, { path: args.path, force: Boolean(args.force) });
+      if (args.recipe && !listRecipes().some(r => r.name === args.recipe)) return fail(`No recipe ${args.recipe}`);
+      const r = await notes.add(args.site, args.text, { path: args.path, force: Boolean(args.force), api: Boolean(args.api), recipe: args.recipe });
       return r.ok ? text(r) : fail(`Not added: ${r.reason}`);
     }
     if (args.action === 'confirm' || args.action === 'drop') {

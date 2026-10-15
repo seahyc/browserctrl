@@ -223,11 +223,13 @@ bench harness records every run into `bench/runs/<run>/rec/`.
 
 A recipe calls a site's own API inside a tab on that site and returns structured
 items in seconds. For a data task on a site (order history, inbox, search
-results), look for one first; `open`, `nav` and `read` also print a `hint:` line
-when the page's site has recipes.
+results), look for one first with `browserctrl site <site or URL>`, which lists recipes
+with their run command and then the site's flow notes; `open`, `nav` and `read` also
+hint them.
 
 ```sh
-browserctrl recipe find "shopee orders"                 # or a URL; matches local and tapped recipes
+browserctrl site shopee.sg                              # recipes, then flow notes
+browserctrl recipe find "shopee orders"                 # recipes by words, local and tapped
 browserctrl recipe run shopee.sg/orders --browser dia   # key=value args override params
 ```
 
@@ -315,12 +317,21 @@ file:
 
 ## Fastest way through a task
 
+**Before planning on a site, look it up once:** `browserctrl site <site or page URL>`
+(MCP `browser_site`). It lists the site's recipes first, with the exact `recipe run`
+command, then its flow notes: facts earlier agents wrote about how the site works,
+with ids, the page's own notes first. Pick your plan from them: a recipe that covers
+the data beats any UI route, and a note such as "the filter is in the URL" turns a
+`do` plan into one `nav`. `open`, `nav`, `read` and `do` also print a short hint block
+(counts, top recipes, top notes, and `all: browserctrl site <site>`), but the lookup is
+yours to run; don't wait for a hint.
+
 Every agent turn costs a few seconds of thinking plus the tool's own time, so the fastest
 route is the one with the fewest calls. Choose by what the task needs:
 
 | The task needs | Use | Not |
 | --- | --- | --- |
-| A site's data that a recipe covers | `browserctrl recipe find <url>`, then `recipe run`: no page at all | |
+| A site's data that a recipe covers | `browserctrl site <url>`, then the `recipe run` it prints: no page at all | |
 | A page whose address you know or can build (search, sort, filter, item pages) | `nav` to it, then `items` or `text` | `do` clicking through filters |
 | Two or more interactions you can foresee (type, pick, sort, filter, page through) | one `do` call with the whole plan and `--then items` | a read before each click |
 | Details from several items of a list | `visit` with their links and `--grep` (parallel) | clicking into each item |
@@ -490,8 +501,10 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   result looks wrong, instead of adding read steps to the plan. Traces live in
   `~/.local/share/browserctrl/traces/` (`BROWSERCTRL_TRACES` overrides).
 - **Flow notes** are short facts about how a site works, written by agents after
-  earlier tasks. `open`, `nav`, `read` and each `do` step that lands on a new kind of
-  page print the best five as `hint:` lines with an id, e.g.
+  earlier tasks. Read them all with `browserctrl site <site>` (or `notes <page URL>`,
+  that page first) before planning. `open`, `nav`, `read` and each `do` step that lands
+  on a new kind of page also print the top ones in the hint block, with ids:
+  `hint: 1 recipe (faster than the UI), 3 of 9 notes for airbnb.com (all: browserctrl site airbnb.com)`
   `hint:   3f9a1 Total price with fees is behind the "Display total" toggle (worked 2×, …)`.
   Treat them as advice: if a note says a filter is in the URL, try one `nav` to it
   before driving the filter UI. One rule also writes notes for you: a control that put a
@@ -505,7 +518,11 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   rephrase rather than `--force`. Then `notes confirm <id>` each note you relied on that
   held, and `notes drop <id> --why "…"` each one that was wrong. Good notes name where a
   control hides, which filter lives in the URL, what a site does by default (currency,
-  location, sort), and fine print that changes an answer.
+  location, sort), and fine print that changes an answer. If you spot where a page's
+  data comes from (a JSON endpoint in `recipe endpoints <host>` or the network), record
+  it: `notes add <site> --api "Order list comes from GET /api/v4/orders?offset="`; `site`
+  flags these as recipe candidates. A note can point at a recipe with
+  `--recipe <name>` (shown as `→ recipe run <name>`).
   `browserctrl notes [site] [--clear]` lists or clears them; `--no-notes` skips hints
   once, `BROWSERCTRL_NOTES=quiet` records without hinting, `=off` disables them
   (`BROWSERCTRL_NOTES_DIR` moves the store). MCP: `browser_notes`.
