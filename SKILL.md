@@ -375,6 +375,19 @@ Fewer, cheaper turns:
 
 Read the page first only when you cannot guess the controls' names at all.
 
+Lessons from hard live-site tasks (Online-Mind2Web, round 1):
+
+- **Only the last step commits.** Adding to a cart or bag, choosing options and filling a
+  form are not commits; the commit is the final pay, place-order, send or book button.
+  After an add, check the page confirms it ("Added to bag", the cart count).
+- **Filters whose options change after each pick** (chips that reorder, counts that
+  update): one pick per `do` call, or the report's next step targets a control that moved.
+- **"Find one that…":** look for a filter or sort that does it before checking items one
+  by one; one task spent 40 calls opening titles a filter would have answered.
+- **Fine print decides it:** when you rule a result out over its details, open it so the
+  evidence is on screen, and say why in your answer.
+- **A site error is not the end:** retry once (reload, or the next store or option).
+
 ## Read before you act
 
 `browserctrl read` snapshots the page into `ref_1..ref_N` with roles, accessible names

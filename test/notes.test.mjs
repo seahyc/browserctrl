@@ -22,7 +22,7 @@ const runLine = (r) => ({ run: 'r1', at: '2026-10-15T10:00:00Z', tab: 'T', kind:
 // The shape of a real GitLab trace: a tab click that put the filter in the URL.
 const closedRun = (done = true, stop) => [
   step(1, { do: 'click "Closed"', action: 'click', target: { role: 'tab', name: 'Closed 12', ref: 'ref_31' }, how: 'jev p=0.98',
-    url_before: MRS, url_after: `${MRS}/?sort=merged_at_desc&state=closed&first_page_size=20`, ...(stop ? { stop } : {}) }),
+    url_before: MRS, url_after: `${MRS}/?state=closed`, ...(stop ? { stop } : {}) }),
   step(2, { do: 'fill "Search or filter results" = "jane"', action: 'fill', url_before: `${MRS}/?state=closed`, url_after: `${MRS}/?state=closed` }),
   step(3, { do: 'key Enter', action: 'key', url_before: `${MRS}/?state=closed`, url_after: `${MRS}/?state=closed&search=jane`,
     dismissed: [{ category: 'cookie banner', text: 'We use cookies to improve your experience', control: 'button "Accept all"' }] }),
@@ -40,8 +40,8 @@ test('a do run yields only the URL fact, with typed values templated', () => {
   assert.deepEqual(facts.map(f => f.kind), ['url']);
   const url = facts[0];
   assert.equal(url.site, 'example.com');
-  // Short enums stay (they are the site's vocabulary); numbers could be a task's price or id.
-  assert.match(url.text, /click "Closed" sets \?sort=merged_at_desc&state=closed&first_page_size=… in the URL/);
+  // Short enums stay: they are the site's vocabulary.
+  assert.match(url.text, /click "Closed" sets \?state=closed in the URL/);
   assert.ok(!facts.some(f => f.text.includes('jane')), 'the typed value is the task, not the site');
 });
 
@@ -60,23 +60,42 @@ test('the URL rule records only what this step changed, and hides task values', 
     step(1, { do: 'click "Web Environment"', action: 'click', url_before: base, url_after: `${base}&c=Environment+%3A%3A+Web+Environment` }),
     runLine({ done: true, url: base }),
   ]);
-  assert.match(filtered[0].text, /sets \?c=… in the URL/);
+  // A value that has to be hidden (a classifier string, a price) leaves nothing to reuse.
+  assert.deepEqual(filtered, []);
   const priced = notes.derive([
     step(1, { do: 'click "Under $40"', action: 'click', url_before: 'https://wine.example.com/list', url_after: 'https://wine.example.com/list?price=0-40' }),
     runLine({ done: true }),
   ]);
-  assert.match(priced[0].text, /sets \?price=… in the URL/);
+  assert.deepEqual(priced, []);
+});
+
+// Round 1 of Online-Mind2Web: a click that changed several parameters at once (dates, place
+// ids, session state) was credited to the control, and the note carried that state.
+test('the URL rule skips a step that changed several parameters', () => {
+  const at = 'https://www.airbnb.com/s/Cleveland/homes?adults=2';
+  assert.deepEqual(notes.derive([
+    step(1, { do: 'click "Search"', action: 'click', url_before: at, url_after: `${at}&monthly_start_date=2026-11-01&place_id=ChIJ&price_filter_input_type=2` }),
+    runLine({ done: true }),
+  ]), []);
+});
+
+test('rule URL notes are capped per site and agent notes outrank them', async () => {
+  for (let i = 0; i < 5; i++) notes.record([{ site: 'example.com', key: `url ${i}`, kind: 'url', path: '/list', text: `rule ${i}`, ok: true }]);
+  assert.equal(notes.show('example.com').facts.filter(f => f.kind === 'url').length, 2);
+  await notes.add('https://example.com/elsewhere', 'Filters live under "More filters"', { force: true });
+  assert.match(notes.hintLines('https://example.com/list')[0], /More filters/);
 });
 
 test('notes from retired rules or older rule versions are purged on load; agent notes stay', () => {
   fs.mkdirSync(DIR, { recursive: true });
   const f = (kind, extra = {}) => ({ key: `${kind} k`, kind, text: kind, count: 1, fails: 0, first: '2026-10-15T00:00:00Z', last: new Date().toISOString(), ...extra });
   fs.writeFileSync(path.join(DIR, 'pypi.org.json'), JSON.stringify({ site: 'pypi.org', facts: [
-    f('flow'), f('enter'), f('overlay'), f('url'), f('url', { key: 'url v2', v: 2 }), f('agent', { author: 'agent' }), f('challenge', { v: 2 }),
+    f('flow'), f('enter'), f('overlay'), f('url'), f('url', { key: 'url v2', v: 2 }), f('url', { key: 'url v3', v: 3 }),
+    f('agent', { author: 'agent' }), f('challenge', { v: 3 }),
   ] }));
   const note = notes.show('pypi.org');
   assert.deepEqual(note.facts.map(x => x.kind).sort(), ['agent', 'challenge', 'url']);
-  assert.equal(note.purged, 4);
+  assert.equal(note.purged, 5);
   assert.ok(note.facts.every(x => /^[0-9a-f]{5}$/.test(x.id)));
 });
 
@@ -111,7 +130,7 @@ test('facts unseen for 90 days are pruned on the next write', () => {
 
 test('hints list this page\'s facts first, capped, and respect BROWSERCTRL_NOTES', () => {
   notes.record(notes.derive(closedRun()));
-  for (let i = 0; i < 8; i++) notes.record([{ site: 'example.com', key: `k${i}`, kind: 'url', path: '/other', text: `elsewhere ${i}`, ok: true }]);
+  for (let i = 0; i < 8; i++) notes.record([{ site: 'example.com', key: `k${i}`, kind: 'challenge', path: '/other', text: `elsewhere ${i}`, ok: true }]);
   const lines = notes.hintLines(`${MRS}?state=opened`);
   assert.equal(lines.length, 5);
   assert.match(lines[0], /^ {2}[0-9a-f]{5} on \/acme/);

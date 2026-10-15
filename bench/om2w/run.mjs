@@ -42,7 +42,10 @@ const bcJson = (...args) => JSON.parse(bc(...args));
 const runPath = (runId, ...p) => path.join(runsDir, runId, ...p);
 const readRun = (runId) => JSON.parse(fs.readFileSync(runPath(runId, 'run.json'), 'utf8'));
 const writeRun = (run) => fs.writeFileSync(runPath(run.runId, 'run.json'), JSON.stringify(run, null, 2));
-const tabIds = () => bcJson('tabs', '--json').map((t) => (t.targetId || t.id).slice(0, 8));
+const tabList = () => bcJson('tabs', '--json').map((t) => ({ id: (t.targetId || t.id).slice(0, 8), url: t.url || '' }));
+const tabIds = () => tabList().map((t) => t.id);
+// Registrable-ish site: last two labels, three for short second-level labels (gov.uk, co.jp).
+const siteKey = (url) => { try { const h = new URL(url).hostname.split('.'); return h.slice(h.at(-2)?.length <= 3 && h.length > 2 ? -3 : -2).join('.'); } catch { return ''; } };
 
 async function readyTab(url) {
   const { id } = bcJson('open', url);
@@ -87,14 +90,17 @@ Task: ${task.confirmed_task}
 Browser: a dedicated Chrome you address with --port ${PORT} on every browserctrl command (never --browser). Your start tab is ${tab}, already open on ${task.website}. Work in that tab and leave it open when you finish. Do not touch other tabs. Today is ${today}; you are browsing from the United States.
 Rules:
 - Use the website's UI. Reading the page (browserctrl read/text/items, eval of the DOM) is fine. Do not call the site's APIs with curl or fetch(), do not use browserctrl recipes, and do not run browserctrl rec commands.
-- Never complete a purchase, booking, payment, sign-up, sign-in, or message. Stop at the step just before committing: reaching that final page or state counts as done.
-- When a form asks for something the task does not give, pick the most neutral option (for example "Don't know", "None", "Prefer not to say", or skip an optional field) and carry on to the result. Do not stop early for missing details, and never type in real personal data.
+- Never complete a purchase, booking, payment, sign-up, sign-in, or message. Stop at the step just before committing: reaching that final page or state counts as done. Adding to a cart or bag, choosing options and filling a form are not commits: do them when the task asks, then check the page confirms it (an "Added to bag" message, the cart count).
+- When a form asks for something the task does not give, pick the neutral option ("Don't know", "Prefer not to say", or skip an optional field) and carry on to the result. If there is none, pick the option that assumes least, carry on, and state that assumption in your answer. Do not stop early for missing details, and never type in real personal data.
+- If you rule a result out because of its fine print (for example the cheapest option excludes your case), open it so the evidence is on screen and say why in your answer.
+- If the site shows an error, retry once (reload, or the next store or option) before giving up.
+- For "find one that..." tasks, look for a filter that does it before checking items one by one.
 - Where the task names a condition (cheapest, highest-rated, a price or size range, a date), apply it with the site's own filter or sort controls, exactly as stated, and leave the final page showing the result. A judge grades screenshots of your steps, not just your answer.
 - Before your final message, run browserctrl read ${tab} --port ${PORT} once so the final page is captured.
 
 Method: use browserctrl as its skill describes (~/.agents/skills/browserctrl/SKILL.md): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
   browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --port ${PORT}
-It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab} --port ${PORT}\` to read lists and \`browserctrl text\` only for other facts. The report's url params line shows filters you can set with a nav step. Trust a report whose steps all show ✓. Do not use jev-tool.
+It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab} --port ${PORT}\` to read lists and \`browserctrl text\` only for other facts. The report's url params line shows filters you can set with a nav step. Trust a report whose steps all show ✓ and don't re-read the page after it; a ⚠ step needs checking. When a filter's chips or options change after each pick, put one pick per do call. Do not use jev-tool.
 
 Your final message must be only a JSON object: {"answer": "<the answer, or what the final page shows>", "summary": "<one line: what you did>", "notes": "<one line on anything that went wrong, or empty>"}`;
 }
@@ -183,11 +189,13 @@ function finish(runId) {
   try {
     exported = bcJson('rec', 'om2w', runPath(runId, 'rec'), '--task-id', run.task_id, '--task', run.task, '--answer', answer?.answer ?? raw.trim(), '--root', runPath(runId, 'om2w'));
   } catch (e) { console.error(`export failed: ${String(e.stderr || e).trim()}`); }
-  // Runs are serial by default, so tabs that appeared during the run are the run's.
+  // Tabs that appeared during the run are the run's; in parallel runs, only those on the
+  // task's own site (agents open links in new tabs; the other run is on another site).
   const closed = [];
   const before = new Set(run.tabsBefore);
-  for (const id of tabIds()) {
-    if (id === run.tab.slice(0, 8) || (!run.parallel && !before.has(id))) {
+  const site = siteKey(run.website || '');
+  for (const { id, url } of tabList()) {
+    if (id === run.tab.slice(0, 8) || (!before.has(id) && (!run.parallel || (site && siteKey(url) === site)))) {
       try { bc('close', id, '--steal'); closed.push(id); } catch {}
     }
   }
@@ -447,9 +455,12 @@ if (cmd === 'start') {
 } else if (cmd === 'batch') {
   const jobs = fs.readFileSync(rest[0], 'utf8').split('\n').map((l) => l.replace(/#.*/, '').trim()).filter(Boolean).map((l) => l.split(/\s+/));
   const n = Number(flag('--parallel') || 1);
+  const batchBefore = new Set(tabIds());
   await pool(jobs, n, async ([task, arm, notes]) => {
     try { await runOne(task, arm, notes, { parallel: n > 1 }); } catch (e) { console.error(`[${task} ${arm}] failed: ${e.message}`); }
   });
+  // Off-site tabs agents opened (e.g. a streaming page linked from IMDb) outlive their run.
+  for (const id of tabIds()) if (!batchBefore.has(id)) try { bc('close', id, '--steal'); } catch {}
   report();
 } else if (cmd === 'report') {
   report();
