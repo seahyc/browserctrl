@@ -199,6 +199,26 @@ screen video, and a frontmost-app sample each second so time spent outside the
 browser is still legible. A mark at 0:42 comes back as "click on button
 'Confirm and apply' [data-testid=wb-confirm]", not as a frame number.
 
+## Recording a run to watch later
+
+`record` above captures a person's play across the browser. To keep an agent's run
+on one tab, small enough to keep every run, use `rec`:
+
+```bash
+browserctrl rec start <tab> --browser dia [--out DIR] [--label L]   # until stopped, across navigations
+# ... drive the tab with any browserctrl command ...
+browserctrl rec stop <tab> --browser dia      # prints the directory and its size
+browserctrl replay DIR                        # one self-contained HTML: DOM replay + step timeline
+browserctrl rec om2w DIR --task-id ID --task "…" --answer "…" --root R   # Online-Mind2Web judge input
+```
+
+A recording is rrweb DOM events (`rrweb.ndjson.br`, brotli) plus one 1280-px JPEG
+still per action (`trajectory/`, listed in `steps.jsonl`). Every acting command (and
+`do`, per step) takes a still; reads take one only when the page moved on. A 13-step
+PyPI run came to 0.74 MB: 170 KB of events and 560 KB of stills. Stills show what DOM
+replay cannot: canvas and cross-origin iframes. The MCP tool is `browser_rec`. The
+bench harness records every run into `bench/runs/<run>/rec/`.
+
 ## Use a recipe before driving a site's UI
 
 A recipe calls a site's own API inside a tab on that site and returns structured

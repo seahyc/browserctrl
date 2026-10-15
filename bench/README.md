@@ -17,6 +17,10 @@ harness opened and rendered. A task may instead start from a tab the user opened
 (`HANDOFF:` start URL, `--tab ID`); Taobao would need this, since it logs out
 pages that automation loads, but it was left out to keep runs hands-off.
 
+Every run's start tab is recorded from `start` to `finish` into `runs/<run>/rec/`
+(`browserctrl replay runs/<run>/rec` plays it; `--no-rec` skips it). A still costs
+the acting command about a screenshot's time, the same in every arm.
+
 ## Decision rule (fixed before any results)
 
 For each task, Jev wins if approach B's median time to a verified answer is at

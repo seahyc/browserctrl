@@ -1,0 +1,4 @@
+rrweb 2.1.7 (MIT), unmodified except for removed sourceMappingURL comments.
+  record.umd.min.js       <- @rrweb/record@2.1.7 dist/record.umd.min.cjs
+  rrweb-player.umd.min.js <- rrweb-player@2.1.7 dist/rrweb-player.umd.min.cjs
+  rrweb-player.min.css    <- rrweb-player@2.1.7 dist/style.min.css

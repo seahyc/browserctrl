@@ -2,6 +2,7 @@
 // CLI frontend. Thin: parse args, call lib/ops, print. No protocol logic here.
 import { execFile } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connect } from '../lib/daemon.mjs';
@@ -35,6 +36,20 @@ import { visit, formatVisits } from '../lib/visit.mjs';
 import * as show from '../lib/show.mjs';
 import * as trace from '../lib/trace.mjs';
 import * as notes from '../lib/notes.mjs';
+import * as rec from '../lib/rec.mjs';
+
+// Commands that act on a page take a still when their tab is being recorded; reads
+// only when the page moved on since the last one.
+const STILL_ACT = new Set(['nav', 'reload', 'refresh', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'act', 'captcha']);
+const STILL_READ = new Set(['read', 'items', 'text', 'check']);
+
+// The action line a recording shows for a command: what was done, to what.
+function actionLabel(cmd, positional, flags) {
+  const what = flags.intent ? `"${flags.intent}"` : flags.ref || flags.selector || (flags.x !== undefined ? `(${flags.x}, ${flags.y})` : '');
+  const value = flags.value ?? (['fill', 'type'].includes(cmd) ? positional.slice(2).join(' ') : '');
+  const rest = ['nav', 'key'].includes(cmd) ? positional[2] : cmd === 'act' ? (flags.steps ?? positional.slice(2).join(' ')) : '';
+  return [cmd, what, rest, value !== '' && value !== undefined ? `= "${String(value).slice(0, 80)}"` : ''].filter(Boolean).join(' ');
+}
 
 const MUTATING = new Set([
   'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha', 'do',
@@ -119,6 +134,13 @@ function usage() {
     browserctrl cooldown [clear <site>]                   sites cooling down after a challenge
     A challenge starts a cool-down for its site (20 min, doubling within a day, max 2 h): open, nav,
     do with nav and recipe run refuse that site until it ends or clears; --force overrides.
+
+  Recordings: small, watch-later runs of one tab (rrweb DOM events + one JPEG still per action):
+    browserctrl rec start <tab> --browser dia [--out DIR] [--label L]   record until stopped, across navigations
+    browserctrl rec stop <tab> --browser dia                            stop; prints sizes
+    browserctrl rec status [--browser dia]                              tabs being recorded
+    browserctrl replay <DIR> [--out FILE] [--no-open]                   one self-contained HTML: DOM replay + step timeline
+    browserctrl rec om2w <DIR> --task-id ID --task "…" [--answer "…"] [--root R]   Online-Mind2Web result.json for its judge
 
   Recipes: a site's own API call, faster than its UI (see references/recipes.md):
     browserctrl recipe find <url or words>                recipes for a page or task; open/nav/read also hint at them
@@ -335,6 +357,23 @@ const main = async () => {
     const note = notes.show(what);
     return out(flags.json ? note : notes.format(note));
   }
+  if (cmd === 'replay') {
+    const dir = positional[1];
+    if (!dir || !fs.existsSync(path.join(dir, 'steps.jsonl'))) throw new Error('Usage: browserctrl replay <recording dir> [--out FILE] [--no-open]');
+    const file = path.resolve(flags.out || path.join(os.tmpdir(), `browserctrl-replay-${path.basename(path.resolve(dir))}.html`));
+    fs.writeFileSync(file, rec.replayHtml(dir));
+    if (!flags['no-open']) execFile(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open', [file]);
+    return out({ replay: file, bytes: fs.statSync(file).size });
+  }
+  if (cmd === 'rec' && positional[1] === 'om2w') {
+    if (!positional[2]) throw new Error('Usage: browserctrl rec om2w <recording dir> --task-id ID --task "…" [--answer "…"] [--root DIR]');
+    return out(rec.exportOm2w(positional[2], { taskId: flags['task-id'], task: flags.task, answer: flags.answer === true ? '' : flags.answer, root: flags.root }));
+  }
+  if (cmd === 'rec' && positional[1] === 'status') {
+    const rows = Object.entries(rec.all());
+    if (flags.json) return out(Object.fromEntries(rows));
+    return out(rows.map(([t, r]) => `${t.slice(0, 8)}  :${r.port}  ${r.n} stills  since ${new Date(r.startedAt).toISOString().slice(11, 19)}  ${r.dir}`).join('\n') || '(no tab is being recorded)');
+  }
   if (cmd === 'cooldown') {
     if (positional[1] === 'clear') {
       if (!positional[2]) throw new Error('Usage: browserctrl cooldown clear <site>');
@@ -457,6 +496,7 @@ const main = async () => {
 
   const port = await requireBrowser(flags);
   const conn = await connect(port);
+  let stillAfter = null;
   try {
     if (cmd === 'activity') return activityOutput(await conn.activity(positional[1] || 'list', activityDetails(flags)), flags);
     if (cmd === 'ready') {
@@ -616,6 +656,14 @@ const main = async () => {
       });
       return out(flags.json ? res : formatVisits(res));
     }
+    if (cmd === 'rec') {
+      const sub = positional[1];
+      if (!['start', 'stop'].includes(sub) || !positional[2]) throw new Error('Usage: browserctrl rec start|stop <tab> [--out DIR] [--label L]  (also: rec status, rec om2w, replay)');
+      const t = await ops.resolveTab(conn, positional[2]);
+      if (sub === 'start') return out(await rec.start(conn, t.targetId, { out: flags.out, label: flags.label === true ? null : flags.label }));
+      const res = await rec.stop(conn, t.targetId);
+      return out({ ...res, replay: `browserctrl replay ${res.recording}` });
+    }
     if (cmd === 'open') {
       if (flags.profile && flags.anonymous) throw new Error('--profile and --anonymous are exclusive: an anonymous tab belongs to no profile.');
       if (positional[1]) cooldown.guard(positional[1], { force: Boolean(flags.force), action: 'open' });
@@ -633,6 +681,10 @@ const main = async () => {
     const tab = await ops.resolveTab(conn, positional[1]);
     const targetId = tab.targetId;
     if (MUTATING.has(cmd)) claims.claim(port, targetId, { steal: Boolean(flags.steal) });
+    if (rec.get(targetId) && (STILL_ACT.has(cmd) || STILL_READ.has(cmd))) {
+      // One still per action once the command is done (or failed), outside its timing.
+      stillAfter = { targetId, label: actionLabel(cmd, positional, flags), ifChanged: STILL_READ.has(cmd) };
+    }
 
     const target = {
       ref: flags.ref,
@@ -686,7 +738,9 @@ const main = async () => {
       case 'do': {
         const lines = positional.slice(2);
         if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text] [--open N --grep "label|label"]');
+        const recording = rec.get(targetId);
         const r = await runSteps(conn, targetId, lines, { show: show.showing(flags),
+          onStep: recording ? row => rec.still(conn, targetId, `do: ${row.do}`, { status: row.stopped ? 'FAILED' : row.skipped ? 'SKIPPED' : 'SUCCESS' }) : undefined,
           then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
           force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
           dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,
@@ -874,7 +928,11 @@ const main = async () => {
       default:
         return out(usage());
     }
+  } catch (e) {
+    if (stillAfter) stillAfter.status = 'FAILED';
+    throw e;
   } finally {
+    if (stillAfter) await rec.still(conn, stillAfter.targetId, stillAfter.label, { status: stillAfter.status || 'SUCCESS', ifChanged: stillAfter.ifChanged && !stillAfter.status });
     for (const warning of conn.takeWarnings()) console.error(`Warning: ${warning}`);
     conn.close();
   }

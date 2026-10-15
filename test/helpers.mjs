@@ -23,6 +23,9 @@ process.env.BROWSERCTRL_NOTES_DIR ||= path.join(os.tmpdir(), `browserctrl-test-n
 // test files, and the solver config must never come from the real home dir.
 process.env.BROWSERCTRL_COOLDOWN ||= path.join(os.tmpdir(), `browserctrl-test-cooldown-${process.pid}.json`);
 process.env.BROWSERCTRL_CAPTCHA_CONFIG ||= path.join(os.tmpdir(), `browserctrl-test-captcha-${process.pid}.json`);
+// One path for every test process: the daemon that writes a recording may have been
+// started by an earlier test file.
+process.env.BROWSERCTRL_REC_STATE ||= path.join(os.tmpdir(), 'browserctrl-test-rec-tabs.json');
 export const TEST_PORT = Number(process.env.BROWSERCTRL_TEST_PORT || 9333); // override to run suites side by side
 
 const CHROME_CANDIDATES = [

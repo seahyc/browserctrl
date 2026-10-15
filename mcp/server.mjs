@@ -15,6 +15,7 @@ import { BROWSERS, agentId, withAgentIdentity } from '../lib/env.mjs';
 import * as ops from '../lib/ops.mjs';
 import { listRecipes, loadRecipe, runRecipe, findRecipes, recipeHint } from '../lib/recipes.mjs';
 import * as notes from '../lib/notes.mjs';
+import * as rec from '../lib/rec.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
 import * as cooldown from '../lib/cooldown.mjs';
@@ -355,6 +356,16 @@ const TOOLS = [
     },
   },
   {
+    name: 'browser_rec',
+    description:
+      'Record one tab for watching later, in little space: rrweb DOM events plus one small JPEG still per action, across navigations, until stopped. action=start (optional out dir, label), stop (returns the directory and sizes; open it with `browserctrl replay <dir>`), status.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...browserProp, action: { type: 'string', enum: ['start', 'stop', 'status'] }, tab: { type: 'string' }, out: { type: 'string' }, label: { type: 'string' } },
+      required: ['action'],
+    },
+  },
+  {
     name: 'browser_recording',
     description:
       'Read a recording: its steps, and any moments the human marked on the video resolved to the nearest real event, so a mark comes back as "click on button Confirm and apply", not a frame number.',
@@ -432,6 +443,9 @@ async function withConn(args, fn) {
     conn.close();
   }
 }
+
+// The action line a recording shows for one browser_act step.
+const actLabel = a => [a.action, a.ref || a.selector || (a.x !== undefined ? `(${a.x}, ${a.y})` : ''), a.key || '', a.value ?? a.text ?? '' ? `= "${String(a.value ?? a.text).slice(0, 80)}"` : ''].filter(Boolean).join(' ');
 
 async function actOnce(conn, targetId, a) {
   const target = { ref: a.ref, selector: a.selector, x: a.x, y: a.y };
@@ -566,6 +580,7 @@ const handlers = {
         if (e.offscreen) bits.push(e.offscreen);
         return bits.join('  ');
       });
+      await rec.still(conn, tab.targetId, 'read', { ifChanged: true });
       const o = snap.omitted;
       if (o?.total) elements.push(`(${o.total} more not listed: ${o.above} above, ${o.below} below, ${o.overLimit} over the limit; pass all: true for the whole page)`);
       const s = snap.stats || {};
@@ -599,6 +614,7 @@ const handlers = {
       claims.claim(port, tab.targetId, { steal: Boolean(args.steal) });
       cooldown.guard(args.url, { force: Boolean(args.force), action: 'navigate to' });
       const res = await ops.navigate(conn, tab.targetId, args.url, { waitUntil: args.until || 'load' });
+      await rec.still(conn, tab.targetId, `nav ${args.url}`);
       const found = args.until === 'none' ? null : await captcha.observe(conn, tab.targetId).catch(() => null);
       return withHint(text(found ? withChallenge({ ...res, targetId: tab.targetId }, found) : res), args.url);
     }),
@@ -626,6 +642,7 @@ const handlers = {
       claims.claim(port, tab.targetId, { steal: Boolean(args.steal) });
       const r = await runSteps(conn, tab.targetId, args.steps || [], {
         then: args.then, dismiss: args.dismiss, repeat: args.repeat, until: args.until, max: args.max, collect: args.collect, open: args.open || 0, grep: args.grep,
+        onStep: rec.get(tab.targetId) ? row => rec.still(conn, tab.targetId, `do: ${row.do}`, { status: row.stopped ? 'FAILED' : row.skipped ? 'SKIPPED' : 'SUCCESS' }) : undefined,
       });
       return text(formatSteps(r));
     }),
@@ -654,8 +671,10 @@ const handlers = {
       for (const [i, step] of steps.entries()) {
         try {
           results.push({ step: i + 1, action: step.action, result: await actOnce(conn, tab.targetId, step) });
+          await rec.still(conn, tab.targetId, actLabel(step));
         } catch (e) {
           results.push({ step: i + 1, action: step.action, error: e.message });
+          await rec.still(conn, tab.targetId, actLabel(step), { status: 'FAILED' });
           return text({ results, stoppedAt: i + 1, note: 'Batch stopped at the first failure.' });
         }
       }
@@ -763,6 +782,15 @@ const handlers = {
     const id = args.id || (await (await fetch(base)).json()).find(r => !r.stoppedAt)?.id;
     if (!id) throw new Error('No recording is running.');
     return text(await (await fetch(`${base}/${id}/stop`, { method: 'POST' })).json());
+  },
+
+  browser_rec: async args => {
+    if (args.action === 'status') return text(rec.all());
+    return withConn(args, async conn => {
+      const tab = await ops.resolveTab(conn, args.tab);
+      if (args.action === 'start') return text(await rec.start(conn, tab.targetId, { out: args.out, label: args.label }));
+      return text(await rec.stop(conn, tab.targetId));
+    });
   },
 
   browser_recording: async args => {

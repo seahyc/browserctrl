@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Jev benchmark harness. See bench/README.md for the protocol.
-//   node bench/run.mjs start <task> <A|B> <n> [--tab ID]   prepare a run, print the agent prompt
+//   node bench/run.mjs start <task> <A|B> <n> [--tab ID] [--no-rec]   prepare a run, print the agent prompt
+//     (the start tab is recorded into runs/<run>/rec/ until finish; `browserctrl replay` plays it)
 //   node bench/run.mjs finish <run> <answer.json> --ms N --tokens N --tools N
 //   node bench/run.mjs report
 import { execFileSync } from 'node:child_process';
@@ -513,13 +514,23 @@ if (cmd === 'start') {
     tab = await readyTab(fill(task.start_url));
     bc('release', tab); // the run's agent claims it, not the harness
   }
-  const run = { runId, task: taskId, arm, n: Number(n), tab, tabsBefore: tabIds(), pre, startedAt: new Date().toISOString(), load: os.loadavg()[0] };
   fs.mkdirSync(path.join(runsDir, runId), { recursive: true });
+  // Every run is recorded for watching later: rrweb DOM events plus one still per action.
+  let rec = null;
+  if (!rest.includes('--no-rec')) {
+    try { rec = bcJson('rec', 'start', tab, '--out', path.join(runsDir, runId, 'rec'), '--label', runId).recording; }
+    catch (e) { console.error(`recording not started: ${String(e.stderr || e).trim()}`); }
+  }
+  const run = { runId, task: taskId, arm, n: Number(n), tab, tabsBefore: tabIds(), pre, startedAt: new Date().toISOString(), load: os.loadavg()[0], rec };
   fs.writeFileSync(path.join(runsDir, runId, 'run.json'), JSON.stringify(run, null, 2));
   process.stdout.write(agentPrompt(task, arm, tab) + '\n');
 } else if (cmd === 'finish') {
   const [runId, answerFile] = rest;
   const run = JSON.parse(fs.readFileSync(path.join(runsDir, runId, 'run.json'), 'utf8'));
+  let rec = null;
+  if (run.rec) {
+    try { rec = bcJson('rec', 'stop', run.tab); } catch (e) { console.error(`recording not stopped: ${String(e.stderr || e).trim()}`); }
+  }
   const raw = fs.readFileSync(answerFile, 'utf8');
   fs.writeFileSync(path.join(runsDir, runId, 'answer.txt'), raw);
   let answer;
@@ -539,6 +550,7 @@ if (cmd === 'start') {
     pass: results.every((r) => r.ok), checks: results,
     agent_ms: Number(flag('--ms')), agent_tokens: Number(flag('--tokens')), tool_uses: Number(flag('--tools')),
     jev: answer?.jev ?? null, notes: answer?.notes ?? null, undo: undone, closed_tabs: closed.length,
+    rec: rec ? { dir: path.relative(here, rec.recording), steps: rec.steps, bytes: rec.total_bytes } : null,
   };
   fs.appendFileSync(resultsFile, JSON.stringify(row) + '\n');
   console.log(JSON.stringify({ run: runId, pass: row.pass, failed: results.filter((r) => !r.ok), undo: undone }, null, 2));
