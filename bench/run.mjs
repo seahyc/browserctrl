@@ -377,6 +377,8 @@ const checks = {
     return out;
   },
   async 'youtube-popular'(a) {
+    // A collapsed description shows only "7y ago"; an exact date from the expanded one fits it.
+    const fitsAge = (year, text) => { const m = text.match(/(\d+)\s*(?:y|years?)\s*ago/); if (!m || !year) return false; const y = new Date().getFullYear() - Number(m[1]); return Number(year) >= y - 1 && Number(year) <= y; };
     const id = await readyTab('https://www.youtube.com/@veritasium/videos');
     let text = '';
     try {
@@ -391,7 +393,7 @@ const checks = {
     const pages = got.length >= 2 ? visitTexts(got.slice(0, 2).map((v) => v.url)) : [];
     (a.top2_upload_dates || []).forEach((d, i) => {
       const t = norm(pages[i]?.text || ''), year = (String(d).match(/\d{4}/) || [''])[0];
-      out.push({ name: `video ${i + 1}: upload date on its page`, ok: /youtube\.com\/watch|youtu\.be\//.test(got[i]?.url || '') && ((!!year && t.includes(year)) || t.includes(norm(d))), detail: { date: d, chars: t.length } });
+      out.push({ name: `video ${i + 1}: upload date on its page`, ok: /youtube\.com\/watch|youtu\.be\//.test(got[i]?.url || '') && ((!!year && t.includes(year)) || t.includes(norm(d)) || fitsAge(year, t)), detail: { date: d, chars: t.length } });
     });
     return out;
   },
