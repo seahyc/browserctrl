@@ -314,11 +314,15 @@ const checks = {
     // The list's first ranking table names the tallest; each article's infobox has the facts.
     const id = await readyTab('https://en.wikipedia.org/wiki/List_of_tallest_buildings_in_Singapore');
     let top = [];
-    try { top = JSON.parse(bc('eval', id, `JSON.stringify([...document.querySelectorAll('table.wikitable')[0].querySelectorAll('tbody tr')].map(tr => { const a = [...tr.querySelectorAll('td a, th a')].find(x => x.closest('td,th') && !/^\\[|^\\d/.test(x.textContent.trim())); return a ? a.textContent.trim() : null; }).filter(Boolean).slice(0, 5))`)); } catch {}
+    try { top = JSON.parse(bc('eval', id, `JSON.stringify([...document.querySelectorAll('table.wikitable')[0].querySelectorAll('tbody tr')].map(tr => { const a = [...tr.querySelectorAll('td a, th a')].find(x => x.closest('td,th') && !/^\\[|^\\d/.test(x.textContent.trim())); return a ? { name: a.textContent.trim(), href: decodeURIComponent(a.pathname) } : null; }).filter(Boolean).slice(0, 5))`)); } catch {}
     try { bc('close', id); } catch {}
     const got = a.buildings ?? [];
     const pages = got.length ? visitTexts(got.map((b) => b.url)) : [];
-    const out = [{ name: 'the 3 tallest in the list, tallest first', ok: got.length === 3 && got.every((b, i) => top.slice(0, 4).some((t) => norm(t).includes(norm(b.name).slice(0, 12)) || norm(b.name).includes(norm(t).slice(0, 12)))), detail: top }];
+    // Matched by article link (names differ from titles: "UOB Plaza" / "United Overseas Bank
+    // Plaza One"); the first 4 rows count because ranks can tie.
+    const path = (u) => { try { return decodeURIComponent(new URL(u).pathname); } catch { return ''; } };
+    const final = (i) => path(pages[i]?.final_url || got[i]?.url);
+    const out = [{ name: 'the 3 tallest in the list', ok: got.length === 3 && got.every((b, i) => top.slice(0, 4).some((t) => t.href === path(b.url) || t.href === final(i) || norm(t.name) === norm(b.name))), detail: top.map((t) => t.href) }];
     got.forEach((b, i) => {
       const text = pages[i]?.text || '';
       out.push({ name: `${b.name}: height and year on its article`, ok: /wikipedia\.org\/wiki\//.test(b.url) && text.includes(String(Math.round(Number(b.height_m)))) && text.includes(String(b.completed)), detail: { height: b.height_m, completed: b.completed, chars: text.length } });
@@ -354,10 +358,30 @@ const checks = {
     }
     return out;
   },
+  async 'pypi-headless'(a) {
+    // The search order is read from the site's own results page; facts from the JSON API.
+    const id = await readyTab('https://pypi.org/search/?q=headless+browser');
+    let names = [];
+    try { names = JSON.parse(bc('eval', id, `JSON.stringify([...document.querySelectorAll('a.package-snippet')].map(a => a.querySelector('.package-snippet__name')?.textContent.trim()).filter(Boolean).slice(0, 5))`)); } catch {}
+    try { bc('close', id); } catch {}
+    const got = a.packages ?? [];
+    const out = [{ name: 'the first 3 search results, in order', ok: got.length === 3 && names.length >= 3 && got.every((g, i) => norm(g.name) === norm(names[i])), detail: names }];
+    for (const g of got) {
+      const info = (await fetch(`https://pypi.org/pypi/${encodeURIComponent(g.name)}/json`).then((r) => r.json()).catch(() => ({}))).info || {};
+      const lic = info.license_expression || info.license || (info.classifiers || []).find((c) => c.startsWith('License ::'))?.split('::').pop().trim() || '';
+      const licOk = !lic ? !g.license || /none|not specified|unknown/i.test(g.license) : norm(lic).includes(norm(g.license)) || norm(g.license).includes(norm(lic).slice(0, 12));
+      out.push({ name: `${g.name}: version, license, requires python`, ok: g.version === info.version && licOk && norm(g.requires_python || '').replace(/\s/g, '') === norm(info.requires_python || '').replace(/\s/g, ''), detail: { version: info.version, license: lic.slice(0, 40), requires_python: info.requires_python } });
+    }
+    return out;
+  },
   async 'youtube-popular'(a) {
     const id = await readyTab('https://www.youtube.com/@veritasium/videos');
     let text = '';
-    try { bc('wake', id); await sleep(3000); try { bc('do', id, 'click Popular'); } catch {} await sleep(4000); text = bc('text', id, '--max-text', '60000'); } catch {}
+    try {
+      bc('wake', id);
+      // The grid renders only while the tab is kept rendering: read it through do's items.
+      for (let i = 0; i < 2 && !/views/i.test(text); i++) { try { text = bc('do', id, 'click Popular', '--then', 'items', '--no-prefetch'); } catch (e) { text = String(e.stdout || ''); } }
+    } catch {}
     try { bc('close', id); } catch {}
     const got = a.videos ?? [];
     const head = norm(text).slice(0, Math.max(4000, norm(text).length / 3));
@@ -365,18 +389,19 @@ const checks = {
     const pages = got.length >= 2 ? visitTexts(got.slice(0, 2).map((v) => v.url)) : [];
     (a.top2_upload_dates || []).forEach((d, i) => {
       const t = norm(pages[i]?.text || ''), year = (String(d).match(/\d{4}/) || [''])[0];
-      out.push({ name: `video ${i + 1}: upload date on its page`, ok: /youtube\.com\/watch|youtu\.be\//.test(got[i]?.url || '') && !!year && t.includes(year), detail: { date: d, chars: t.length } });
+      out.push({ name: `video ${i + 1}: upload date on its page`, ok: /youtube\.com\/watch|youtu\.be\//.test(got[i]?.url || '') && ((!!year && t.includes(year)) || t.includes(norm(d))), detail: { date: d, chars: t.length } });
     });
     return out;
   },
   async 'imdb-top3'(a) {
     const id = await readyTab('https://www.imdb.com/chart/top/');
     let top = [];
-    try { top = JSON.parse(bc('eval', id, `JSON.stringify([...document.querySelectorAll('a[href*="/title/tt"] h3, h3.ipc-title__text')].map(h => h.textContent.replace(/^\\d+\\.\\s*/, '').trim()).filter(Boolean).slice(0, 5))`)); } catch {}
+    try { bc('wake', id); await sleep(5000); } catch {}
+    try { top = JSON.parse(bc('eval', id, `JSON.stringify([...new Set([...document.querySelectorAll('a[href*="/title/tt"]')].map(a => a.textContent.replace(/^\\d+\\.\\s*/, '').trim()).filter(Boolean))].slice(0, 5))`)); } catch {}
     try { bc('close', id); } catch {}
     const got = a.movies ?? [];
     const pages = got.length ? visitTexts(got.map((m) => m.url), ['--parallel', '1']) : [];
-    const out = [{ name: 'the top 3 of the chart, in order', ok: got.length === 3 && got.every((m, i) => norm(top[i] || '').includes(norm(m.title).slice(0, 15)) || norm(m.title).includes(norm(top[i] || '').slice(0, 15))), detail: top.slice(0, 3) }];
+    const out = [{ name: 'the top 3 of the chart, in order', ok: got.length === 3 && top.length >= 3 && got.every((m, i) => norm(top[i] || '').includes(norm(m.title).slice(0, 15)) || norm(m.title).includes(norm(top[i] || '').slice(0, 15))), detail: top.slice(0, 3) }];
     got.forEach((m, i) => {
       const t = norm(pages[i]?.text || '');
       out.push({ name: `${m.title}: year, director, runtime on its page`, ok: /imdb\.com\/title\/tt/.test(m.url) && t.includes(String(m.year)) && t.includes(norm(m.director)) && t.includes(norm(m.runtime).replace(/\s+/g, ' ')), detail: { director: m.director, runtime: m.runtime, chars: t.length } });

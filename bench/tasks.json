@@ -176,14 +176,6 @@
     "jev_allow_controls": []
   },
   {
-    "id": "npm-headless",
-    "kind": "r6",
-    "start_url": "https://www.npmjs.com/",
-    "goal": "On npmjs.com, search for \"headless browser\". Open the first 3 results and report each package's name, latest version, license and weekly downloads as shown on its page.",
-    "answer": "{\"packages\": [{\"name\": str, \"version\": str, \"license\": str, \"weekly_downloads\": number}] (3, in result order)}",
-    "jev_allow_controls": []
-  },
-  {
     "id": "youtube-popular",
     "kind": "r6",
     "start_url": "https://www.youtube.com/",
@@ -197,6 +189,14 @@
     "start_url": "https://www.imdb.com/",
     "goal": "On IMDb, open the Top 250 movies chart. Open the top 3 movies and report each one's title, year, director and runtime as shown on its page.",
     "answer": "{\"movies\": [{\"title\": str, \"year\": number, \"director\": str, \"runtime\": str, \"url\": str}] (3, in chart order)}",
+    "jev_allow_controls": []
+  },
+  {
+    "id": "pypi-headless",
+    "kind": "r6",
+    "start_url": "https://pypi.org/",
+    "goal": "On PyPI (pypi.org), search for \"headless browser\". Open the first 3 results and report each package's name, latest version, license and required Python version as shown on its page.",
+    "answer": "{\"packages\": [{\"name\": str, \"version\": str, \"license\": str, \"requires_python\": str}] (3, in result order)}",
     "jev_allow_controls": []
   }
 ]
