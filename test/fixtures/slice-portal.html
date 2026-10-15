@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Portal dropdown in a dialog</title>
+<style>
+  body { font: 14px sans-serif; margin: 0; }
+  .grid button { margin: 2px; }
+  .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.3); }
+  [role=dialog] { position: fixed; left: 50px; top: 40px; width: 500px; height: 400px; background: #fff; padding: 20px; }
+  #menu { position: absolute; left: 70px; top: 140px; width: 200px; background: #fff; border: 1px solid #999; z-index: 10; list-style: none; margin: 0; padding: 0; }
+  #menu li { padding: 6px; cursor: pointer; }
+</style></head>
+<body>
+<!-- A page with far more controls than read lists by default. -->
+<div class="grid" id="grid"></div>
+<script>
+  var grid = document.getElementById('grid');
+  for (var i = 0; i < 450; i++) { var b = document.createElement('button'); b.textContent = 'Listing ' + i; grid.appendChild(b); }
+</script>
+<div class="backdrop"></div>
+<div role="dialog" aria-modal="true" aria-label="All Filters">
+  <h2>All Filters</h2>
+  <button id="sqft" aria-label="minimum square feet" aria-expanded="true" aria-controls="menu">No Min</button>
+  <button>See Results</button>
+</div>
+<!-- The open dropdown is a portal at the end of <body>, outside the dialog. -->
+<ul id="menu" role="listbox">
+  <li role="option" data-value="">No Min</li>
+  <li role="option" data-value="400">400</li>
+  <li role="option" data-value="600" onclick="document.getElementById('sqft').textContent = '600'">600</li>
+</ul>
+</body></html>

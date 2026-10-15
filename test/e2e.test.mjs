@@ -125,9 +125,12 @@ t('select reports the available options when the label is wrong', async () => {
   );
 });
 
-t('stale refs are refused rather than clicking the wrong element', async () => {
+t('refs keep naming what their read saw, and stale refs are refused rather than clicking the wrong element', async () => {
   const snap = await ops.readPage(conn, tabId);
-  await ops.readPage(conn, tabId); // invalidates the previous token
+  await ops.readPage(conn, tabId); // a newer read (do, --intent) does not change what snap's refs mean
+  const r = await ops.click(conn, tabId, { ref: 'ref_1', token: snap.token });
+  assert.ok(r.clicked);
+  for (let i = 0; i < 8; i++) await ops.readPage(conn, tabId, { maxText: 0 }); // the page keeps the last 8 snapshots
   await assert.rejects(() => ops.click(conn, tabId, { ref: 'ref_1', token: snap.token }), /older snapshot/);
 });
 

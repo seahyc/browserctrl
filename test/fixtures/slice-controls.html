@@ -1,0 +1,40 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Steppers, custom checkboxes and accordions</title>
+<style>
+  body { font: 14px sans-serif; margin: 20px; }
+  .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; width: 360px; justify-content: space-between; }
+  .stepper button { width: 32px; height: 32px; border-radius: 50%; border: 1px solid #999; background: #fff; }
+  /* A custom checkbox: the real input is stretched, invisible, over its label. */
+  .pill { position: relative; display: inline-block; padding: 8px 16px; border: 1px solid #999; margin: 6px; }
+  .pill input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  #SEC_SEATS[hidden] { display: none; }
+</style></head>
+<body>
+<h1>Who's coming?</h1>
+<div class="row"><div><div>Adults</div><small>Ages 18 or above</small></div>
+  <div class="stepper"><button type="button" onclick="adults.textContent=+adults.textContent-1"><svg width="12" height="12"><rect y="5" width="12" height="2"/></svg></button>
+  <span id="adults">2</span>
+  <button type="button" onclick="adults.textContent=+adults.textContent+1"><svg width="12" height="12"><rect y="5" width="12" height="2"/><rect x="5" width="2" height="12"/></svg></button></div></div>
+<div class="row"><div><div>Children</div><small>Ages 0-17</small></div>
+  <div class="stepper"><button type="button" onclick="kids.textContent=+kids.textContent-1"><svg width="12" height="12"><rect y="5" width="12" height="2"/></svg></button>
+  <span id="kids">0</span>
+  <button type="button" onclick="kids.textContent=+kids.textContent+1"><svg width="12" height="12"><rect y="5" width="12" height="2"/><rect x="5" width="2" height="12"/></svg></button></div></div>
+
+<h2>Color</h2>
+<span class="pill"><input type="checkbox" id="c-black" onchange="window.blackChecked = this.checked"><label for="c-black">Black 179</label></span>
+<span class="pill"><input type="checkbox" id="c-brown"><label for="c-brown">Brown 9</label></span>
+
+<h2>Filters</h2>
+<button type="button" id="seats" aria-controls="SEC_SEATS" aria-expanded="false"
+  onclick="var open = this.getAttribute('aria-expanded') === 'true'; this.setAttribute('aria-expanded', String(!open)); SEC_SEATS.hidden = open;">Number of seats</button>
+<div id="SEC_SEATS" role="region" hidden><fieldset><legend>Number of seats</legend>
+  <label><input type="checkbox"> 1 seat</label><br><label><input type="checkbox"> 2 seats</label><br>
+  <label><input type="checkbox"> 3 seats</label><br><label><input type="checkbox"> 4 seats</label><br>
+  <label><input type="checkbox"> 5 seats</label></fieldset></div>
+
+<h2>Search</h2>
+<div><span id="hint" class="hint">Where to?</span> <input name="q" aria-label="Destination"></div>
+<label id="wrap">Check-in <input id="checkin" name="checkin"></label>
+<button type="button" onclick="alert('Are you sure?')" id="alerter">Show an alert</button>
+<button type="button" onclick="var t = Date.now(); while (Date.now() - t < 9000) {}" id="busy">Busy for 9 s</button>
+</body></html>

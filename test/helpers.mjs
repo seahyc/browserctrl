@@ -55,6 +55,12 @@ export async function startFixtureServer() {
   const html = fs.readFileSync(path.join(HERE, 'fixtures', 'page.html'), 'utf8');
   const hits = new Map();
   const server = http.createServer((req, res) => {
+    // A JSON answer after ?ms=N milliseconds: a slow search API.
+    if (req.url.startsWith('/delay')) {
+      const ms = Math.min(20000, Number(new URL(req.url, 'http://x').searchParams.get('ms') || 1000));
+      setTimeout(() => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}'); }, ms);
+      return;
+    }
     if (req.url.startsWith('/slow')) {
       setTimeout(() => {
         res.writeHead(200, { 'Content-Type': 'text/html' });

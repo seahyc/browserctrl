@@ -38,16 +38,54 @@ import * as trace from '../lib/trace.mjs';
 import * as notes from '../lib/notes.mjs';
 import * as site from '../lib/site.mjs';
 import * as rec from '../lib/rec.mjs';
+import * as readtokens from '../lib/readtokens.mjs';
 
 // Commands that act on a page take a still when their tab is being recorded; reads
 // only when the page moved on since the last one.
 const STILL_ACT = new Set(['nav', 'reload', 'refresh', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'act', 'captcha']);
 const STILL_READ = new Set(['read', 'items', 'text', 'check']);
 
+// Commands that take a target as a ref, a stable id or a CSS selector.
+const TARGET_CMDS = new Set(['click', 'hover', 'fill', 'select', 'scroll-to', 'upload']);
+// "#id", ".class", "[attr]", "tag#id", "div > a", "input[name=q]": not words.
+const looksLikeSelector = p => /^[#.\[*]/.test(p) ||
+  /^(a|button|input|select|textarea|div|span|li|ul|ol|label|form|img|svg|nav|section|main|header|footer|p|h[1-6]|table|tr|td|th|option|summary|details|dialog)([#.\[:]|\s*[>~+])/.test(p);
+
+// Before a read: wait for skeletons and spinners to clear (up to 8 s) so the page is read
+// finished, not mid-load. --no-wait skips; BROWSERCTRL_READ_WAIT_MS changes the limit.
+async function waitToRead(conn, targetId, flags, { quiet = false } = {}) {
+  if (flags['no-wait'] || flags.wait === false) return null;
+  const st = await ops.settle(conn, targetId, { timeoutMs: Number(process.env.BROWSERCTRL_READ_WAIT_MS || 8000) });
+  const note = ops.describeSettle(st);
+  if (note && !quiet) console.error(`(${note})`);
+  return st;
+}
+
+// --recover: a read of a page that stopped responding reloads it (restarting its renderer
+// if a reload cannot run) and reads it once more. Without the flag the error says why it
+// stopped and what to run.
+async function recovering(conn, targetId, flags, read) {
+  try { return await read(); }
+  catch (e) {
+    if (!flags.recover || e.code !== 'timeout' || !['hung', 'crashed'].includes(e.diagnosis?.kind)) throw e;
+    let how = 'reloaded';
+    try { await ops.reload(conn, targetId, { waitUntil: 'load', timeoutMs: 20000 }); }
+    catch { await ops.hardReload(conn, targetId, { timeoutMs: 30000 }); how = 'restarted its renderer'; }
+    const r = await read();
+    const note = `the page had stopped responding (${e.diagnosis.kind}); --recover ${how} it`;
+    if (r && typeof r === 'object' && !Array.isArray(r)) r.recovered = note;
+    else console.error(`(${note})`);
+    return r;
+  }
+}
+
 // The action line a recording shows for a command: what was done, to what.
 function actionLabel(cmd, positional, flags) {
-  const what = flags.intent ? `"${flags.intent}"` : flags.ref || flags.selector || (flags.x !== undefined ? `(${flags.x}, ${flags.y})` : '');
-  const value = flags.value ?? (['fill', 'type'].includes(cmd) ? positional.slice(2).join(' ') : '');
+  // `click <tab> ref_9` and `fill <tab> ref_9 "text"` name their target positionally.
+  const posTarget = TARGET_CMDS.has(cmd) && !flags.intent && !flags.ref && !flags.selector && positional[2] !== undefined &&
+    (/^(ref_\d+|e\d+)$/.test(String(positional[2])) || looksLikeSelector(String(positional[2]))) ? String(positional[2]) : '';
+  const what = flags.intent ? `"${flags.intent}"` : flags.ref || flags.selector || posTarget || (flags.x !== undefined ? `(${flags.x}, ${flags.y})` : '');
+  const value = flags.value ?? (['fill', 'type'].includes(cmd) ? positional.slice(posTarget ? 3 : 2).join(' ') : '');
   const rest = ['nav', 'key'].includes(cmd) ? positional[2] : cmd === 'act' ? (flags.steps ?? positional.slice(2).join(' ')) : '';
   return [cmd, what, rest, value !== '' && value !== undefined ? `= "${String(value).slice(0, 80)}"` : ''].filter(Boolean).join(' ');
 }
@@ -166,6 +204,8 @@ function usage() {
     browserctrl read <tab> --browser dia [--json] [--all] snapshot with ref_1..N + page text (--all: whole page, not just near the viewport)
     browserctrl text <tab> [--max-text 8000] [--match re] visible text, bounded by default
     browserctrl items <tab> [--group g2] [--all] [--json]  repeated items (results, cards, rows, messages) grouped by page region
+                       read, text and items first wait up to 8 s for skeletons/spinners to clear (--no-wait skips);
+                       --recover reloads a page that stopped responding and reads it again
     browserctrl html <tab> [selector]
     browserctrl eval <tab> <js>
 
@@ -188,10 +228,12 @@ function usage() {
     browserctrl notes confirm <id> | drop <id> --why "…"  a note held / was wrong. --no-notes skips hints once;
                                                          BROWSERCTRL_NOTES=quiet records without hints, =off disables
     browserctrl check <tab> [--expect "…"]               Jev yes/no checks: challenge, login, error, dialog, empty
-    browserctrl click <tab> --ref ref_3 [--button right] [--count 2] [--mod cmd,shift]
-    browserctrl hover <tab> --selector ".menu"
-    browserctrl fill  <tab> --ref ref_5 --value "text"
+    browserctrl click <tab> ref_3 [--button right] [--count 2] [--mod cmd,shift]   (or --ref ref_3; a CSS selector: click <tab> "#id")
+    browserctrl hover <tab> ".menu"
+    browserctrl fill  <tab> ref_5 "text"                   (or --ref ref_5 --value "text"); a label or wrapper is followed to its field
+                       refs mean what your last read saw, even after do or --intent read the page again
     browserctrl select <tab> --ref ref_7 --label "Option"
+    browserctrl dialog <tab> --accept | --dismiss [--text "prompt answer"]   answer a JavaScript alert/confirm/prompt
     browserctrl type  <tab> "literal text"
     browserctrl key   <tab> Enter | cmd+a | shift+Tab
     browserctrl upload <tab> --ref ref_2 --files a.pdf,b.png
@@ -202,7 +244,8 @@ function usage() {
   Navigate and wait (no blind sleeps):
     browserctrl ready <tab> --browser dia [--until load|domcontentloaded] [--timeout 15000]
                        [--selector CSS] [--text TEXT] [--url substring] (background, no activation)
-    browserctrl reload <tab> [--until load|domcontentloaded|networkidle|none] [--timeout 30000]  (refresh is an alias)
+    browserctrl reload <tab> [--until load|domcontentloaded|networkidle|none] [--timeout 30000] [--hard]  (refresh is an alias;
+                       --hard restarts the tab's renderer when the page is stuck and a plain reload times out)
     browserctrl nav <tab> <url> [--until load|domcontentloaded|networkidle|none]
     browserctrl wait <tab> --selector ".done" | --text "Saved" | --url /success | --gone ".spinner" | --network-idle
                    [--timeout 15000]
@@ -730,6 +773,19 @@ const main = async () => {
       token: flags.token,
     };
     const timeoutMs = flags.timeout ? Number(flags.timeout) : undefined;
+    // The natural forms: `click <tab> ref_9`, `click <tab> "#id"`, `fill <tab> ref_61 "value"`.
+    let valueArg = positional[2];
+    if (TARGET_CMDS.has(cmd) && !flags.intent && !target.ref && !target.selector && target.x === undefined && positional[2] !== undefined) {
+      const p = String(positional[2]);
+      if (/^(ref_\d+|e\d+)$/.test(p)) target.ref = p;
+      else if (looksLikeSelector(p)) target.selector = p;
+      else if (/^i\d+$/.test(p)) throw new Error(`${p} is an item id from \`items\`, not a ref. Click the item by its text: browserctrl do ${tab.id} 'click "<the item's text>"', or use a ref_N from browserctrl read ${tab.id}.`);
+      else if (cmd !== 'fill') throw new Error(`"${p}" is not a ref (ref_9) or a CSS selector. Name it in words instead: browserctrl do ${tab.id} '${cmd} "${p}"', or browserctrl ${cmd} ${tab.id} --intent "${p}".`);
+      if (target.ref || target.selector) valueArg = positional[3];
+    }
+    // A ref means what the agent's last `read` of this tab printed, not whatever snapshot
+    // ran last (do and --intent read the page again).
+    if (target.ref && !target.token) target.token = readtokens.recall(port, targetId);
 
     // --show / BROWSERCTRL_SHOW=1: bring the tab forward, outline the target and log the
     // action in a corner panel, so a person can watch the automation.
@@ -742,6 +798,8 @@ const main = async () => {
       await show.busy(conn, targetId, false); // the idle timer runs from here until the next command
     }
 
+    // Refs that do and --intent print come from their own snapshot, the page's latest.
+    if (cmd === 'do' || flags.intent) readtokens.forget(port, targetId);
     // --intent: Jev picks the target from the page instead of the caller naming a ref.
     if (flags.intent && ['click', 'fill', 'select', 'hover'].includes(cmd)) {
       const cfg = jev.jevKey();
@@ -786,7 +844,8 @@ const main = async () => {
         return out(flags.json ? r : formatSteps(r));
       }
       case 'items': {
-        const r = await ops.evaluate(conn, targetId, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }));
+        await waitToRead(conn, targetId, flags);
+        const r = await recovering(conn, targetId, flags, () => ops.evaluate(conn, targetId, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }), { retry: true }));
         if (flags.group) r.groups = r.groups.filter(g => g.id === flags.group);
         if (!flags['no-prefetch']) await prefetch.start(conn, mainLinks(r, 3, r.url)).catch(() => {});
         return out(flags.json ? r : formatItems(r, { full: Boolean(flags.group), grep: flags.grep }));
@@ -798,19 +857,24 @@ const main = async () => {
         return out({ page: { url: page.url, title: page.title }, ...c, ...(cool ? { cooldown: cooldown.describe(cool) } : {}) });
       }
       case 'read': {
-        const snap = await ops.readPage(conn, targetId, {
+        const settled = await waitToRead(conn, targetId, flags, { quiet: true });
+        const snap = await recovering(conn, targetId, flags, () => ops.readPage(conn, targetId, {
           maxText: flags.text === 'none' ? 0 : Number(flags['max-text'] || 20000),
           max: Number(flags.max || 400),
           includeHidden: Boolean(flags['include-hidden']),
           all: Boolean(flags.all),
-        });
+        }));
+        readtokens.remember(port, targetId, snap.token);
+        if (settled) { snap.settled = settled; snap.waitNote = ops.describeSettle(settled); }
+        if (snap.recovered) snap.waitNote = [snap.waitNote, snap.recovered].filter(Boolean).join('; ');
         hint(snap.url, flags);
         snap.params = await ops.evaluate(conn, targetId, PAGE_PARAMS).catch(() => []);
         if (flags.json) return out(snap);
         return out(formatRead(snap) + (snap.params?.length ? `\nurl params (set them with a nav step): ${formatParams(snap.params)}` : ''));
       }
       case 'text': {
-        const raw = await ops.evaluate(conn, targetId, 'document.body ? document.body.innerText : ""');
+        await waitToRead(conn, targetId, flags);
+        const raw = await recovering(conn, targetId, flags, () => ops.evaluate(conn, targetId, 'document.body ? document.body.innerText : ""', { retry: true }));
         const source = String(raw || '');
         let selected = source;
         if (flags.match) {
@@ -893,8 +957,11 @@ const main = async () => {
         return out(await ops.type(conn, targetId, positional.slice(2).join(' ')));
       case 'key':
         return out(await ops.key(conn, targetId, positional[2]));
-      case 'fill':
-        return out(await ops.fill(conn, targetId, { ...target, value: flags.value ?? positional[2] }));
+      case 'fill': {
+        const value = flags.value ?? valueArg;
+        if (value === undefined || value === true) throw new Error(`Usage: browserctrl fill ${tab.id} ref_5 "text"   (or --ref ref_5 --value "text")`);
+        return out(await ops.fill(conn, targetId, { ...target, value }));
+      }
       case 'select':
         return out(await ops.selectOption(conn, targetId, { ...target, value: flags.value, label: flags.label }));
       case 'upload':
@@ -935,7 +1002,14 @@ const main = async () => {
         return out(await ops.wake(conn, targetId, { enabled: !flags.off }));
       case 'reload':
       case 'refresh':
+        if (flags.hard) return out(await ops.hardReload(conn, targetId, { timeoutMs: timeoutMs || 30000 }));
         return out(await ops.reload(conn, targetId, {waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000}));
+      case 'dialog': {
+        if (!flags.accept && !flags.dismiss) throw new Error(`Usage: browserctrl dialog ${tab.id} --accept | --dismiss [--text "prompt answer"]`);
+        const open = (await conn.events(targetId, { limit: 1 }).catch(() => null))?.dialog;
+        await conn.send(targetId, 'Page.handleJavaScriptDialog', { accept: Boolean(flags.accept), ...(typeof flags.text === 'string' ? { promptText: flags.text } : {}) }, 5000);
+        return out({ answered: flags.accept ? 'accept' : 'dismiss', ...(open ? { dialog: { type: open.type, message: open.message } } : {}) });
+      }
       case 'release':
         claims.release(port, targetId);
         return out({ released: tab.id });

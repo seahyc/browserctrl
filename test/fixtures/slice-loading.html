@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Results loading</title>
+<style>.skeleton { background: #eee; height: 18px; margin: 10px 0; width: 300px; }</style></head>
+<body>
+<div id="results" aria-busy="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+<script>
+  // Results arrive after a chain of slow API calls (about 4.5 s), as a search page pages
+  // through its backend; the placeholders hold still meanwhile.
+  function step(n) {
+    if (!n) {
+      var r = document.getElementById('results');
+      r.removeAttribute('aria-busy');
+      r.innerHTML = '<ul><li>Condo A · $1,900</li><li>Condo B · $2,100</li><li>Condo C · $2,350</li></ul>';
+      return;
+    }
+    fetch('/delay?ms=750&n=' + n).then(function () { step(n - 1); });
+  }
+  step(6);
+</script>
+</body></html>
