@@ -1,0 +1,132 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Friction fixture</title>
+<style>
+  body { font: 14px sans-serif; margin: 20px; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+  .icon { width: 28px; height: 28px; }
+  #cal { border: 1px solid #999; padding: 8px; width: 330px; }
+  #cal .days { display: grid; grid-template-columns: repeat(7, 40px); gap: 2px; }
+  #cal .days button { width: 40px; height: 28px; }
+  .dialog { position: fixed; top: 60px; width: 240px; background: #fff; border: 2px solid #333; padding: 10px; z-index: 10; }
+</style></head>
+<body>
+<header><a href="#order" id="order1">Order Now</a> <a href="#help">Help</a></header>
+
+<form id="search" onsubmit="event.preventDefault(); document.getElementById('searched').textContent = 'Searched: ' + this.q.value;">
+  <input type="search" name="q" placeholder="Search for parking">
+  <button type="submit">Submit</button>
+</form>
+<p id="searched"></p>
+
+<section>
+  <h2>Gift card</h2>
+  <label>SEND-TO EMAIL <input id="email" type="email"></label>
+  <button id="place" onclick="document.getElementById('placed').textContent = 'placed'">Place order</button>
+  <span id="placed"></span>
+  <a href="#order" id="order2">Order Now</a>
+</section>
+
+<section>
+  <h2>Amenities</h2>
+  <label><input type="checkbox" id="spa"> Spa</label>
+  <label><input type="checkbox" id="gym" onclick="return false"> Gym</label>
+</section>
+
+<section>
+  <h2>Guests</h2>
+  <div class="row"><span>Children</span><span>Ages 2-17</span>
+    <button class="stepper-minus" onclick="kids(-1)"><svg class="icon" viewBox="0 0 10 10"><path d="M2 5h6"/></svg></button>
+    <span id="kids">0</span>
+    <button class="stepper-plus" onclick="kids(1)"><svg class="icon" viewBox="0 0 10 10"><path d="M2 5h6M5 2v6"/></svg></button>
+  </div>
+</section>
+
+<section>
+  <h2>Size</h2>
+  <div role="combobox" aria-expanded="true" aria-controls="sqft" tabindex="0">Minimum square feet</div>
+  <div role="listbox" id="sqft">
+    <div role="option" data-value="500" onclick="pickSqft(this)">500</div>
+    <div role="option" data-value="600" onclick="pickSqft(this)">600</div>
+    <div role="option" data-value="700" onclick="pickSqft(this)">700</div>
+  </div>
+  <p id="sqftPicked"></p>
+</section>
+
+<section>
+  <h2>Savings</h2>
+  <form id="savings" onsubmit="event.preventDefault(); check()">
+    <label><input type="radio" name="money" value="none"> None</label>
+    <label><input type="radio" name="money" value="some"> Some</label>
+    <button type="submit">Continue</button>
+  </form>
+  <div id="errors"></div>
+</section>
+
+<section>
+  <h2>Dates</h2>
+  <button id="when" onclick="document.getElementById('cal').hidden = false; render()">When Add dates</button>
+  <button>Payment &amp; Price</button>
+  <div id="cal" hidden>
+    <div class="row"><button aria-label="Previous month" onclick="move(-1)">‹</button><b id="month"></b><button aria-label="Next month" onclick="move(1)">›</button></div>
+    <div class="days" id="days"></div>
+  </div>
+  <p id="picked"></p>
+</section>
+
+<ul id="results">
+  <li><a href="#r1">Result one</a> · $10</li>
+  <li><a href="#r2">Result two</a> · $20</li>
+  <li><a href="#r3">Result three</a> · $30</li>
+  <li><a href="#r4">Result four</a> · $40</li>
+</ul>
+
+<button id="alerts" onclick="document.getElementById('a1').hidden = false; document.getElementById('a2').hidden = false">Show alerts</button>
+<div class="dialog" role="alertdialog" id="a1" style="left: 20px" hidden><p>Store closed</p><button onclick="this.parentElement.hidden = true; ok('a1')">OK</button></div>
+<div class="dialog" role="alertdialog" id="a2" style="left: 300px" hidden><p>Pick another time</p><button onclick="this.parentElement.hidden = true; ok('a2')">OK</button></div>
+<p id="oks"></p>
+
+<button id="shadowOpen" onclick="document.getElementById('sm').hidden = false">Open shadow modal</button>
+<x-modal id="sm" role="dialog" aria-modal="true" class="dialog" style="left: 20px; top: 300px" hidden><p>Your order type</p></x-modal>
+<p id="shadowDone"></p>
+
+<script>
+  function kids(d) { const k = document.getElementById('kids'); k.textContent = Math.max(0, +k.textContent + d); }
+  function pickSqft(o) { document.getElementById('sqftPicked').textContent = 'Min ' + o.dataset.value; }
+  function ok(id) { document.getElementById('oks').textContent += id + ' '; }
+  function check() {
+    const chosen = document.querySelector('input[name=money]:checked');
+    const box = document.getElementById('errors');
+    if (chosen) { box.innerHTML = ''; document.title = 'Results'; return; }
+    document.title = 'Error - How much money do you have';
+    box.innerHTML = '<div role="alert">There is a problem: Select how much money you have</div>';
+    document.querySelector('input[name=money]').setAttribute('aria-invalid', 'true');
+  }
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  let shown = new Date(2026, 9, 1);
+  function move(d) { shown = new Date(shown.getFullYear(), shown.getMonth() + d, 1); render(); }
+  function render() {
+    document.getElementById('month').textContent = MONTHS[shown.getMonth()] + ' ' + shown.getFullYear();
+    const days = document.getElementById('days');
+    days.innerHTML = '';
+    const n = new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate();
+    for (let d = 1; d <= n; d++) {
+      const date = new Date(shown.getFullYear(), shown.getMonth(), d);
+      const b = document.createElement('button');
+      b.textContent = d;
+      b.setAttribute('aria-label', DAYS[date.getDay()] + ', ' + d + ' ' + MONTHS[date.getMonth()] + ' ' + date.getFullYear());
+      if (date < new Date(2026, 9, 10)) b.setAttribute('aria-disabled', 'true');
+      b.onclick = () => { if (b.getAttribute('aria-disabled') !== 'true') document.getElementById('picked').textContent = 'Picked ' + b.getAttribute('aria-label'); };
+      days.appendChild(b);
+    }
+  }
+  customElements.define('x-modal', class extends HTMLElement {
+    constructor() {
+      super();
+      const root = this.attachShadow({ mode: 'open' });
+      root.innerHTML = '<slot></slot><button>Got it</button>';
+      root.querySelector('button').onclick = () => { this.hidden = true; document.getElementById('shadowDone').textContent = 'type confirmed'; };
+    }
+  });
+</script>
+</body></html>

@@ -15,7 +15,7 @@ test('steps parse into action, target and value', () => {
   assert.deepEqual(parseStep('select Sort = Price - Low to High'), { action: 'select', target: 'Sort', value: 'Price - Low to High' });
   assert.deepEqual(parseStep('key Enter'), { action: 'key', target: 'Enter' });
   assert.deepEqual(parseStep('click! "Buy now"'), { action: 'click', target: 'Buy now', commit: true });
-  assert.throws(() => parseStep('fill! Search = x'), /only click! and select! can commit/);
+  assert.deepEqual(parseStep('fill! Search = x'), { action: 'fill', target: 'Search', value: 'x' }); // only click and select commit
   assert.throws(() => parseStep('buy everything'), /Unknown step/);
   assert.throws(() => parseStep('fill "box"'), /fill <target> = <value>/);
 });
