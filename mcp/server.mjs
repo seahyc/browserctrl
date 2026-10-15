@@ -141,6 +141,8 @@ const TOOLS = [
         until: { type: 'string', description: 'Page condition that ends repeat.' },
         max: { type: 'number', description: 'Most repeats, default 10.' },
         collect: { type: 'string', enum: ['items', 'text'], description: 'Collect each repeated page, merged.' },
+        open: { type: 'number', description: 'Then open the first N items of the main list (ads skipped) in parallel and return what grep finds on each.' },
+        grep: { type: 'string', description: 'With open: case-insensitive regex for the lines to return from each opened page.' },
         steal: { type: 'boolean' },
       },
       required: ['tab'],
@@ -619,7 +621,7 @@ const handlers = {
       const tab = await ops.resolveTab(conn, args.tab);
       claims.claim(port, tab.targetId, { steal: Boolean(args.steal) });
       const r = await runSteps(conn, tab.targetId, args.steps || [], {
-        then: args.then, dismiss: args.dismiss, repeat: args.repeat, until: args.until, max: args.max, collect: args.collect,
+        then: args.then, dismiss: args.dismiss, repeat: args.repeat, until: args.until, max: args.max, collect: args.collect, open: args.open || 0, grep: args.grep,
       });
       return text(formatSteps(r));
     }),

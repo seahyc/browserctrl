@@ -312,7 +312,27 @@ Pick the first that fits; each step down costs more agent turns:
    opens them in parallel background tabs and returns only the matching lines (with one
    line either side) per page; `--then items` returns each page's items instead. A dozen
    pages take about 15 s.
+   Or chain it onto the plan: `do <tab> '<steps>' --open 5 --grep "<label>|<label>"` runs
+   the plan, takes the first 5 items of the main list (ads, Sponsored and Spotlight items
+   skipped), opens them in parallel and returns the matching lines: the list and its
+   drill-down in one call.
 5. `read` and single actions, only for what `do` reports it could not do.
+
+Fewer, cheaper turns:
+
+- Every `do` and `read` report ends with `url params`: the address parameters this page
+  uses (its own query, GET forms, sort/filter/page links), and each step shows how it
+  changed the address (`url: +state=closed`). Use them to jump straight to a filtered view
+  with a `nav` step instead of clicking through filters again.
+- A report whose steps all show ✓ did what it says, and `=> "<expected>"` checks were
+  judged on the page: answer from it instead of re-reading the page to confirm.
+- `--then items` shows the main list in full and folds the other groups to one line;
+  `browserctrl items <tab> --grep "<regex>"` keeps only matching items.
+- After a call that ends on a list, the first 3 item links start loading in background
+  tabs (3 per site, closed after 90 s if unused); `visit` takes them already loaded.
+  `--no-prefetch` or `BROWSERCTRL_PREFETCH=0` turns it off.
+- If you can delegate, let a fast model run the mechanical `do`/`visit` calls of a plan
+  you wrote and report back; keep planning and the final answer for yourself.
 
 Read the page first only when you cannot guess the controls' names at all.
 

@@ -8,6 +8,9 @@ import { spawn, execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
+// Tests open no speculative tabs unless a test asks for them.
+if (process.env.BROWSERCTRL_PREFETCH === undefined) process.env.BROWSERCTRL_PREFETCH = '0';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Test daemons inherit the environment of whichever test file started them, so
 // keep their capture store and recipe tab registry out of the real home dir.

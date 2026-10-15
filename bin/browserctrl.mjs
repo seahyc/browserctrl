@@ -29,7 +29,8 @@ import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { formatRead } from '../lib/refs.mjs';
-import { runSteps, formatSteps } from '../lib/steps.mjs';
+import { runSteps, formatSteps, PAGE_PARAMS, formatParams, mainLinks } from '../lib/steps.mjs';
+import * as prefetch from '../lib/prefetch.mjs';
 import { visit, formatVisits } from '../lib/visit.mjs';
 import * as show from '../lib/show.mjs';
 import * as trace from '../lib/trace.mjs';
@@ -667,11 +668,12 @@ const main = async () => {
     switch (cmd) {
       case 'do': {
         const lines = positional.slice(2);
-        if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text]');
+        if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text] [--open N --grep "label|label"]');
         const r = await runSteps(conn, targetId, lines, { show: show.showing(flags),
           then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
           force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
           dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,
+          open: flags.open ? Number(flags.open) : 0, grep: flags.grep, prefetch: !flags['no-prefetch'], context: flags.context != null ? Number(flags.context) : 1,
         });
         if (!r.done) process.exitCode = 3;
         return out(flags.json ? r : formatSteps(r));
@@ -679,7 +681,8 @@ const main = async () => {
       case 'items': {
         const r = await ops.evaluate(conn, targetId, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }));
         if (flags.group) r.groups = r.groups.filter(g => g.id === flags.group);
-        return out(flags.json ? r : formatItems(r, { full: Boolean(flags.group) }));
+        if (!flags['no-prefetch']) await prefetch.start(conn, mainLinks(r, 3, r.url)).catch(() => {});
+        return out(flags.json ? r : formatItems(r, { full: Boolean(flags.group), grep: flags.grep }));
       }
       case 'check': {
         const page = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
@@ -695,8 +698,9 @@ const main = async () => {
           all: Boolean(flags.all),
         });
         hint(snap.url);
+        snap.params = await ops.evaluate(conn, targetId, PAGE_PARAMS).catch(() => []);
         if (flags.json) return out(snap);
-        return out(formatRead(snap));
+        return out(formatRead(snap) + (snap.params?.length ? `\nurl params (set them with a nav step): ${formatParams(snap.params)}` : ''));
       }
       case 'text': {
         const raw = await ops.evaluate(conn, targetId, 'document.body ? document.body.innerText : ""');
