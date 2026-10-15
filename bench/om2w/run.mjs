@@ -11,6 +11,7 @@
 //   node bench/om2w/run.mjs finish <run>       stop recording, export for the judge, append the result row
 //   node bench/om2w/run.mjs judge <run>        WebJudge (re-runnable; updates the row)
 //   node bench/om2w/run.mjs batch <file> [--parallel N]   lines of "<task_id> <arm> [reflect|off]"
+//   OM2W_JUDGE=quick (default: one call, last stills) or full (the WebJudge port)
 //   node bench/om2w/run.mjs report
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -321,7 +322,34 @@ async function pool(items, n, fn) {
   return out;
 }
 
+// One call instead of WebJudge's one-per-screenshot: the final-judgment prompt, key points
+// left to the model, and the last few distinct stills. For finding friction, not for scores.
+const QUICK_IMAGES = 6;
+async function quickJudge(runId) {
+  const run = readRun(runId);
+  const dir = runPath(runId, 'om2w', run.task_id);
+  const result = JSON.parse(fs.readFileSync(path.join(dir, 'result.json'), 'utf8'));
+  const actions = result.action_history.map((s) => s.action);
+  if (result.agent_final_answer) actions.push(`Final answer: ${result.agent_final_answer}`);
+  const images = [...new Set(result.action_history.map((s) => path.join(dir, 'trajectory', s.screenshot)))].slice(-QUICK_IMAGES);
+  const scratch = runPath(runId, 'judge');
+  fs.rmSync(scratch, { recursive: true, force: true });
+  const history = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
+  const user = `User Task: ${result.task}\n\nKey Points: (derive them from the task yourself)\n\nAction History:\n${history}\n\nThe last ${images.length} snapshots of the agent's trajectory are attached.`;
+  const response = await model(asCall(JUDGE_SYSTEM, user), images, scratch, 'quick');
+  const status = response.toLowerCase().split('status:')[1];
+  run.judge = {
+    success: status ? status.includes('success') : false, mode: 'quick', response, images_used: images.length,
+    thoughts: response.split(/Status:/i)[0].replace(/^Thoughts:\s*/i, '').trim(), at: new Date().toISOString(), model: MODEL, effort: EFFORT,
+  };
+  fs.writeFileSync(runPath(runId, 'judge.json'), JSON.stringify(run.judge, null, 2));
+  writeRun(run);
+  upsertRow(run);
+  return run.judge;
+}
+
 async function judge(runId) {
+  if ((process.env.OM2W_JUDGE || 'quick') === 'quick') return quickJudge(runId);
   const run = readRun(runId);
   const dir = runPath(runId, 'om2w', run.task_id);
   const result = JSON.parse(fs.readFileSync(path.join(dir, 'result.json'), 'utf8'));
