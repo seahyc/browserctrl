@@ -36,7 +36,7 @@ test('a site is the registrable part of the host', () => {
 test('a challenge starts a 20 min cool-down that doubles within a day, capped at 2 h', () => {
   reset();
   const t0 = Date.parse('2026-10-14T10:00:00Z');
-  const a = cooldown.record('https://shopee.sg/verify/captcha', { kind: 'shopee-verify', now: t0 });
+  const a = cooldown.record('https://shopee.sg/verify/captcha', { kind: 'verification-page', now: t0 });
   assert.equal(a.windowMs, 20 * MIN);
   assert.equal(a.strikes, 1);
   assert.equal(cooldown.active('https://mall.shopee.sg/', { now: t0 + 19 * MIN }).site, 'shopee.sg');
@@ -69,10 +69,10 @@ test('clearing the challenge ends the cool-down early but a repeat still doubles
 test('the guard refuses a cooling site with when, why and how to override; other sites and --force pass', () => {
   reset();
   const now = Date.now();
-  cooldown.record('https://shopee.sg/verify/captcha', { kind: 'shopee-verify', now });
+  cooldown.record('https://shopee.sg/verify/captcha', { kind: 'verification-page', now });
   assert.throws(() => cooldown.guard('https://shopee.sg/cart', { action: 'open', now }), e =>
     e instanceof cooldown.CooldownError && /refusing to open it until/.test(e.message) && /--force/.test(e.message) &&
-    /escalates/.test(e.message) && /shopee-verify/.test(e.message) && /20 min from now/.test(e.message));
+    /escalates/.test(e.message) && /verification-page/.test(e.message) && /20 min from now/.test(e.message));
   assert.equal(cooldown.guard('https://lazada.sg/', { now }), null);
   assert.equal(cooldown.guard('https://shopee.sg/', { force: true, now }).site, 'shopee.sg');
   assert.equal(cooldown.list({ now }).length, 1);
@@ -109,15 +109,15 @@ t('open on a challenge page records the cool-down and says not to retry', async 
   reset();
   const r = await cli('open', `${fixture.url}verify/captcha?x=1`);
   assert.equal(r.code, 0, r.stderr);
-  assert.match(r.stderr, /challenge: shopee-verify on tab \w{8}\. Cool-down: 127\.0\.0\.1 until/);
+  assert.match(r.stderr, /challenge: verification-page on tab \w{8}\. Cool-down: 127\.0\.0\.1 until/);
   assert.match(r.stderr, /Do not reload or retry/);
-  assert.equal(JSON.parse(r.stdout).challenge, 'shopee-verify');
-  assert.equal(cooldown.active(fixture.url).kind, 'shopee-verify');
+  assert.equal(JSON.parse(r.stdout).challenge, 'verification-page');
+  assert.equal(cooldown.active(fixture.url).kind, 'verification-page');
 });
 
 t('during the cool-down, open, nav, do with nav and recipe run refuse the site; others and --force pass', async () => {
   assert.ok(cooldown.active(fixture.url), 'set by the previous test');
-  const refused = /127\.0\.0\.1 is cooling down after a shopee-verify .*--force/s;
+  const refused = /127\.0\.0\.1 is cooling down after a verification-page .*--force/s;
 
   const open = await cli('open', `${fixture.url}fixtures/page.html`);
   assert.equal(open.code, 1);
@@ -146,7 +146,7 @@ t('during the cool-down, open, nav, do with nav and recipe run refuse the site; 
   assert.match(recipe.stderr, /refusing to run 127\.0\.0\.1\/cool against it/);
 
   const tabs = await cli('tabs');
-  assert.match(tabs.stderr, /cool-down: 127\.0\.0\.1 until .*shopee-verify, 1st challenge today/);
+  assert.match(tabs.stderr, /cool-down: 127\.0\.0\.1 until .*verification-page, 1st challenge today/);
   const doctor = await cli('doctor');
   assert.equal(JSON.parse(doctor.stdout).cooldowns[0].site, '127.0.0.1');
 

@@ -299,20 +299,19 @@ Pick the first that fits; each step down costs more agent turns:
 
 1. A recipe for the site (`browserctrl recipe find <url>`): one call, no page at all.
 2. A URL that already carries the filter or search, when the site keeps them in its
-   address (`?q=`, `?state=merged&author_username=…`, `?sort=priceasc`): `nav` to it, or
-   start the plan with a `nav` step. Check this before driving a filter box: after one
-   click, the address often shows the parameter names (`?state=closed`), and token filters
-   (GitLab, Jira) take several steps in the UI but one in the URL. In the benchmark,
-   GitLab tasks took half the time this way.
+   address (`?q=`, `?state=closed`, `?sort=price_asc`): `nav` to it, or start the plan with
+   a `nav` step. Check this before driving a filter box: after one click the address often
+   shows the parameter names, and filters built from tokens or chips take several steps in
+   the UI but one in the URL. In the benchmark this halved the time on such tasks.
 3. **`do` with the whole plan and `--then items`** (see [below](#plan-several-steps-in-one-call-with-do)):
-   send every step you can foresee in one call. In benchmarks on marketplaces, GitHub,
-   GitLab, Stripe and news sites it took 30–70% less time than reading and clicking
-   step by step on 9 of 13 tasks, with the same success rate (bench/RESULTS.md).
-4. To drill into a list (each PR's files, each listing's seller), take the links from
-   `items` and open them all at once: `browserctrl visit /mr/144 /mr/136 … --from <tab>
-   --grep "into|Source branch"` opens them in parallel background tabs and returns only
-   the matching lines (with one line either side) per page; `--then items` returns each
-   page's items instead. 12 GitLab MRs take about 15 s.
+   send every step you can foresee in one call. In benchmarks on marketplaces, code hosts,
+   dashboards and news sites it took 30–70% less time than reading and clicking step by
+   step on most tasks, with the same success rate (bench/RESULTS.md).
+4. To drill into a list (each item's details), take the links from `items` and open them
+   all at once: `browserctrl visit /item/1 /item/2 … --from <tab> --grep "<label>|<label>"`
+   opens them in parallel background tabs and returns only the matching lines (with one
+   line either side) per page; `--then items` returns each page's items instead. A dozen
+   pages take about 15 s.
 5. `read` and single actions, only for what `do` reports it could not do.
 
 Read the page first only when you cannot guess the controls' names at all.
@@ -403,10 +402,10 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   `hover`, `key Enter`, `type "<text>"` (into whatever has focus), `scroll down|up`,
   `nav <url>`, `wait <ms>`, and `expect <what the page shows>`.
 - `fill` types like a person (select the old text, insert the new), so search-as-you-type
-  boxes, comboboxes and token filters react. For a token filter (GitLab, Jira, Linear),
-  plan it the way you would click it: `click "Search or filter results"` `type "Author"`
-  `click "Author"` `click "= is"` `type "yjwong"` `click "yjwong"` `key Enter`. Items of
-  an open dropdown or suggestion list are listed and clickable even without roles.
+  boxes, comboboxes and token filters react. Plan a token filter the way you would click
+  it: open the box, type the field name, pick it, pick the operator if one is offered,
+  type the value, pick the suggestion, then Enter. Items of an open dropdown or suggestion
+  list are listed and clickable even without roles.
 - `=> "<expected result>"` after any step: the plan stops right after that step when
   Jev judges it untrue. It is checked in the same request that grounds the next step
   (the last one with the final page checks), so it costs no extra time. Write it about

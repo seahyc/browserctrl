@@ -87,10 +87,10 @@ t('a handoff that runs out of time fails, names the site and leaves it cooling d
   fs.rmSync(sent, { force: true });
   process.env.BROWSERCTRL_NOTIFY_CMD = script;
   const tab = await open('verify/captcha?x=9');
-  await assert.rejects(handoff(conn, tab, { timeoutMs: 1000, pollMs: 200 }), /shopee-verify on 127\.0\.0\.1 .*not cleared within 1s/);
+  await assert.rejects(handoff(conn, tab, { timeoutMs: 1000, pollMs: 200 }), /verification-page on 127\.0\.0\.1 .*not cleared within 1s/);
   // handoff() alone does not record; solve() does.
   await assert.rejects(solve(conn, tab, { timeoutMs: 800, pollMs: 200 }), /cooling down until .*do not retry/);
-  assert.equal(cooldown.active(fixture.url).kind, 'shopee-verify');
+  assert.equal(cooldown.active(fixture.url).kind, 'verification-page');
   assert.equal(pings().length, 2);
   assert.match(pings()[0], /verification page/);
   await ops.closeTab(conn, tab);
