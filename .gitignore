@@ -9,3 +9,8 @@ test-results/
 .worktrees/
 bench/runs/
 bench/results.jsonl
+bench/om2w/runs/
+bench/om2w/results.jsonl
+# gated dataset (osunlp/Online-Mind2Web on Hugging Face): download it, do not commit it
+bench/om2w/tasks.json
+bench/om2w/picker.html
