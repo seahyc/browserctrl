@@ -472,7 +472,18 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
 
 - Steps: `click <element>`, `fill <element> = <value>`, `select <element> = <option>`,
   `hover`, `key Enter`, `type "<text>"` (into whatever has focus), `scroll down|up`,
-  `nav <url>`, `wait <ms>`, and `expect <what the page shows>`.
+  `nav <url>`, `wait <ms>`, `expect <what the page shows>`, and `date YYYY-MM-DD`.
+- `date YYYY-MM-DD` picks a calendar day (open the picker first): it matches any day-cell
+  label format and pages months to the date. A click that names a whole date ("Oct 17,
+  2026") does the same.
+- A step can name an element directly: `click ref_25` (from your last read), `click i140`
+  (an `items` id, unquoted), or a CSS selector `click "#id"` / `click '[data-value="600"]'`.
+  These never go to Jev.
+- ⚠ marks a step Jev was unsure about (p < 0.75): check the page before relying on it. A
+  pick that lacks a number or date your step names stops instead of guessing. A checkbox
+  or radio that didn't change, or a page that shows an error after a step, also stops.
+- `!` matters only on click and select (`click! "Place order"`); typing, ticking boxes and
+  following links never need it.
 - `fill` types like a person (select the old text, insert the new), so search-as-you-type
   boxes, comboboxes and token filters react. Plan a token filter the way you would click
   it: open the box, type the field name, pick it, pick the operator if one is offered,
@@ -556,9 +567,19 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
 
 ### Single actions
 
-Every action takes `--ref ref_3`, `--selector <css>`, or `--x/--y`. A click on a ref
-waits until the element stops moving and lands where it is on top; if another element
-covers it, the click is refused with what covers it.
+Every action takes a ref or selector, positionally (`click <tab> ref_3`, `click <tab>
+"#id"`, `fill <tab> ref_5 "text"`) or as `--ref ref_3` / `--selector <css>`, or `--x/--y`.
+Refs keep meaning what your last `read` showed, even after a `do` read the page again. A
+click on a ref waits until the element stops moving and lands where it is on top; if
+another element covers it, the click is refused with what covers it (its own label or
+input doesn't count). `fill` on a label follows it to its field; on anything else it
+names the nearest field.
+
+`read`, `text` and `items` wait up to 8 s for a loading page (skeletons, spinners,
+`aria-busy`) and say how long they waited; `--no-wait` skips it. If a command says a
+JavaScript dialog is open, run `browserctrl dialog <tab> --accept` (or `--dismiss`); if it
+says the page is stuck, `browserctrl reload <tab>`, then `reload <tab> --hard`, or add
+`--recover` to `read`.
 
 ```bash
 browserctrl click <tab> --ref ref_3 --browser dia
