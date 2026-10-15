@@ -333,6 +333,10 @@ async function pool(items, n, fn) {
 // One call instead of WebJudge's one-per-screenshot: the final-judgment prompt, key points
 // left to the model, and the last few distinct stills. For finding friction, not for scores.
 const QUICK_IMAGES = 6;
+// The agent was told this date (New York) and the browser runs on that clock; the judge
+// needs it too, or "tomorrow" and "next Sunday" are graded against the wrong day.
+const runDate = (run) => new Date(run.startedAt || Date.now()).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+
 async function quickJudge(runId) {
   const run = readRun(runId);
   const dir = runPath(runId, 'om2w', run.task_id);
@@ -343,7 +347,7 @@ async function quickJudge(runId) {
   const scratch = runPath(runId, 'judge');
   fs.rmSync(scratch, { recursive: true, force: true });
   const history = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
-  const user = `User Task: ${result.task}\n\nKey Points: (derive them from the task yourself)\n\nAction History:\n${history}\n\nThe last ${images.length} snapshots of the agent's trajectory are attached.`;
+  const user = `User Task: ${result.task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day.\n\nKey Points: (derive them from the task yourself)\n\nAction History:\n${history}\n\nThe last ${images.length} snapshots of the agent's trajectory are attached.`;
   const response = await model(asCall(JUDGE_SYSTEM, user), images, scratch, 'quick');
   const status = response.toLowerCase().split('status:')[1];
   run.judge = {
@@ -390,8 +394,8 @@ async function judge(runId) {
 
   const history = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
   const user = kept.length
-    ? `User Task: ${task}\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}\n\nThe potentially important snapshots of the webpage in the agent's trajectory and their reasons:\n${thoughts.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
-    : `User Task: ${task}\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}`;
+    ? `User Task: ${task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day.\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}\n\nThe potentially important snapshots of the webpage in the agent's trajectory and their reasons:\n${thoughts.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+    : `User Task: ${task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day.\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}`;
   const response = await model(asCall(JUDGE_SYSTEM, user), kept, scratch, 'final');
   const status = response.toLowerCase().split('status:')[1];
   run.judge = {

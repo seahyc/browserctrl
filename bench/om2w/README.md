@@ -14,7 +14,7 @@ run with browserctrl by Codex agents and graded by a port of the benchmark's own
   browser is routed:
   ```sh
   wireproxy -c ~/.config/wireproxy/proton-us.conf      # [Socks5] BindAddress = 127.0.0.1:25344
-  open -n -a "Google Chrome" --args --user-data-dir=$HOME/.local/share/browserctrl/bench-chrome-us \
+  open -n --env TZ=America/New_York -a "Google Chrome" --args --user-data-dir=$HOME/.local/share/browserctrl/bench-chrome-us \
     --remote-debugging-port=9230 --proxy-server=socks5://127.0.0.1:25344 --load-extension=$HOME/Code/browserctrl/extension
   curl -s --socks5-hostname 127.0.0.1:25344 https://www.cloudflare.com/cdn-cgi/trace | grep loc=   # loc=US
   ```
