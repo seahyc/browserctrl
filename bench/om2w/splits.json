@@ -69,7 +69,7 @@
    "cf757a775fa1224acfc7998489e199a8",
    "f158345f8489e0d1d91e28768c39bca1"
   ],
-  "status": "running 2026-10-16"
+  "status": "retired into dev 2026-10-16 after two browserctrl runs and one Codex-native run"
  },
  "rotation-2": {
   "sites": [
@@ -95,7 +95,8 @@
    "fcf4952d2a1d80ea505c555c3c3b54e7",
    "987bad7c6d4726d64232a8a1c3386888",
    "84ef883a37af638c3bcf7561f28ce80a"
-  ]
+  ],
+  "status": "next held-out test"
  },
  "rotation-3": {
   "sites": [
@@ -132,6 +133,7 @@
    "amtrak.com",
    "apartments.com",
    "apple.com",
+   "azure.microsoft.com",
    "backcountry.com",
    "bandcamp.com",
    "berkeley.edu",
@@ -142,12 +144,14 @@
    "booking.com",
    "ca.gov",
    "careers.walmart.com",
+   "carmax.com",
    "carnival.com",
    "carvana.com",
    "cboe.com",
    "cbp.gov",
    "chess.com",
    "coinmarketcap.com",
+   "compass.com",
    "cookpad.com",
    "coolmath4kids.com",
    "coursera.org",
@@ -173,6 +177,7 @@
    "imgur.com",
    "instructure.com",
    "irs.gov",
+   "jcpenney.com",
    "jobs.chronicle.com",
    "justice.gov",
    "landwatch.com",
@@ -189,7 +194,9 @@
    "ohio.gov",
    "osu.edu",
    "parkers.co.uk",
+   "petfinder.com",
    "phys.org",
+   "porsche.com",
    "publicstorage.com",
    "qatarairways.com",
    "raisingcanes.com",
@@ -197,13 +204,17 @@
    "redbull.com",
    "remax.com",
    "rottentomatoes.com",
+   "ryanair.com",
    "sec.gov",
    "smartasset.com",
    "soundcloud.com",
    "spothero.com",
    "stanford.edu",
    "stubhub.com",
+   "student.com",
    "superlawyers.com",
+   "target.com",
+   "ted.com",
    "theweathernetwork.com",
    "thumbtack.com",
    "ticketmaster.com",
@@ -420,7 +431,17 @@
    "c181f903ec1107b850032c17cad88393",
    "3443e9c3151fef19a3c3a45eb2c13640_070826",
    "3ef64f34eae59c9fac7ee9a4f18b4a0c",
-   "3dca7cbe7d086619d837ff9f5312cebc_110325"
+   "3dca7cbe7d086619d837ff9f5312cebc_110325",
+   "b64f938af842f6a1b4489d0e49a785a7_121125",
+   "eb323dc584156d0eb3a2b90bb8c4b791_110325",
+   "c3a333968fc3c43d7f2688f425a0d633",
+   "bb5d90e6f2fbc0ae146f7c1998c2b4a1",
+   "9d090a15c214eb070d9caa8a034d03c1_070826",
+   "f707d765bca668830745d20807d7bee6",
+   "0b51b4fa0295ae80ccd176ebdad6fff6",
+   "636b07af4dd97c1793733db1fd1b90b8_110325",
+   "cf757a775fa1224acfc7998489e199a8",
+   "f158345f8489e0d1d91e28768c39bca1"
   ]
  }
 }
