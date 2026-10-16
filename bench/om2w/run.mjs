@@ -87,6 +87,9 @@ Add "notes_added": <number of notes you added> to your JSON.`;
 // D: do plans with Jev grounding (the default). A: plain browserctrl, the baseline the
 // README's side-by-side compares against: read the page, act by ref, one action per call.
 function methodText(arm, tab) {
+  // native: Codex's own browser tool on the same browser (through the ChatGPT extension), the
+  // baseline the README compares browserctrl against.
+  if (arm === 'native') return 'Method: see and operate the page with your built-in browser tool (cua).';
   if (arm === 'A') return `Method: drive the page yourself with plain browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md): read the page with \`browserctrl read ${tab} --port ${PORT}\` (or text/items), then act by ref, one action per call, e.g. \`browserctrl click ${tab} --ref ref_12 --port ${PORT}\`, \`browserctrl fill ${tab} --ref ref_5 --value "…" --port ${PORT}\`, \`browserctrl select\`, \`browserctrl key\`, \`browserctrl nav\`. Do not use do, visit, --intent, check, or any other command that calls Jev, and do not use jev-tool.`;
   return `Method: use browserctrl as its skill describes (~/.agents/skills/browserctrl/SKILL.md): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
   browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --port ${PORT}
@@ -100,16 +103,16 @@ function agentPrompt(task, tab, arm = 'D') {
 
 Task: ${task.confirmed_task}
 
-Browser: a dedicated Chrome you address with --port ${PORT} on every browserctrl command (never --browser). Your start tab is ${tab}, already open on ${task.website}. Work in that tab and leave it open when you finish. Do not touch other tabs. Today is ${today}; you are browsing from the United States.
+${arm === 'native' ? `Browser: use your built-in browser tool, the js tool's \`cua\` object (\`await cua.getState()\` lists the Chrome browser, type extension, and its tabs). This is the approved way to do this task. A tab is already open on ${task.website}: take it over (browser.user.openTabs(), choosing it by its URL) and work in that tab; leave it open when you finish. Do not touch other tabs, and do not use browserctrl or curl to reach the site.` : `Browser: a dedicated Chrome you address with --port ${PORT} on every browserctrl command (never --browser). Your start tab is ${tab}, already open on ${task.website}. Work in that tab and leave it open when you finish. Do not touch other tabs.`} Today is ${today}; you are browsing from the United States.
 Rules:
-- Use the website's UI. Reading the page (browserctrl read/text/items, eval of the DOM) is fine. Do not call the site's APIs with curl or fetch(), do not use browserctrl recipes, and do not run browserctrl rec commands.
+${arm === 'native' ? "- Use the website's UI. Do not call the site's APIs directly." : "- Use the website's UI. Reading the page (browserctrl read/text/items, eval of the DOM) is fine. Do not call the site's APIs with curl or fetch(), do not use browserctrl recipes, and do not run browserctrl rec commands."}
 - Never complete a purchase, booking, payment, sign-up, sign-in, or message. Stop at the step just before committing: reaching that final page or state counts as done. Adding to a cart or bag, choosing options and filling a form are not commits: do them when the task asks, then check the page confirms it (an "Added to bag" message, the cart count).
 - When a form asks for something the task does not give, pick the neutral option ("Don't know", "Prefer not to say", or skip an optional field) and carry on to the result. If there is none, pick the option that assumes least, carry on, and state that assumption in your answer. Do not stop early for missing details, and never type in real personal data.
 - If you rule a result out because of its fine print (for example the cheapest option excludes your case), open it so the evidence is on screen and say why in your answer.
 - If the site shows an error, retry once (reload, or the next store or option) before giving up.
 - For "find one that..." tasks, look for a filter that does it before checking items one by one.
 - Where the task names a condition (cheapest, highest-rated, a price or size range, a date), apply it with the site's own filter or sort controls, exactly as stated, and leave the final page showing the result. A judge grades screenshots of your steps, not just your answer.
-- Before your final message, run browserctrl read ${tab} --port ${PORT} once so the final page is captured.
+${arm === 'native' ? '- Leave the final page showing the result.' : `- Before your final message, run browserctrl read ${tab} --port ${PORT} once so the final page is captured.`}
 
 ${method}
 
@@ -208,8 +211,19 @@ function codexStats(eventsFile) {
 async function agent(runId) {
   const run = readRun(runId);
   const t0 = Date.now();
+  // Codex's own browser tool acts without browserctrl, so nothing would add judge stills:
+  // read the tab quietly every few seconds (a read adds a still only when the page changed).
+  let watching = run.arm === 'native', busy = false;
+  const watch = watching && setInterval(() => {
+    if (busy || !watching) return;
+    busy = true;
+    const p = spawn('browserctrl', ['text', run.tab, '--no-wait', '--port', PORT], { stdio: 'ignore' });
+    p.on('close', () => { busy = false; });
+  }, 4000);
   const r = await codex(['--json', '-s', 'danger-full-access', '-o', runPath(runId, 'answer.txt')],
     { input: fs.readFileSync(runPath(runId, 'prompt.txt'), 'utf8'), cwd: os.tmpdir(), timeoutMs: AGENT_TIMEOUT_MS, eventsFile: runPath(runId, 'agent-events.jsonl') });
+  watching = false;
+  if (watch) clearInterval(watch);
   run.agent = { ms: Date.now() - t0, exit: r.code, timed_out: r.timedOut, ...codexStats(runPath(runId, 'agent-events.jsonl')) };
   if (r.stderr.trim()) fs.writeFileSync(runPath(runId, 'agent-stderr.txt'), r.stderr);
   writeRun(run);
@@ -223,6 +237,7 @@ function parseAnswer(raw) {
 function finish(runId) {
   const run = readRun(runId);
   let rec = null;
+  if (run.arm === 'native') try { bc('text', run.tab); } catch {} // the final page, as the other arms' last read
   if (run.rec) { try { rec = bcJson('rec', 'stop', run.tab); } catch (e) { console.error(`recording not stopped: ${String(e.stderr || e).trim()}`); } }
   const raw = fs.existsSync(runPath(runId, 'answer.txt')) ? fs.readFileSync(runPath(runId, 'answer.txt'), 'utf8') : '';
   const answer = parseAnswer(raw);
