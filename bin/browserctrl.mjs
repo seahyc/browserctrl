@@ -340,8 +340,38 @@ async function launch(name) {
 const { flags, positional } = parseArgs(process.argv.slice(2));
 const cmd = positional[0];
 
+// Commands are the words the help text documents after "browserctrl", plus every case below.
+// An unknown one gets a pointer instead of the whole help text.
+const SYNONYMS = { screenshot: 'shot', capture: 'shot', snapshot: 'read', navigate: 'nav', goto: 'nav', go: 'nav', press: 'key', input: 'fill', type_text: 'type', list: 'tabs' };
+function knownCommands() {
+  const src = fs.readFileSync(new URL(import.meta.url), 'utf8');
+  const words = new Set([...usage().matchAll(/browserctrl ([a-z][a-z-]+)/g)].map(m => m[1]));
+  for (const m of src.matchAll(/case '([a-z][a-z-]+)':/g)) words.add(m[1]);
+  return words;
+}
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+  {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1); // a swap
+  }
+  return d[a.length][b.length];
+}
+export function suggestCommand(word, known = knownCommands()) {
+  if (known.has(word)) return null;
+  if (SYNONYMS[word] && known.has(SYNONYMS[word])) return SYNONYMS[word];
+  const best = [...known].map(k => [k, k.startsWith(word) || word.startsWith(k) ? 0.5 : editDistance(word, k)]).sort((a, b) => a[1] - b[1])[0];
+  return best && best[1] <= Math.max(2, Math.floor(word.length / 3)) ? best[0] : '';
+}
+
 const main = async () => {
   if (!cmd || cmd === 'help' || flags.help) return out(usage());
+  if (/^[a-z][a-z_-]*$/.test(cmd)) {
+    const near = suggestCommand(cmd);
+    if (near !== null) throw new Error(`Unknown command "${cmd}".${near ? ` Did you mean "${near}"?` : ''} Run browserctrl help for the list.`);
+  }
   if (flags.browser === 'safari' || cmd === 'safari') {
     if (flags.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
     const safari = await import('../lib/safari.mjs');

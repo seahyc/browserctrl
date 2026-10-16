@@ -124,3 +124,11 @@ test('a stale DevToolsActivePort file does not report a dead browser as debuggab
   assert.equal(await portOpen(9, 200), false);
   await assert.rejects(() => browserWsUrl(9), /No browser is debuggable/);
 });
+
+test('an unknown command names the nearest one instead of printing all of help', async () => {
+  const { execFile } = await import('node:child_process');
+  const run = (c) => new Promise(res => execFile(process.execPath, [new URL('../bin/browserctrl.mjs', import.meta.url).pathname, c], (e, so, se) => res(se)));
+  assert.match(await run('screenshot'), /Unknown command "screenshot"\. Did you mean "shot"\?/);
+  assert.match(await run('shto'), /Did you mean "shot"\?/);
+  assert.match(await run('zzqqxx'), /Unknown command "zzqqxx"\. Run browserctrl help/);
+});

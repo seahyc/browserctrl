@@ -482,11 +482,20 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
 
 - Steps: `click <element>`, `fill <element> = <value>`, `select <element> = <option>`,
   `hover`, `key Enter`, `type "<text>"` (into whatever has focus), `scroll down|up`,
-  `nav <url>`, `wait <ms>`, `expect <what the page shows>`, and `date YYYY-MM-DD`.
+  `nav <url>`, `wait <ms>`, `expect <what the page shows>`, `date YYYY-MM-DD`, and
+  `set <slider> = <value or range>`.
 - `date YYYY-MM-DD` picks a calendar day (open the picker first): it matches any day-cell
   label or text format, waits for a picker that is still opening (and opens a collapsed
   When / Check-in / Dates control itself if no calendar shows), and pages months to the
   date. A click that names a whole date ("Oct 17, 2026") does the same.
+- `set "<slider>" = <value>` (or `= <min>-<max>` for a range, e.g. `= $300-$900`) sets a
+  slider by its name or its group's: native ranges take the value, accessible sliders are
+  moved with keys (a drag if they ignore keys). The report shows `now 300–900`; a slider
+  that won't move stops with where it is. `fill` on a slider of that exact name does the same.
+- A `date` pick must show on the page (the day marked selected, or a date field or summary
+  showing it), or the plan stops.
+- If a site keeps stalling (pages that never finish, timeouts, challenges), browserctrl says
+  so: change connection or pacing, use a recipe, or hand the tab to a person.
 - A step can name an element directly: `click ref_25` (from your last read), `click i140`
   (an `items` id, unquoted), or a CSS selector `click "#id"` / `click '[data-value="600"]'`.
   These never go to Jev.
