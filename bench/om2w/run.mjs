@@ -71,13 +71,12 @@ function notesEnv(notesArm) {
 }
 function notesPrompt(notesArm, env) {
   if (!notesArm) return '';
-  const prefix = Object.entries(env).map(([k, v]) => `${k}=${v}`).join(' ');
-  const run = `\n\nRun every browserctrl command with this prefix: ${prefix} browserctrl ...`;
-  if (notesArm === 'off') return run;
-  return `${run}
-Before planning, look the site up: ${prefix} browserctrl site <site or start URL> --port ${PORT}. It lists the site's recipes and its flow notes (facts earlier runs wrote about how the site works, with ids). Use the notes to pick your plan (recipes are off limits in this benchmark). open, nav, read and do also print the top ones as "hint:" lines.
+  if (notesArm === 'off') return '';
+  return `
+
+Before planning, look the site up: browserctrl site <site or start URL>. It lists the site's recipes and its flow notes (facts earlier runs wrote about how the site works, with ids). Use the notes to pick your plan (recipes are off limits in this benchmark). open, nav, read and do also print the top ones as "hint:" lines.
 When you have your answer, and before your final message, reflect: what would have saved you the most time on this site? Add up to 3 one-line facts about how the site works that would help a different task on it, never the answer or this task's values:
-  ${prefix} browserctrl notes add <site or page URL> "<fact>"
+  browserctrl notes add <site or page URL> "<fact>"
 If you saw where a page's data comes from (an API endpoint), add it with --api: notes add <site> --api "<data> comes from <endpoint>".
 If the lesson is how to reach a control hidden behind another, write it so do runs it next time: notes add <site> --reveal "<the hidden control>" '<do step>'... "<fact>" (e.g. --reveal "Pets" 'click "Guests"'). If it is how to clear a recurring interruption: notes add <site> --on "<the situation>" '<do step>'... "<fact>" (e.g. --on "a cookie banner covers the page" 'click "Accept"'). Their steps only click, select, hover, press keys, scroll or wait.
 Confirm each note you relied on that held (notes confirm <id>) and drop each one that was wrong (notes drop <id> --why "<what was wrong>").
@@ -90,10 +89,10 @@ function methodText(arm, tab) {
   // native: Codex's own browser tool on the same browser (through the ChatGPT extension), the
   // baseline the README compares browserctrl against.
   if (arm === 'native') return 'Method: see and operate the page with your built-in browser tool (cua).';
-  if (arm === 'A') return `Method: drive the page yourself with plain browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md): read the page with \`browserctrl read ${tab} --port ${PORT}\` (or text/items), then act by ref, one action per call, e.g. \`browserctrl click ${tab} --ref ref_12 --port ${PORT}\`, \`browserctrl fill ${tab} --ref ref_5 --value "…" --port ${PORT}\`, \`browserctrl select\`, \`browserctrl key\`, \`browserctrl nav\`. Do not use do, visit, --intent, check, or any other command that calls Jev, and do not use jev-tool.`;
+  if (arm === 'A') return `Method: drive the page yourself with plain browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md): read the page with \`browserctrl read ${tab}\` (or text/items), then act by ref, one action per call, e.g. \`browserctrl click ${tab} --ref ref_12\`, \`browserctrl fill ${tab} --ref ref_5 --value "…"\`, \`browserctrl select\`, \`browserctrl key\`, \`browserctrl nav\`. Do not use do, visit, --intent, check, or any other command that calls Jev, and do not use jev-tool.`;
   return `Method: use browserctrl as its skill describes (~/.agents/skills/browserctrl/SKILL.md): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
-  browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --port ${PORT}
-It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab} --port ${PORT}\` to read lists and \`browserctrl text\` only for other facts. The report's url params line shows filters you can set with a nav step. Trust a report whose steps all show ✓ and don't re-read the page after it; a ⚠ step needs checking. When a filter's chips or options change after each pick, put one pick per do call. For a calendar, open it and use a \`date YYYY-MM-DD\` step. You can name an element from your last read directly: \`click ref_25\` in a do step, or \`browserctrl click ${tab} ref_25 --port ${PORT}\`. Do not use jev-tool.`;
+  browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items
+It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. The report's url params line shows filters you can set with a nav step. Trust a report whose steps all show ✓ and don't re-read the page after it; a ⚠ step needs checking. When a filter's chips or options change after each pick, put one pick per do call. For a calendar, open it and use a \`date YYYY-MM-DD\` step. You can name an element from your last read directly: \`click ref_25\` in a do step, or \`browserctrl click ${tab} ref_25\`. Do not use jev-tool.`;
 }
 
 function agentPrompt(task, tab, arm = 'D') {
@@ -103,7 +102,7 @@ function agentPrompt(task, tab, arm = 'D') {
 
 Task: ${task.confirmed_task}
 
-${arm === 'native' ? `Browser: use your built-in browser tool, the js tool's \`cua\` object (\`await cua.getState()\` lists the Chrome browser, type extension, and its tabs). This is the approved way to do this task. A tab is already open on ${task.website}: take it over (browser.user.openTabs(), choosing it by its URL) and work in that tab; leave it open when you finish. Do not touch other tabs, and do not use browserctrl or curl to reach the site.` : `Browser: a dedicated Chrome you address with --port ${PORT} on every browserctrl command (never --browser). Your start tab is ${tab}, already open on ${task.website}. Work in that tab and leave it open when you finish. Do not touch other tabs.`} Today is ${today}; you are browsing from the United States.
+${arm === 'native' ? `Browser: use your built-in browser tool, the js tool's \`cua\` object (\`await cua.getState()\` lists the Chrome browser, type extension, and its tabs). This is the approved way to do this task. A tab is already open on ${task.website}: take it over (browser.user.openTabs(), choosing it by its URL) and work in that tab; leave it open when you finish. Do not touch other tabs, and do not use browserctrl or curl to reach the site.` : `Browser: a dedicated Chrome you address with on every browserctrl command (never --browser). Your start tab is ${tab}, already open on ${task.website}. Work in that tab and leave it open when you finish. Do not touch other tabs.`} Today is ${today}; you are browsing from the United States.
 Rules:
 ${arm === 'native' ? "- Use the website's UI. Do not call the site's APIs directly." : "- Use the website's UI. Reading the page (browserctrl read/text/items, eval of the DOM) is fine. Do not call the site's APIs with curl or fetch(), do not use browserctrl recipes, and do not run browserctrl rec commands."}
 - Never complete a purchase, booking, payment, sign-up, sign-in, or message. Stop at the step just before committing: reaching that final page or state counts as done. Adding to a cart or bag, choosing options and filling a form are not commits: do them when the task asks, then check the page confirms it (an "Added to bag" message, the cart count).
@@ -112,7 +111,7 @@ ${arm === 'native' ? "- Use the website's UI. Do not call the site's APIs direct
 - If the site shows an error, retry once (reload, or the next store or option) before giving up.
 - For "find one that..." tasks, look for a filter that does it before checking items one by one.
 - Where the task names a condition (cheapest, highest-rated, a price or size range, a date), apply it with the site's own filter or sort controls, exactly as stated, and leave the final page showing the result. A judge grades screenshots of your steps, not just your answer.
-${arm === 'native' ? '- Leave the final page showing the result.' : `- Before your final message, run browserctrl read ${tab} --port ${PORT} once so the final page is captured.`}
+- Leave the final page showing the result.
 
 ${method}
 
@@ -172,6 +171,9 @@ async function ensureBrowser() {
 async function start(taskId, arm, notesArm) {
   const relaunched = await ensureBrowser();
   const { task, runId } = startRun(taskId, arm, notesArm);
+  // One owner per run: the harness (recording, timed reads) and the run's agent act on the tab
+  // as the same browserctrl agent, so neither is refused by the other's claim.
+  process.env.CDP_AGENT_ID = `om2w-${runId}`;
   fs.mkdirSync(runPath(runId), { recursive: true });
   let cleaned = null;
   try { cleaned = await cleanSite(task.website); } catch (e) { console.error(`site data not cleared: ${e.message}`); }
@@ -193,9 +195,9 @@ async function start(taskId, arm, notesArm) {
 }
 
 // Codex, non-interactive: JSONL events to events.jsonl, final message to answer.txt.
-function codex(args, { input, cwd, timeoutMs, eventsFile }) {
+function codex(args, { input, cwd, timeoutMs, eventsFile, env }) {
   return new Promise((resolve) => {
-    const child = spawn('codex', ['exec', '-m', MODEL, '-c', `model_reasoning_effort="${EFFORT}"`, '--skip-git-repo-check', ...args, '-'], { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn('codex', ['exec', '-m', MODEL, '-c', `model_reasoning_effort="${EFFORT}"`, '--skip-git-repo-check', ...args, '-'], { cwd, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...(env || {}) } });
     const out = eventsFile ? fs.createWriteStream(eventsFile) : null;
     let stdout = '', stderr = '';
     child.stdout.on('data', (d) => { stdout += d; out?.write(d); });
@@ -223,10 +225,13 @@ function codexStats(eventsFile) {
 
 async function agent(runId) {
   const run = readRun(runId);
+  process.env.CDP_AGENT_ID = `om2w-${runId}`; // `agent <run>` may run in a fresh process
   const t0 = Date.now();
   // Codex's own browser tool acts without browserctrl, so nothing would add judge stills:
   // read the tab quietly every few seconds (a read adds a still only when the page changed).
-  let watching = run.arm === 'native', busy = false;
+  // Both arms get the same stills: none inside the agent's own commands (BROWSERCTRL_REC_STILLS
+  // =off below), and this timer from outside the agent's path.
+  let watching = true, busy = false;
   const watch = watching && setInterval(() => {
     if (busy || !watching) return;
     busy = true;
@@ -234,7 +239,9 @@ async function agent(runId) {
     p.on('close', () => { busy = false; });
   }, 4000);
   const r = await codex(['--json', '-s', 'danger-full-access', '-o', runPath(runId, 'answer.txt')],
-    { input: fs.readFileSync(runPath(runId, 'prompt.txt'), 'utf8'), cwd: os.tmpdir(), timeoutMs: AGENT_TIMEOUT_MS, eventsFile: runPath(runId, 'agent-events.jsonl') });
+    { input: fs.readFileSync(runPath(runId, 'prompt.txt'), 'utf8'), cwd: os.tmpdir(), timeoutMs: AGENT_TIMEOUT_MS, eventsFile: runPath(runId, 'agent-events.jsonl'),
+      // Set once for the agent's shell: long per-command prefixes measurably slow the model.
+      env: { BROWSERCTRL_PORT: String(PORT), BROWSERCTRL_REC_STILLS: 'off', CDP_AGENT_ID: `om2w-${runId}`, ...(run.notes_env || {}) } });
   watching = false;
   if (watch) clearInterval(watch);
   run.agent = { ms: Date.now() - t0, exit: r.code, timed_out: r.timedOut, ...codexStats(runPath(runId, 'agent-events.jsonl')) };
@@ -249,8 +256,9 @@ function parseAnswer(raw) {
 
 function finish(runId) {
   const run = readRun(runId);
+  process.env.CDP_AGENT_ID = `om2w-${runId}`;
   let rec = null;
-  if (run.arm === 'native') try { bc('text', run.tab); } catch {} // the final page, as the other arms' last read
+  try { bc('text', run.tab); } catch {} // the final page, taken from outside the agent's path for every arm
   if (run.rec) { try { rec = bcJson('rec', 'stop', run.tab); } catch (e) { console.error(`recording not stopped: ${String(e.stderr || e).trim()}`); } }
   const raw = fs.existsSync(runPath(runId, 'answer.txt')) ? fs.readFileSync(runPath(runId, 'answer.txt'), 'utf8') : '';
   const answer = parseAnswer(raw);
