@@ -157,7 +157,20 @@ async function cleanSite(website) {
   });
 }
 
+// The bench browser has been seen to quit mid-batch with no one stopping it. Before each run,
+// check it answers and, if not, relaunch it with OM2W_LAUNCH (a shell command; see README).
+async function ensureBrowser() {
+  const up = async () => { try { return (await fetch(`http://127.0.0.1:${PORT}/json/version`)).ok; } catch { return false; } };
+  if (await up()) return false;
+  if (!process.env.OM2W_LAUNCH) throw new Error(`no browser on port ${PORT}; set OM2W_LAUNCH to relaunch it automatically`);
+  console.error(`browser on port ${PORT} is down; relaunching it`);
+  execFileSync('/bin/sh', ['-c', process.env.OM2W_LAUNCH], { stdio: 'ignore' });
+  for (let i = 0; i < 30; i++) { await sleep(1000); if (await up()) { await sleep(4000); return true; } }
+  throw new Error(`browser on port ${PORT} did not come back after relaunching`);
+}
+
 async function start(taskId, arm, notesArm) {
+  const relaunched = await ensureBrowser();
   const { task, runId } = startRun(taskId, arm, notesArm);
   fs.mkdirSync(runPath(runId), { recursive: true });
   let cleaned = null;
@@ -171,7 +184,7 @@ async function start(taskId, arm, notesArm) {
   const env = notesEnv(notesArm);
   const run = {
     runId, task_id: task.task_id, task: task.confirmed_task, website: task.website, level: task.level, reference_length: task.reference_length,
-    arm, notes_arm: notesArm || null, notes_env: env, tab, tabsBefore, rec, cleaned, startedAt: new Date().toISOString(), load: os.loadavg()[0], model: MODEL, effort: EFFORT,
+    arm, notes_arm: notesArm || null, notes_env: env, tab, tabsBefore, rec, cleaned, relaunched, startedAt: new Date().toISOString(), load: os.loadavg()[0], model: MODEL, effort: EFFORT,
   };
   const prompt = agentPrompt(task, tab, arm) + notesPrompt(notesArm, env) + '\n';
   fs.writeFileSync(runPath(runId, 'prompt.txt'), prompt);
