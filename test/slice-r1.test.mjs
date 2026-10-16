@@ -61,7 +61,10 @@ const open = async (q) => {
 };
 const js = (id, expr) => ops.evaluate(conn, id, expr);
 const run = (id, steps) => runSteps(conn, id, steps, { jev: fakeJev(), noNotes: true });
-const cli = (args, env = {}) => promisify(execFile)(process.execPath, [path.join(ROOT, 'bin/browserctrl.mjs'), ...args], { env: { ...process.env, ...env } });
+process.env.CDP_AGENT_ID ||= 'slice-r1-test'; // the test's own calls and its CLI calls are one owner
+// One agent identity for every CLI call: without one (CI has no session id), each process is
+// its own owner and the second command finds the tab claimed by the first.
+const cli = (args, env = {}) => promisify(execFile)(process.execPath, [path.join(ROOT, 'bin/browserctrl.mjs'), ...args], { env: { ...process.env, CDP_AGENT_ID: process.env.CDP_AGENT_ID, ...env } });
 
 t('clicking a component\'s slotted heading opens its shadow-root disclosure, and says so', async () => {
   const id = await open('?acc');
