@@ -1,0 +1,29 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='720' height='360' viewBox='0 0 720 360' font-family='-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'>
+<rect width='720' height='360' rx='12' fill='#1a1a19'/>
+<text x='56' y='34' font-size='18' font-weight='600' fill='#f0efec'>Hard website tasks done right, by round of fixes</text>
+<text x='56' y='56' font-size='13' fill='#c3c2b7'>Codex (gpt-6.1-sol, low reasoning) using browserctrl on live sites, graded from screenshots</text>
+<line x1='56' x2='696' y1='296.0' y2='296.0' stroke='#383835' stroke-width='1'/>
+<text x='48' y='300.0' font-size='11' text-anchor='end' fill='#898781'>0%</text>
+<line x1='56' x2='696' y1='241.0' y2='241.0' stroke='#2c2c2a' stroke-width='1'/>
+<text x='48' y='245.0' font-size='11' text-anchor='end' fill='#898781'>25%</text>
+<line x1='56' x2='696' y1='186.0' y2='186.0' stroke='#2c2c2a' stroke-width='1'/>
+<text x='48' y='190.0' font-size='11' text-anchor='end' fill='#898781'>50%</text>
+<line x1='56' x2='696' y1='131.0' y2='131.0' stroke='#2c2c2a' stroke-width='1'/>
+<text x='48' y='135.0' font-size='11' text-anchor='end' fill='#898781'>75%</text>
+<line x1='56' x2='696' y1='76.0' y2='76.0' stroke='#2c2c2a' stroke-width='1'/>
+<text x='48' y='80.0' font-size='11' text-anchor='end' fill='#898781'>100%</text>
+<path d='M100.0,296.0 V215.4 Q100.0,211.4 104.0,211.4 H168.0 Q172.0,211.4 172.0,215.4 V296.0 Z' fill='#3987e5'><title>Round 1: 5 of 13 tasks (38%)</title></path>
+<text x='136.0' y='203.4' font-size='14' font-weight='600' text-anchor='middle' fill='#f0efec'>5 of 13</text>
+<text x='136.0' y='316.0' font-size='12' text-anchor='middle' fill='#c3c2b7'>Round 1</text>
+<text x='136.0' y='332.0' font-size='11' text-anchor='middle' fill='#898781'>before fixes</text>
+<path d='M260.0,296.0 V164.6 Q260.0,160.6 264.0,160.6 H328.0 Q332.0,160.6 332.0,164.6 V296.0 Z' fill='#3987e5'><title>Round 2: 8 of 13 tasks (62%)</title></path>
+<text x='296.0' y='152.6' font-size='14' font-weight='600' text-anchor='middle' fill='#f0efec'>8 of 13</text>
+<text x='296.0' y='316.0' font-size='12' text-anchor='middle' fill='#c3c2b7'>Round 2</text>
+<path d='M420.0,296.0 V153.3 Q420.0,149.3 424.0,149.3 H488.0 Q492.0,149.3 492.0,153.3 V296.0 Z' fill='#3987e5'><title>Round 3: 8 of 12 tasks (67%)</title></path>
+<text x='456.0' y='141.3' font-size='14' font-weight='600' text-anchor='middle' fill='#f0efec'>8 of 12</text>
+<text x='456.0' y='316.0' font-size='12' text-anchor='middle' fill='#c3c2b7'>Round 3</text>
+<path d='M580.0,296.0 V116.7 Q580.0,112.7 584.0,112.7 H648.0 Q652.0,112.7 652.0,116.7 V296.0 Z' fill='#3987e5'><title>Round 4: 10 of 12 tasks (83%)</title></path>
+<text x='616.0' y='104.7' font-size='14' font-weight='600' text-anchor='middle' fill='#f0efec'>10 of 12</text>
+<text x='616.0' y='316.0' font-size='12' text-anchor='middle' fill='#c3c2b7'>Round 4</text>
+<text x='616.0' y='332.0' font-size='11' text-anchor='middle' fill='#898781'>after fixes</text>
+</svg>
