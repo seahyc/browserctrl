@@ -18,7 +18,7 @@ The task: *"Find the cheapest hotel + flight + car package from New York to San 
 | Actions | 33 | **18** |
 | Text the AI had to read (tokens) | 3.7 million | **1.1 million** |
 
-It doesn't always win. On an Airbnb search, Codex's own browser was faster; [the results section](#does-it-really-work) shows that run too and what we changed because of it.
+It doesn't always win. In the first of two Airbnb runs, Codex's own browser was faster; [the results section](#does-it-really-work) shows both runs and what we changed in between.
 
 ## What it does, in plain words
 
@@ -54,11 +54,12 @@ How we kept it honest:
 | --- | --- | --- |
 | Booking.com package, New York to San Francisco | ✅ 5:03, 33 actions, 3.7M tokens | ✅ **3:10, 18 actions, 1.1M tokens** |
 | StubHub: NHL games in Boston | ✅ 2:12, 12 actions, 0.69M tokens | ✅ **1:56, 11 actions, 0.60M tokens** |
-| Airbnb: Cleveland, 3 nights, kids, a pet, parking, washer, gym | ✅ **2:21, 17 actions, 0.98M tokens** | ✅ 3:43, 26 actions, 1.75M tokens |
+| Airbnb: Cleveland, 3 nights, kids, a pet, parking, washer, gym (first run) | ✅ **2:21, 17 actions, 0.98M tokens** | ✅ 3:43, 26 actions, 1.75M tokens |
+| The same Airbnb task, after the fixes below (second run) | ❌ ran out of time at 15:00, 33 actions | ✅ **2:40, 17 actions, 1.04M tokens** |
 
 The StubHub browserctrl run comes from the notes test (with notes off), on the same connection and time zone but in branded Chrome rather than Chrome for Testing, which Codex's own browser needs for its extension.
 
-browserctrl lost the Airbnb run because of four things the recording made plain: it couldn't see a "Gym" button that had just appeared, it didn't mention a tooltip covering "Filters", it didn't track Airbnb's on/off buttons, and it couldn't find the search button while the guest picker was open. Those are being fixed. [Watch the Airbnb side by side](docs/media/airbnb-side-by-side.mp4).
+browserctrl lost the first Airbnb run, and the recording showed why. Its clicks scrolled the page a little even when a button was already on screen, and Airbnb hides its search bar whenever the page scrolls; a "Gym" button under the filters' footer couldn't be found; a notice covering "Filters" went unmentioned; and Airbnb's on/off buttons weren't tracked. After fixing those, the same task needs two `do` plans instead of about twenty steps. In the second run browserctrl finished in 2:40, while Codex's own browser ran out of its 15 minutes. Two runs are not many: Codex's own browser took 2:21 the first time and 15 minutes the second, so treat these as examples rather than averages. [Watch the first Airbnb run side by side](docs/media/airbnb-side-by-side.mp4).
 
 **Notes did not help yet.** browserctrl can keep notes about how each site works and show them to the next AI that visits. On 8 new tasks on sites it had already explored, runs with notes passed 7 and runs without passed 8, in about the same time. The new tasks mostly used parts of each site the notes didn't cover.
 
