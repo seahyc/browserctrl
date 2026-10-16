@@ -84,7 +84,17 @@ Confirm each note you relied on that held (notes confirm <id>) and drop each one
 Add "notes_added": <number of notes you added> to your JSON.`;
 }
 
-function agentPrompt(task, tab) {
+// D: do plans with Jev grounding (the default). A: plain browserctrl, the baseline the
+// README's side-by-side compares against: read the page, act by ref, one action per call.
+function methodText(arm, tab) {
+  if (arm === 'A') return `Method: drive the page yourself with plain browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md): read the page with \`browserctrl read ${tab} --port ${PORT}\` (or text/items), then act by ref, one action per call, e.g. \`browserctrl click ${tab} --ref ref_12 --port ${PORT}\`, \`browserctrl fill ${tab} --ref ref_5 --value "…" --port ${PORT}\`, \`browserctrl select\`, \`browserctrl key\`, \`browserctrl nav\`. Do not use do, visit, --intent, check, or any other command that calls Jev, and do not use jev-tool.`;
+  return `Method: use browserctrl as its skill describes (~/.agents/skills/browserctrl/SKILL.md): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
+  browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --port ${PORT}
+It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab} --port ${PORT}\` to read lists and \`browserctrl text\` only for other facts. The report's url params line shows filters you can set with a nav step. Trust a report whose steps all show ✓ and don't re-read the page after it; a ⚠ step needs checking. When a filter's chips or options change after each pick, put one pick per do call. For a calendar, open it and use a \`date YYYY-MM-DD\` step. You can name an element from your last read directly: \`click ref_25\` in a do step, or \`browserctrl click ${tab} ref_25 --port ${PORT}\`. Do not use jev-tool.`;
+}
+
+function agentPrompt(task, tab, arm = 'D') {
+  const method = methodText(arm, tab);
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
   return `You are one run of a browser benchmark (Online-Mind2Web). Complete the task on the live website as a careful person would, then stop.
 
@@ -101,9 +111,7 @@ Rules:
 - Where the task names a condition (cheapest, highest-rated, a price or size range, a date), apply it with the site's own filter or sort controls, exactly as stated, and leave the final page showing the result. A judge grades screenshots of your steps, not just your answer.
 - Before your final message, run browserctrl read ${tab} --port ${PORT} once so the final page is captured.
 
-Method: use browserctrl as its skill describes (~/.agents/skills/browserctrl/SKILL.md): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
-  browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --port ${PORT}
-It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab} --port ${PORT}\` to read lists and \`browserctrl text\` only for other facts. The report's url params line shows filters you can set with a nav step. Trust a report whose steps all show ✓ and don't re-read the page after it; a ⚠ step needs checking. When a filter's chips or options change after each pick, put one pick per do call. For a calendar, open it and use a \`date YYYY-MM-DD\` step. You can name an element from your last read directly: \`click ref_25\` in a do step, or \`browserctrl click ${tab} ref_25 --port ${PORT}\`. Do not use jev-tool.
+${method}
 
 Your final message must be only a JSON object: {"answer": "<the answer, or what the final page shows>", "summary": "<one line: what you did>", "notes": "<one line on anything that went wrong, or empty>"}`;
 }
@@ -162,7 +170,7 @@ async function start(taskId, arm, notesArm) {
     runId, task_id: task.task_id, task: task.confirmed_task, website: task.website, level: task.level, reference_length: task.reference_length,
     arm, notes_arm: notesArm || null, notes_env: env, tab, tabsBefore, rec, cleaned, startedAt: new Date().toISOString(), load: os.loadavg()[0], model: MODEL, effort: EFFORT,
   };
-  const prompt = agentPrompt(task, tab) + notesPrompt(notesArm, env) + '\n';
+  const prompt = agentPrompt(task, tab, arm) + notesPrompt(notesArm, env) + '\n';
   fs.writeFileSync(runPath(runId, 'prompt.txt'), prompt);
   writeRun(run);
   return run;
