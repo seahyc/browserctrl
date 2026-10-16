@@ -1,0 +1,95 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Rotation 1 fixture</title>
+<style>
+  body { font: 14px sans-serif; margin: 0; }
+  #state { position: fixed; top: 0; right: 0; }
+  .panel { width: 420px; height: 300px; overflow: auto; border: 1px solid #ccc; position: relative; margin: 40px; }
+  .panel-footer { position: absolute; left: 40px; top: 300px; width: 420px; height: 44px; background: #eee; }
+  .slide { width: 200px; height: 30px; background: #9cf; }
+</style>
+<script>
+// A design-system accordion: the toggle is a <summary> in the shadow root, the heading is
+// slotted into the content area but drawn over the summary row, so a click on the heading
+// itself does nothing.
+customElements.define('x-acc', class extends HTMLElement {
+  constructor() {
+    super();
+    const sr = this.attachShadow({ mode: 'open' });
+    sr.innerHTML = '<style>details{position:relative}summary{display:block;height:44px;cursor:pointer;list-style:none}' +
+      '.c{position:absolute;top:10px;left:12px}details[open] .c{position:static;padding:8px}</style>' +
+      '<details><summary><slot name="summary"></slot></summary><div class="c"><slot></slot></div></details>';
+    sr.querySelector('details').addEventListener('toggle', () => { this.open = sr.querySelector('details').open; });
+  }
+});
+// A design-system select: label and combobox button in the shadow root, options slotted in
+// as custom elements with role=option; a pick shows in the button.
+customElements.define('x-select', class extends HTMLElement {
+  constructor() {
+    super();
+    const sr = this.attachShadow({ mode: 'open' });
+    sr.innerHTML = '<label id="label"></label><button type="button" role="combobox" aria-labelledby="label" aria-expanded="false" id="button">Any</button>' +
+      '<div role="listbox" id="listbox" hidden><slot></slot></div>';
+    sr.getElementById('label').textContent = this.getAttribute('label');
+    const btn = sr.getElementById('button'), lb = sr.getElementById('listbox');
+    btn.addEventListener('click', () => { const open = lb.hidden; lb.hidden = !open; btn.setAttribute('aria-expanded', String(open)); });
+    this.addEventListener('click', (e) => {
+      const opt = e.target.closest && e.target.closest('x-opt');
+      if (!opt) return;
+      btn.textContent = opt.textContent; lb.hidden = true; btn.setAttribute('aria-expanded', 'false');
+      document.getElementById('state').textContent = this.getAttribute('label') + '=' + opt.textContent;
+    });
+  }
+});
+customElements.define('x-opt', class extends HTMLElement { connectedCallback() { this.setAttribute('role', 'option'); this.style.display = 'block'; this.style.padding = '6px'; } });
+</script>
+</head><body>
+<p id="state"></p>
+<div id="root"></div>
+<script>
+const q = new URLSearchParams(location.search);
+const root = document.getElementById('root');
+if (q.has('acc')) {
+  const filler = q.has('footer') ? '<div style="height:240px">Other filters</div>' : '';
+  root.innerHTML = '<div class="panel" id="panel">' + filler + '<x-acc id="year"><h2 style="margin:0;font-size:16px">Year</h2><div>Min year</div></x-acc>' +
+    (q.has('footer') ? '<div style="height:200px">More filters</div>' : '') + '</div>' +
+    (q.has('footer') ? '<button class="panel-footer">Show results</button>' : '');
+}
+if (q.has('sel')) {
+  const years = ['Any', '2021', '2020', '2019', '2018'];
+  root.innerHTML = ['Min. Year', 'Max. Year'].map(l => '<x-select label="' + l + '">' + years.map(y => '<x-opt>' + y + '</x-opt>').join('') + '</x-select>').join('<br>');
+}
+if (q.has('overlay')) {
+  root.innerHTML = '<div style="position:relative;display:inline-block;margin:40px"><button id="sortbtn">Relevance</button>' +
+    '<select id="sort" aria-label="Sort" style="position:absolute;inset:0;opacity:0;width:100%"><option>Relevance</option><option>Price - Low to High</option></select></div>';
+  document.getElementById('sort').addEventListener('change', (e) => { document.getElementById('sortbtn').textContent = e.target.value; document.getElementById('state').textContent = 'sort=' + e.target.value; });
+}
+if (q.has('drill')) {
+  // One section at a time: opening one hides the other headers until it is closed.
+  const sections = { Breed: 'English Spot', Age: 'Young', Gender: 'Female' };
+  root.innerHTML = Object.entries(sections).map(([h, opt]) => '<section data-s="' + h + '"><button aria-expanded="false" class="h">' + h + '</button>' +
+    '<div class="body" hidden><label><input type="checkbox"> ' + opt + '</label></div></section>').join('');
+  for (const s of root.querySelectorAll('section')) {
+    s.querySelector('.h').addEventListener('click', () => {
+      const open = s.querySelector('.h').getAttribute('aria-expanded') !== 'true';
+      s.querySelector('.h').setAttribute('aria-expanded', String(open));
+      s.querySelector('.body').hidden = !open;
+      for (const o of root.querySelectorAll('section')) if (o !== s) o.hidden = open;
+    });
+  }
+}
+if (q.has('polyfill')) {
+  // A site polyfill that returns undefined from getRootNode for some nodes.
+  const real = Node.prototype.getRootNode;
+  Node.prototype.getRootNode = function () { return this === document.documentElement ? undefined : real.call(this); }; // as on some sites: the top of the page has no root
+  root.innerHTML = '<span><button>Inside a span</button></span>';
+}
+if (q.has('settle')) {
+  root.innerHTML = '<div class="slide" id="slide"></div><button id="go">Go</button><p id="out"></p>';
+  let x = 0; setInterval(() => { x = (x + 7) % 300; document.getElementById('slide').style.transform = 'translateX(' + x + 'px)'; }, 50);
+  document.getElementById('go').addEventListener('click', () => {
+    fetch('/delay?ms=4000', { keepalive: true }).catch(() => {}); // an analytics beacon
+    document.getElementById('out').textContent = 'Done';
+  });
+}
+</script>
+</body></html>

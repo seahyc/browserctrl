@@ -51,6 +51,16 @@ const TARGET_CMDS = new Set(['click', 'hover', 'fill', 'select', 'scroll-to', 'u
 const looksLikeSelector = p => /^[#.\[*]/.test(p) ||
   /^(a|button|input|select|textarea|div|span|li|ul|ol|label|form|img|svg|nav|section|main|header|footer|p|h[1-6]|table|tr|td|th|option|summary|details|dialog)([#.\[:]|\s*[>~+])/.test(p);
 
+// Anything the page's own querySelectorAll accepts and that reads as a selector: CSS punctuation,
+// a custom element (its name always has a hyphen), or a tag name that matches something. Plain
+// words ("Submit") are valid selectors too, but match nothing and have no selector syntax.
+async function selectorOnPage(conn, targetId, p) {
+  const syntax = /[#.\[\]:>~+*=()]/.test(p) || /(^|[\s>~+])[a-z][a-z0-9]*-[a-z0-9-]*/.test(p);
+  const count = await ops.evaluate(conn, targetId, `(() => { try { return document.querySelectorAll(${JSON.stringify(p)}).length; } catch { return -1; } })()`).catch(() => -1);
+  if (count < 0) return false;
+  return syntax || (count > 0 && /^[a-z][a-z0-9]*$/.test(p));
+}
+
 // Before a read: wait for skeletons and spinners to clear (up to 8 s) so the page is read
 // finished, not mid-load. --no-wait skips; BROWSERCTRL_READ_WAIT_MS changes the limit.
 async function waitToRead(conn, targetId, flags, { quiet = false } = {}) {
@@ -290,7 +300,8 @@ function usage() {
     browserctrl claims [--browser dia]       browserctrl release [<tab>|--mine]
     browserctrl status --browser dia         browserctrl stop --browser dia
 
-  Chromium commands take --browser <${Object.keys(BROWSERS).join('|')}> or --port <n>.
+  Chromium commands take --browser <${Object.keys(BROWSERS).join('|')}> or --port <n>, or set
+  BROWSERCTRL_BROWSER / BROWSERCTRL_PORT once in the environment of the agent that runs them.
   Safari commands take --browser safari and an explicit full native handle.
   Add --steal to take a tab another agent has claimed.`;
 }
@@ -339,6 +350,12 @@ async function launch(name) {
 
 const { flags, positional } = parseArgs(process.argv.slice(2));
 const cmd = positional[0];
+// The browser is never guessed, but whoever launches an agent can choose it once:
+// BROWSERCTRL_BROWSER=dia or BROWSERCTRL_PORT=9230 stands for --browser/--port on every command.
+if (flags.browser === undefined && flags.port === undefined) {
+  if (process.env.BROWSERCTRL_PORT) flags.port = process.env.BROWSERCTRL_PORT;
+  else if (process.env.BROWSERCTRL_BROWSER) flags.browser = process.env.BROWSERCTRL_BROWSER;
+}
 
 // Commands are the words the help text documents after "browserctrl", plus every case below.
 // An unknown one gets a pointer instead of the whole help text.
@@ -841,11 +858,14 @@ const main = async () => {
     let valueArg = positional[2];
     if (TARGET_CMDS.has(cmd) && !flags.intent && !target.ref && !target.selector && target.x === undefined && positional[2] !== undefined) {
       const p = String(positional[2]);
+      const num = (v) => v !== undefined && /^-?\d+(\.\d+)?$/.test(String(v));
       if (/^(ref_\d+|e\d+)$/.test(p)) target.ref = p;
-      else if (looksLikeSelector(p)) target.selector = p;
+      else if (num(p) && num(positional[3]) && cmd !== 'fill') { target.x = Number(p); target.y = Number(positional[3]); } // click <tab> 150 407
+      else if (looksLikeSelector(p) || await selectorOnPage(conn, targetId, p)) target.selector = p;
       else if (/^i\d+$/.test(p)) throw new Error(`${p} is an item id from \`items\`, not a ref. Click the item by its text: browserctrl do ${tab.id} 'click "<the item's text>"', or use a ref_N from browserctrl read ${tab.id}.`);
       else if (cmd !== 'fill') throw new Error(`"${p}" is not a ref (ref_9) or a CSS selector. Name it in words instead: browserctrl do ${tab.id} '${cmd} "${p}"', or browserctrl ${cmd} ${tab.id} --intent "${p}".`);
       if (target.ref || target.selector) valueArg = positional[3];
+      if (target.x !== undefined) valueArg = positional[4];
     }
     // A ref means what the agent's last `read` of this tab printed, not whatever snapshot
     // ran last (do and --intent read the page again).
