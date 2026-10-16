@@ -45,7 +45,7 @@
   // collapses its search bar, and drops the Search button, on any scroll).
   if (q.get('tall')) {
     const b = document.createElement('button');
-    b.textContent = 'Increase Pets'; b.style.cssText = 'position:absolute;top:420px;left:200px';
+    b.textContent = 'Increase Pets'; b.style.cssText = `position:absolute;top:${Math.round(innerHeight / 3)}px;left:200px`; // in view in any window size
     b.onclick = () => { document.querySelector('#state').textContent = 'pets ' + scrollY; };
     document.body.appendChild(b);
     document.body.style.height = '3000px';
