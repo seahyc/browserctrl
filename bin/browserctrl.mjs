@@ -29,7 +29,7 @@ import * as jigsaw from '../lib/jigsaw.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
-import { formatRead } from '../lib/refs.mjs';
+import { formatRead, deepTextExpression } from '../lib/refs.mjs';
 import { runSteps, formatSteps, PAGE_PARAMS, formatParams, mainLinks } from '../lib/steps.mjs';
 import * as prefetch from '../lib/prefetch.mjs';
 import { visit, formatVisits } from '../lib/visit.mjs';
@@ -959,7 +959,8 @@ const main = async () => {
       }
       case 'text': {
         await waitToRead(conn, targetId, flags);
-        const raw = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, 'document.body ? document.body.innerText : ""', { retry: true }));
+        // Shadow-root text too (a quiz or popup drawn by a web component).
+        const raw = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, deepTextExpression(), { retry: true }));
         const source = String(raw || '');
         let selected = source;
         if (flags.match) {

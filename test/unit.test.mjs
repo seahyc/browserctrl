@@ -63,8 +63,10 @@ test('browser names resolve to their ports', () => {
   assert.throws(() => resolveBrowserArg({ browser: 'safari' }), /Unknown browser/);
 });
 
-test('every command documented in SKILL.md exists in the CLI', () => {
-  const skill = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
+test('every command documented in SKILL.md and its references exists in the CLI', () => {
+  // The skill is a short core plus references/*.md; commands are documented across both.
+  const refs = fs.readdirSync(path.join(ROOT, 'references')).filter(f => f.endsWith('.md')).map(f => fs.readFileSync(path.join(ROOT, 'references', f), 'utf8'));
+  const skill = [fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8'), ...refs].join('\n');
   const cli = fs.readFileSync(path.join(ROOT, 'bin', 'browserctrl.mjs'), 'utf8');
   const documented = new Set(
     [...skill.matchAll(/^\s*(?:\$\s*)?(?:browserctrl|cdp)\s+([a-z-]+)/gm)].map(m => m[1]).filter(c => c !== 'help'),

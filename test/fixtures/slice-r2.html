@@ -1,0 +1,157 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Rotation 2</title>
+<style>
+  body { font: 14px sans-serif; margin: 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .swatch { display: inline-block; padding: 8px 12px; border: 1px solid #888; margin: 4px; cursor: pointer; }
+  #side { width: 220px; height: 1800px; background: #f4f4f4; float: left; }
+  #results { margin-left: 240px; padding-top: 1200px; }
+</style></head>
+<body>
+<p id="state"></p>
+<div id="root"></div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const root = document.querySelector('#root');
+  const state = (t) => { document.querySelector('#state').textContent = t; };
+
+  // A newsletter popup drawn inside a web component's shadow root, over the page (Speedo).
+  if (q.get('shadowpop')) {
+    root.innerHTML = '<a href="#women" id="women">Women</a><p>Lots of swimsuits.</p>';
+    customElements.define('promo-overlay', class extends HTMLElement {
+      connectedCallback() {
+        const s = this.attachShadow({ mode: 'open' });
+        s.innerHTML = `<div id="backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center">
+          <div style="background:#fff;padding:20px;width:360px">
+            <div class="head"><p>Sign up to our emails and get 20% off your first order</p>
+              <button type="button" class="close-btn" id="x"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M14 1.41L12.59 0L7 5.59L1.41 0L0 1.41L5.59 7L0 12.59L1.41 14L7 8.41L12.59 14L14 12.59L8.41 7Z"/></svg></button></div>
+            <form id="f" onsubmit="event.preventDefault()"><input type="email" aria-label="Email address">
+              <div><p>Join the club for early access</p><button type="submit" id="go"><svg width="10" height="10"><path d="M0 0L10 5L0 10Z"/></svg></button></div>
+              <button type="submit">Sign up</button></form>
+          </div></div>`;
+        s.querySelector('#x').onclick = () => { this.remove(); state('closed'); };
+        s.querySelector('#go').onclick = () => state('submitted');
+      }
+    });
+    document.body.appendChild(document.createElement('promo-overlay'));
+  }
+
+  // A quiz app whose questions live in a shadow root (Healthline).
+  if (q.get('shadowquiz')) {
+    root.innerHTML = '<h1>Weight quiz</h1>';
+    customElements.define('quiz-app', class extends HTMLElement {
+      connectedCallback() {
+        const s = this.attachShadow({ mode: 'open' });
+        s.innerHTML = `<section><h2>How often do you exercise?</h2>
+          <ul>${['Never', 'Once a week', 'Most days', 'Every day'].map(t => `<li><button role="radio" aria-checked="false">${t}</button></li>`).join('')}</ul>
+          <p>Your answers stay private.</p></section>`;
+        for (const b of s.querySelectorAll('button')) b.onclick = () => { for (const o of s.querySelectorAll('button')) o.setAttribute('aria-checked', String(o === b)); state(b.textContent); };
+      }
+    });
+    root.appendChild(document.createElement('quiz-app'));
+  }
+
+  // Sort radios drawn twice: the page's own form, and a copy in the open "Filter & Sort"
+  // drawer (a modal, so the page's copy is inert behind it). Choosing one redraws both a
+  // moment later, and only the drawer's copy keeps the choice (Speedo's Shopify theme).
+  if (q.get('dupsort')) {
+    const opts = ['Featured', 'Price - Low to High', 'Price - High to Low'];
+    const draw = (chosen) => {
+      const form = (id, stale) => `<form id="${id}"><fieldset><legend>Sort by</legend>${opts.map((o, k) =>
+        `<label><input type="radio" name="sort_by${id}" value="${k}" ${!stale && o === chosen ? 'checked' : ''}> ${o}</label>`).join('')}</fieldset></form>`;
+      root.innerHTML = form('desk', true) + `<div role="dialog" aria-modal="true" aria-label="Filter &amp; Sort" style="position:fixed;inset:0 0 0 40%;background:#fff;border-left:1px solid #888">${form('drawer', false)}</div>`;
+      for (const r of root.querySelectorAll('#drawer input')) r.onchange = () => {
+        const chosen = r.parentElement.textContent.trim();
+        state('sorted ' + chosen);
+        // The theme puts the choice in the address at once and redraws both forms from the
+        // server's answer, unticked until it arrives.
+        history.replaceState({}, '', location.pathname + '?dupsort=1&sort_by=' + r.value);
+        draw(null);
+        setTimeout(() => draw(chosen), 7000);
+      };
+    };
+    draw('Featured');
+  }
+
+  // A radius chosen with radios, where the one named in the step reads as checked though
+  // the search still uses another (ZipRecruiter's "10mi" with radius=25).
+  if (q.get('radius')) {
+    root.innerHTML = ['5mi', '10mi', '25mi'].map(r => `<label><input type="radio" name="radius" ${r === '10mi' ? 'checked' : ''}> ${r}</label>`).join(' ');
+    for (const i of root.querySelectorAll('input')) i.onclick = () => state('clicked ' + i.parentElement.textContent.trim());
+  }
+
+  // A price filter with a slider and a text box for the same maximum (Wine Access).
+  if (q.get('price')) {
+    root.innerHTML = `<label>Maximum Price <input type="range" id="slider" min="0" max="200" step="1" value="200" aria-label="Maximum Price"></label>
+      <label>Max Price $ <input type="text" id="box" aria-label="Maximum Price" value=""></label>`;
+    document.querySelector('#box').oninput = (e) => state('box ' + e.target.value);
+    document.querySelector('#slider').oninput = (e) => state('slider ' + e.target.value);
+  }
+  if (q.get('slideronly')) {
+    root.innerHTML = '<label>Maximum Price <input type="range" id="slider" min="0" max="200" step="1" value="200" aria-label="Maximum Price"></label>';
+    document.querySelector('#slider').oninput = (e) => state('slider ' + e.target.value);
+  }
+
+  // Size swatches: visually hidden radios whose labels are what a person clicks.
+  if (q.get('swatch')) {
+    // The 1px input sits at its row's left edge, just outside the label (Shopify's facets).
+    root.innerHTML = ['S', 'M', 'L', '40'].map((s, k) => `<div style="position:relative;padding-left:6px"><input type="checkbox" name="size" id="sz${k}" value="${s}" style="position:absolute;left:0;top:0;width:1px;height:1px;margin:0;overflow:hidden;clip:rect(0 0 0 0)"><label class="swatch" for="sz${k}">${s}</label></div>`).join('');
+    for (const i of root.querySelectorAll('input')) i.onchange = () => state('size ' + i.value);
+  }
+
+  // A filter list the page redraws by itself after a read (results arriving).
+  if (q.get('redraw')) {
+    const draw = () => {
+      root.innerHTML = `<label>Max Price $ <input type="text" aria-label="Max Price" id="max"></label> <button id="apply">Apply</button>`;
+      root.querySelector('#max').oninput = (e) => state('max ' + e.target.value);
+      root.querySelector('#apply').onclick = () => state('applied');
+    };
+    draw();
+    window.redrawSoon = () => setTimeout(() => { draw(); history.pushState({}, '', location.pathname + location.search + '&page=2'); }, 200);
+  }
+
+  // Two popups stacked: a cookie dialog (the page's modal), and over it a web component's
+  // region picker whose host is a 0x0 box and whose full-screen layer lives in its shadow
+  // root (Speedo).
+  if (q.get('stacked')) {
+    root.innerHTML = `<p>Swimwear</p><div role="dialog" aria-modal="true" aria-label="We Value Your Privacy" style="position:fixed;left:0;right:0;bottom:0;height:45vh;background:#eef;padding:16px">
+      <p>We use cookies.</p><button id="reject">Reject All</button> <button>Accept All Cookies</button> <button aria-label="Close">×</button></div>`;
+    root.querySelector('#reject').onclick = () => state((document.querySelector('#state').textContent + ' rejected').trim());
+    customElements.define('region-picker', class extends HTMLElement {
+      connectedCallback() {
+        this.style.cssText = 'position:fixed;width:0;height:0';
+        const s = this.attachShadow({ mode: 'open' });
+        s.innerHTML = `<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center">
+          <div style="background:#fff;padding:20px"><p>Are you in the right place? Please select your region</p><button>Shop now</button> <button id="x">Close</button></div></div>`;
+        s.querySelector('#x').onclick = () => { this.remove(); state('closed'); };
+      }
+    });
+    document.body.appendChild(document.createElement('region-picker'));
+  }
+
+  // A bot check that clears on a reload (Cloudflare's managed challenge often does).
+  if (q.get('challenge')) {
+    const n = Number(sessionStorage.getItem('loads') || 0) + 1;
+    sessionStorage.setItem('loads', String(n));
+    root.innerHTML = n === 1 ? '<h1>www.example.com</h1><p>Performing security verification</p><p>This website uses a security service to protect against malicious bots.</p>'
+      : '<h1>Cars for sale</h1><p>143 matches</p>';
+  }
+
+  // Icon-only buttons named from their row: one that only shows a tour, one that sends the
+  // sign-up form it sits in.
+  if (q.get('derived')) {
+    root.innerHTML = `<div class="row"><p>Sign up for our app tour</p><button type="button" id="tour"><svg width="10" height="10"><circle cx="5" cy="5" r="4"/></svg></button></div>
+      <form onsubmit="event.preventDefault()"><input type="email" aria-label="Email address"><div><p>Join our mailing list today</p><button type="submit" id="send"><svg width="10" height="10"><path d="M0 0L10 5L0 10Z"/></svg></button></div></form>`;
+    root.querySelector('#tour').onclick = () => state('tour');
+    root.querySelector('#send').onclick = () => state('sent');
+  }
+
+  // A long filter sidebar beside the results: after filtering, the page sits scrolled to the
+  // bottom of the sidebar and the results are out of view.
+  if (q.get('results')) {
+    root.innerHTML = `<div id="side"><button id="f">Red</button></div><div id="results"><h2>12 results</h2>
+      <ul>${Array.from({ length: 12 }, (_, k) => `<li><a href="#p${k}">Product ${k + 1} with a fairly long title</a> <span>$${10 + k}</span></li>`).join('')}</ul></div>`;
+    root.querySelector('#f').onclick = () => { state('filtered'); scrollTo(0, 0); };
+  }
+</script>
+</body></html>
