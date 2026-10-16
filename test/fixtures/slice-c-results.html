@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Stays</title>
+<style>.skeleton { background: #eee; height: 24px; margin: 10px 0; width: 320px; } li { margin: 6px 0; }</style></head>
+<body>
+<button id="show" onclick="show()">Show places</button>
+<button id="add" onclick="document.getElementById('bag').textContent = 'KIVIK was added to your shopping bag'">Add to bag</button>
+<button id="add-slow" class="shop-btn" onclick="addSlow(this)"><span class="shop-btn__label">Add to cart</span></button>
+<p id="bag"></p>
+<p><input type="checkbox" id="brand-1"><label for="brand-1">Samsung   Galaxy S25+ (12)</label></p>
+<div id="results"></div>
+<script>
+  // Results replace skeleton cards about 1.5 s after the click, as a search page does
+  // while its API answers; the URL never changes.
+  // IKEA's "Add to bag": the button shows a loader in its own class until the cart API
+  // answers, and only then the confirmation appears.
+  function addSlow(b) {
+    b.className = 'shop-btn shop-btn--loading';
+    b.innerHTML = '<span class="shop-btn__loader" style="display:inline-block;width:10px;height:10px;background:#fff;border-radius:5px"></span>';
+    setTimeout(function () {
+      b.className = 'shop-btn';
+      b.innerHTML = '<span class="shop-btn__label">Add to cart</span>';
+      document.getElementById('bag').textContent = 'Sofa was added to your cart';
+    }, 1500);
+  }
+  function show() {
+    var r = document.getElementById('results');
+    r.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+    setTimeout(function () { r.innerHTML = '<ul><li>Place 1 · $120</li><li>Place 2 · $180</li><li>Place 3 · $240</li></ul>'; }, 1500);
+  }
+</script>
+</body></html>
