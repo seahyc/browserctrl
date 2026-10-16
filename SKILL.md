@@ -477,7 +477,8 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   `hover`, `key Enter`, `type "<text>"` (into whatever has focus), `scroll down|up`,
   `nav <url>`, `wait <ms>`, `expect <what the page shows>`, and `date YYYY-MM-DD`.
 - `date YYYY-MM-DD` picks a calendar day (open the picker first): it matches any day-cell
-  label or text format, waits for a picker that is still opening, and pages months to the
+  label or text format, waits for a picker that is still opening (and opens a collapsed
+  When / Check-in / Dates control itself if no calendar shows), and pages months to the
   date. A click that names a whole date ("Oct 17, 2026") does the same.
 - A step can name an element directly: `click ref_25` (from your last read), `click i140`
   (an `items` id, unquoted), or a CSS selector `click "#id"` / `click '[data-value="600"]'`.
