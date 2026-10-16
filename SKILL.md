@@ -214,7 +214,10 @@ browserctrl rec om2w DIR --task-id ID --task "…" --answer "…" --root R   # O
 
 A recording is rrweb DOM events (`rrweb.ndjson.br`, brotli) plus one 1280-px JPEG
 still per action (`trajectory/`, listed in `steps.jsonl`). Every acting command (and
-`do`, per step) takes a still; reads take one only when the page moved on. A 13-step
+`do`, per step) takes a still after waiting (up to 4 s) for the page to stop loading;
+`read`, `text` and `items` add one when the page changed since the last still (address,
+title or visible text). End a recorded task with one `read` so the final state is
+captured. A 13-step
 PyPI run came to 0.74 MB: 170 KB of events and 560 KB of stills. Stills show what DOM
 replay cannot: canvas and cross-origin iframes. The MCP tool is `browser_rec`. The
 bench harness records every run into `bench/runs/<run>/rec/`.
