@@ -66,3 +66,20 @@ listing all 300 tasks with level, human step count and published agents' pass ra
 ```sh
 python3 bench/om2w/make_picker.py bench/om2w bench/om2w/suggested.txt && open bench/om2w/picker.html
 ```
+
+## Splits: developing without overfitting
+
+`split.py` (seed 20261016) splits the 300 tasks by site, so no site is in two sets, into
+`splits.json`:
+
+- **dev** (102 sites, 195 tasks): every site already used plus leftovers. Study runs and fix
+  browserctrl against these freely.
+- **rotation-1, -2, -3** (about 10 hard tasks each): held-out rounds. A rotation is run to
+  measure whether fixes generalise; once its runs have been studied it is retired into dev and
+  the next rotation becomes the held-out test.
+- **final** (17 sites, 20 hard tasks): run once at the end. These are the only results reported
+  as unseen sites.
+
+Rules: fixes are developed and checked live only on dev sites or synthetic fixtures, never on a
+held-out or final site; a held-out failure is studied as a kind of problem, and the fix is
+verified elsewhere.
