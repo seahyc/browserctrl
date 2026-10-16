@@ -1,0 +1,11 @@
+# Held-out sites: never used while fixing browserctrl. Chosen 2026-10-16 before the slider/date/word-list fixes, to test whether the fixes generalise.
+b64f938af842f6a1b4489d0e49a785a7_121125
+eb323dc584156d0eb3a2b90bb8c4b791_110325
+c3a333968fc3c43d7f2688f425a0d633
+bb5d90e6f2fbc0ae146f7c1998c2b4a1
+9d090a15c214eb070d9caa8a034d03c1_070826
+f707d765bca668830745d20807d7bee6
+0b51b4fa0295ae80ccd176ebdad6fff6
+636b07af4dd97c1793733db1fd1b90b8_110325
+cf757a775fa1224acfc7998489e199a8
+f158345f8489e0d1d91e28768c39bca1
