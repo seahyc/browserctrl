@@ -497,6 +497,14 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   following links never need it. A click by ref or items id (`click ref_3`) is deliberate
   and never guarded, and "Order Now"-style buttons that only start an order run unless the
   page shows a bag total or payment step.
+- A control under a sticky header or a dialog's footer, or past the edge of a scrolling
+  list, is still found by name; the click scrolls it clear. Clicks never scroll a control
+  that is already in view.
+- Toggle buttons (`aria-pressed`) report now pressed / not pressed like checkboxes. Naming
+  a toggle or checkbox that is already on leaves it on; to turn it off, click it by ref.
+- When a step finds nothing because a dialog or notice is on top, the stop report names it
+  and its harmless close control (`On top: … close it with click "Got it"`); add
+  `optional click "Got it"` to a plan for notices that may or may not appear.
 - When several controls share a name, Jev sees each one's row, and an unsure pick stops
   listing them (`click ref_7 (near "Start time") or click ref_8 (near "End time")`): pick
   one by ref.
