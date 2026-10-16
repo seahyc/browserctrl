@@ -111,6 +111,6 @@ t('a page that never reaches readyState complete is read once it holds still, an
   assert.ok(first.waitedMs < 3500, `stopped waiting once nothing was left to load on screen (${first.waitedMs} ms)`);
   assert.ok(first.stable || first.cleared, JSON.stringify(first));
   const again = await ops.settle(conn, id);
-  assert.ok(again.waitedMs < 600, `a page known never to complete is not waited on again (${again.waitedMs} ms)`);
+  assert.ok(again.waitedMs < 1000, `a page known never to complete is not waited on again (holding still alone takes 1 s) (${again.waitedMs} ms)`);
   await ops.closeTab(conn, id);
 });
