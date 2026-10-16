@@ -3,15 +3,19 @@
 A fix studied on one site can tune browserctrl to that site, so sets are split by site, not
 by task: no site appears in two sets.
 
-- dev: sites already used (the 13 hard tasks, the notes test, demos) plus leftover sites.
-  Study and fix against these freely.
-- rotation-1: the held-out set chosen on 2026-10-16 (heldout.txt). Once its results have
-  been studied, it is retired into dev.
-- rotation-2, rotation-3: ~10 hard tasks each, for later rounds; each is retired into dev
-  after use.
+- dev: every site already run (the 13 hard tasks, notes test, demos, retired rotations) plus
+  leftovers. Study and fix against these freely.
+- rotation-1, rotation-2: held-out rounds already run and studied; retired into dev.
+- rotation-3 (and rotation-4 if enough reachable sites remain; none did): ~10 hard tasks for the next held-out round, retired into
+  dev after it has been run and studied.
 - final: ~20 hard tasks, run once at the end. The only numbers reported as "unseen sites".
 
-usage: python3 split.py   (reads tasks.json, results.jsonl, heldout.txt; writes splits.json)
+Since 2026-10-16 runs use a direct connection from Singapore (no VPN), so the unused sets are
+drawn only from sites access.json lists as reachable that way (no block, no redirect to
+another country's site).
+
+usage: python3 split.py   (reads tasks.json, results.jsonl, heldout.txt, access.json and the
+       retired rotations in splits.json; writes splits.json)
 """
 import json, random
 from pathlib import Path
@@ -27,14 +31,18 @@ for t in tasks:
     by_site.setdefault(host(t["website"]), []).append(t["task_id"])
 hard_by_site = {s: [t["task_id"] for t in tasks if host(t["website"]) == s and t["level"] == "hard"] for s in by_site}
 
+old = json.loads((HERE / "splits.json").read_text()) if (HERE / "splits.json").exists() else {}
+retired = {k: v for k, v in old.items() if k in ("rotation-1", "rotation-2")}
+reachable = set(json.loads((HERE / "access.json").read_text())["reachable"])
+
 used = set()
 for line in (HERE / "results.jsonl").read_text().splitlines():
     if line.strip() and (w := json.loads(line).get("website")):
         used.add(host(w))
-rotation1 = [l.strip() for l in (HERE / "heldout.txt").read_text().splitlines() if l.strip() and not l.startswith("#")]
-r1_sites = {host(t["website"]) for t in tasks if t["task_id"] in rotation1}
+for v in retired.values():
+    used |= set(v["sites"])
 
-free = sorted(s for s in by_site if s not in used and s not in r1_sites and hard_by_site[s])
+free = sorted(s for s in by_site if s not in used and s in reachable and hard_by_site[s])
 random.Random(SEED).shuffle(free)
 
 def take(n):
@@ -47,19 +55,20 @@ def take(n):
     return sites
 
 final_sites = take(FINAL)
-r2_sites, r3_sites = take(ROTATION), take(ROTATION)
-dev_sites = sorted(s for s in by_site if s not in set(final_sites) | set(r2_sites) | set(r3_sites) | r1_sites)
+r3_sites, r4_sites = take(ROTATION), take(ROTATION)
+held = set(final_sites) | set(r3_sites) | set(r4_sites)
+dev_sites = sorted(s for s in by_site if s not in held)
 
 def hard(sites):
     return [t for s in sites for t in hard_by_site[s]]
 
 splits = {
     "seed": SEED,
-    "rule": "site-disjoint; hard tasks only in rotations and final; dev holds every task on its sites",
+    "rule": "site-disjoint; hard tasks only in rotations and final; dev holds every task on its sites; unused sets drawn from sites reachable directly (access.json)",
     "final": {"sites": sorted(final_sites), "tasks": hard(final_sites)},
-    "rotation-1": {"sites": sorted(r1_sites), "tasks": rotation1, "status": "running 2026-10-16"},
-    "rotation-2": {"sites": sorted(r2_sites), "tasks": hard(r2_sites)},
-    "rotation-3": {"sites": sorted(r3_sites), "tasks": hard(r3_sites)},
+    **retired,
+    "rotation-3": {"sites": sorted(r3_sites), "tasks": hard(r3_sites), "status": "next held-out test"},
+    **({"rotation-4": {"sites": sorted(r4_sites), "tasks": hard(r4_sites)}} if r4_sites else {}),
     "dev": {"sites": dev_sites, "tasks": [t for s in dev_sites for t in by_site[s]]},
 }
 (HERE / "splits.json").write_text(json.dumps(splits, indent=1) + "\n")

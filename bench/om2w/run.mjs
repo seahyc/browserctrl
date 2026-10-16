@@ -415,6 +415,52 @@ const QUICK_IMAGES = 6;
 // needs it too, or "tomorrow" and "next Sunday" are graded against the wrong day.
 const runDate = (run) => new Date(run.startedAt || Date.now()).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
 
+// The judge's action history comes from the agent's own log, the same way for both arms:
+// browserctrl commands with their result lines (which name the element each step landed on),
+// or Codex's browser-tool calls with their titles and code. The recorder's step labels alone
+// say "do: click ref_8" without naming what ref_8 was.
+const STEP_LINE = /^\s*(✓|✗|⚠|–|Stopped|now |url:|→)/;
+function agentActions(runId) {
+  const out = [];
+  let lines = [];
+  try { lines = fs.readFileSync(runPath(runId, 'agent-events.jsonl'), 'utf8').split('\n'); } catch { return out; }
+  for (const l of lines) {
+    let e; try { e = JSON.parse(l); } catch { continue; }
+    if (e.type !== 'item.completed' || !e.item) continue;
+    const it = e.item;
+    if (it.type === 'command_execution') {
+      const cmd = String(it.command || '');
+      if (!/browserctrl /.test(cmd)) continue;
+      const res = String(it.aggregated_output || '').split('\n').filter(x => STEP_LINE.test(x)).slice(0, 12).map(x => '   ' + x.trim().slice(0, 160));
+      out.push([cmd.replace(/^.*?browserctrl /, 'browserctrl ').replace(/['"]$/, '').slice(0, 220), ...res].join('\n'));
+    } else if (it.type === 'mcp_tool_call') {
+      let a = {}; try { a = typeof it.arguments === 'string' ? JSON.parse(it.arguments) : (it.arguments || {}); } catch {}
+      out.push(`${a.title || it.tool || 'browser tool'}: ${String(a.code || '').replace(/\s+/g, ' ').slice(0, 220)}`);
+    }
+  }
+  return out;
+}
+// Hosts the run's tab showed, from the recorder; a task done through another site doesn't count.
+function visitedHosts(runId) {
+  const hosts = new Set();
+  try {
+    for (const l of fs.readFileSync(runPath(runId, 'rec', 'steps.jsonl'), 'utf8').split('\n')) {
+      try { const u = JSON.parse(l).url; if (u) hosts.add(new URL(u).hostname.replace(/^www\./, '')); } catch {}
+    }
+  } catch {}
+  return [...hosts];
+}
+function judgeContext(run, runId) {
+  const hosts = visitedHosts(runId);
+  return `The task was done on ${runDate(run)} (New York time); read relative dates from that day. The agent was told never to complete a purchase, booking, payment, sign-up, sign-in or message, and to stop at the step just before committing; reaching that final page or state (for example the item in the cart or bag, or a filled form) counts as completing the task. The task must be done on ${run.website}; an answer found through another website, such as a search engine, does not count.${hosts.length ? ` Sites the agent's tab showed: ${hosts.join(', ')}.` : ''}`;
+}
+function historyFor(runId, result) {
+  const acts = agentActions(runId);
+  const list = acts.length ? acts : result.action_history.map((s) => s.action);
+  if (result.agent_final_answer) list.push(`Final answer: ${result.agent_final_answer}`);
+  return list.map((a, i) => `${i + 1}. ${a}`).join('\n').slice(0, 12000);
+}
+
 async function quickJudge(runId) {
   const run = readRun(runId);
   const dir = runPath(runId, 'om2w', run.task_id);
@@ -424,8 +470,8 @@ async function quickJudge(runId) {
   const images = [...new Set(result.action_history.map((s) => path.join(dir, 'trajectory', s.screenshot)))].slice(-QUICK_IMAGES);
   const scratch = runPath(runId, 'judge');
   fs.rmSync(scratch, { recursive: true, force: true });
-  const history = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
-  const user = `User Task: ${result.task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day. The agent was told never to complete a purchase, booking, payment, sign-up, sign-in or message, and to stop at the step just before committing; reaching that final page or state (for example the item in the cart or bag, or a filled form) counts as completing the task.\n\nKey Points: (derive them from the task yourself)\n\nAction History:\n${history}\n\nThe last ${images.length} snapshots of the agent's trajectory are attached.`;
+  const history = historyFor(runId, result);
+  const user = `User Task: ${result.task}\n\n${judgeContext(run, runId)}\n\nKey Points: (derive them from the task yourself)\n\nAction History:\n${history}\n\nThe last ${images.length} snapshots of the agent's trajectory are attached.`;
   const response = await model(asCall(JUDGE_SYSTEM, user), images, scratch, 'quick');
   const status = response.toLowerCase().split('status:')[1];
   run.judge = {
@@ -470,10 +516,10 @@ async function judge(runId) {
   const kept = images.filter((img, i) => scored.get(img).score >= SCORE_THRESHOLD && images.indexOf(img) === i).slice(0, MAX_IMAGE);
   const thoughts = kept.map((img) => scored.get(img).thought).filter(Boolean);
 
-  const history = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
+  const history = historyFor(runId, result);
   const user = kept.length
-    ? `User Task: ${task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day. The agent was told never to complete a purchase, booking, payment, sign-up, sign-in or message, and to stop at the step just before committing; reaching that final page or state (for example the item in the cart or bag, or a filled form) counts as completing the task.\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}\n\nThe potentially important snapshots of the webpage in the agent's trajectory and their reasons:\n${thoughts.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
-    : `User Task: ${task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day. The agent was told never to complete a purchase, booking, payment, sign-up, sign-in or message, and to stop at the step just before committing; reaching that final page or state (for example the item in the cart or bag, or a filled form) counts as completing the task.\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}`;
+    ? `User Task: ${task}\n\n${judgeContext(run, runId)}\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}\n\nThe potentially important snapshots of the webpage in the agent's trajectory and their reasons:\n${thoughts.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+    : `User Task: ${task}\n\n${judgeContext(run, runId)}\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}`;
   const response = await model(asCall(JUDGE_SYSTEM, user), kept, scratch, 'final');
   const status = response.toLowerCase().split('status:')[1];
   run.judge = {
