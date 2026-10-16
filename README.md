@@ -85,7 +85,7 @@ node bin/browserctrl.mjs recipe run shopee.sg/orders --browser chrome
 
 **Captchas:** `captcha <tab>` makes one attempt at a plain drag-to-the-end slider. For any other challenge, or if that attempt fails, it shows a desktop notification on macOS and waits for you to clear the challenge.
 
-**Run recordings:** `rec start <tab>` / `rec stop <tab>` keep one tab's run for watching later in little space: rrweb DOM events (brotli) plus one small JPEG still per action, across navigations. `replay <dir>` builds one self-contained HTML with a DOM replay and a clickable step timeline. `rec om2w` writes the run as an Online-Mind2Web `result.json` for its WebJudge. A 13-step run is about 0.7 MB. rrweb 2.1.7 is vendored in `vendor/rrweb/` (MIT).
+**Run recordings:** `rec start <tab>` / `rec stop <tab>` keep one tab's run for watching later in little space: rrweb DOM events (brotli) plus one small JPEG still per action, across navigations. `replay <dir>` builds one self-contained HTML with a DOM replay and a clickable step timeline. `replay <dir> --video run.mp4` renders the run as a real-time video with captions in plain words and a clock, and `replay --side-by-side <a> <b> --video ab.mp4 --gif ab.gif` puts two runs of a task on one clock. `rec om2w` writes the run as an Online-Mind2Web `result.json` for its WebJudge. A 13-step run is about 0.7 MB. rrweb 2.1.7 is vendored in `vendor/rrweb/` (MIT).
 
 ## How this differs from the original
 

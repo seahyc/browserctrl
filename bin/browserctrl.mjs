@@ -192,6 +192,9 @@ function usage() {
     browserctrl rec stop <tab> --browser dia                            stop; prints sizes
     browserctrl rec status [--browser dia]                              tabs being recorded
     browserctrl replay <DIR> [--out FILE] [--no-open]                   one self-contained HTML: DOM replay + step timeline
+    browserctrl replay <DIR> --video out.mp4 [--gif out.gif] [--gif-speed 4] [--speed 1] [--width 1280] [--label L] [--proxy socks5://…] [--no-captions] [--no-clock]
+                                                          real-time MP4: captions in plain words, a clock, stills where DOM replay is blank
+    browserctrl replay --side-by-side <A> <B> --labels "Without,With" --video out.mp4 [--gif out.gif]   two runs on one clock
     browserctrl rec om2w <DIR> --task-id ID --task "…" [--answer "…"] [--root R]   Online-Mind2Web result.json for its judge
 
   Recipes: a site's own API call, faster than its UI (see references/recipes.md):
@@ -451,6 +454,21 @@ const main = async () => {
     }
     const note = notes.show(what);
     return out(flags.json ? note : notes.format(note));
+  }
+  if (cmd === 'replay' && (flags.video || flags['side-by-side'])) {
+    const dirs = flags['side-by-side'] ? [flags['side-by-side'], ...positional.slice(1)].filter(d => typeof d === 'string') : positional.slice(1, 2);
+    if (!dirs.length || dirs.some(d => !fs.existsSync(path.join(d, 'steps.jsonl'))) || (flags['side-by-side'] && dirs.length < 2) || typeof flags.video !== 'string') {
+      throw new Error('Usage: browserctrl replay <recording dir> --video out.mp4 [--gif out.gif] [--gif-speed 4] [--fps 12] [--width 1280] [--speed 1] [--label "…"] [--no-captions] [--no-clock]\n       browserctrl replay --side-by-side <dirA> <dirB> --labels "Without do,With do + Jev" --video out.mp4 [--gif out.gif]');
+    }
+    const { renderVideo } = await import('../lib/video.mjs');
+    const labels = typeof flags.labels === 'string' ? flags.labels.split(/\s*[,|]\s*/) : typeof flags.label === 'string' ? [flags.label] : [];
+    const num = (v, d) => (v === undefined || v === true ? d : Number(v));
+    return out(await renderVideo(dirs, {
+      out: flags.video, gif: typeof flags.gif === 'string' ? flags.gif : null, gifSpeed: num(flags['gif-speed'], 4),
+      fps: num(flags.fps, 12), width: flags.width ? Number(flags.width) : undefined, speed: num(flags.speed, 1), labels,
+      captions: !flags['no-captions'], clock: !flags['no-clock'], ...(typeof flags.proxy === 'string' ? { proxy: flags.proxy } : {}),
+      onProgress: (i, f, n) => process.stderr.write(`video${dirs.length > 1 ? ` ${i + 1}/${dirs.length}` : ''}: ${Math.round((f / n) * 100)}%\r`),
+    }));
   }
   if (cmd === 'replay') {
     const dir = positional[1];

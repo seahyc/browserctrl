@@ -209,6 +209,8 @@ browserctrl rec start <tab> --browser dia [--out DIR] [--label L]   # until stop
 # ... drive the tab with any browserctrl command ...
 browserctrl rec stop <tab> --browser dia      # prints the directory and its size
 browserctrl replay DIR                        # one self-contained HTML: DOM replay + step timeline
+browserctrl replay DIR --video run.mp4 --gif run.gif   # real-time video: plain-words captions, clock, "Thinking…" gaps
+browserctrl replay --side-by-side DIR_A DIR_B --labels "Without,With" --video ab.mp4 --gif ab.gif   # one clock, "Done in m:ss"
 browserctrl rec om2w DIR --task-id ID --task "…" --answer "…" --root R   # Online-Mind2Web judge input
 ```
 
@@ -219,7 +221,12 @@ still per action (`trajectory/`, listed in `steps.jsonl`). Every acting command 
 title or visible text). End a recorded task with one `read` so the final state is
 captured. A 13-step
 PyPI run came to 0.74 MB: 170 KB of events and 560 KB of stills. Stills show what DOM
-replay cannot: canvas and cross-origin iframes. The MCP tool is `browser_rec`. The
+replay cannot: canvas and cross-origin iframes. Videos are rendered in a private headless Chrome by seeking the
+replay to each frame's time, so they keep the run's real timing however busy the machine
+is; frames that did not change cost nothing. Pages load their images from the live site
+during rendering: if the run went through a proxy (a geo-blocked site), pass the same one
+with `--proxy socks5://…` (or `BROWSERCTRL_VIDEO_PROXY`). The GIF is sped up 4× by
+default (`--gif-speed`) and kept under 8 MB; the MP4 stays real-time. Needs ffmpeg. The MCP tool is `browser_rec`. The
 bench harness records every run into `bench/runs/<run>/rec/`.
 
 ## Use a recipe before driving a site's UI
