@@ -1,0 +1,86 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Friction 4</title>
+<style>
+  body { font: 14px sans-serif; margin: 0; }
+  #filters { position: fixed; inset: 40px 40px auto 40px; height: 420px; background: #fff; border: 1px solid #888; }
+  #filters .body { overflow: auto; height: 100%; }
+  #filters .body button { display: block; margin: 6px 12px; padding: 6px 12px; }
+  #filters footer { position: sticky; bottom: 0; height: 64px; background: #eee; border-top: 1px solid #888; display: flex; gap: 12px; align-items: center; padding: 0 12px; }
+  #notice { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; }
+  #notice > div { background: #fff; padding: 20px; width: 320px; }
+  #search-bar { margin: 20px; display: flex; gap: 8px; align-items: center; }
+  #search-btn { width: 40px; height: 40px; border-radius: 20px; }
+</style></head>
+<body>
+<div id="search-bar">
+  <button id="search-btn" data-testid="structured-search-input-search-button" onclick="document.querySelector('#searched').textContent='searched'"><svg width="16" height="16" viewBox="0 0 16 16"><title>Search</title><circle cx="7" cy="7" r="5" stroke="#000" fill="none"/></svg></button>
+  <span id="searched"></span>
+</div>
+<button id="open-filters" onclick="document.querySelector('#filters').hidden=false">Filters</button>
+<div id="panel"></div>
+<p id="state"></p>
+
+<div id="filters2" role="dialog" aria-modal="true" aria-label="More filters" hidden style="position: fixed; inset: 40px 40px auto 40px; background: #fff; border: 1px solid #888;">
+  <div id="list2" style="overflow: auto; height: 170px;"></div>
+  <footer style="height: 64px; background: #eee; margin-top: -40px; position: relative; display: flex; gap: 12px; align-items: center; padding: 0 12px;"><button>Clear all</button><button>Show 20 places</button></footer>
+</div>
+
+<div id="filters" role="dialog" aria-modal="true" aria-label="Filters" hidden>
+  <div class="body" id="amenities"><footer><button>Clear all</button><button>Show 48 places</button></footer></div>
+</div>
+
+<script>
+  const q = new URLSearchParams(location.search);
+  // Amenity toggles: aria-pressed buttons, as Airbnb draws them.
+  const names = ['Wifi', 'Kitchen', 'Washer', 'Dryer', 'Air conditioning', 'Heating', 'Pool', 'Hot tub', 'Free parking', 'Gym', 'BBQ grill'];
+  const box = document.querySelector('#amenities');
+  for (const n of names) {
+    const b = document.createElement('button');
+    b.textContent = n; b.setAttribute('aria-pressed', 'false');
+    b.onclick = () => { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); document.querySelector('#state').textContent = names.filter(x => [...box.querySelectorAll(':scope > button')].find(c => c.textContent === x).getAttribute('aria-pressed') === 'true').join(','); };
+    box.insertBefore(b, box.querySelector('footer'));
+  }
+  if (q.get('filters') === 'open') document.querySelector('#filters').hidden = false;
+  // A tall page with a control well inside the screen: clicking it must not scroll (Airbnb
+  // collapses its search bar, and drops the Search button, on any scroll).
+  if (q.get('tall')) {
+    const b = document.createElement('button');
+    b.textContent = 'Increase Pets'; b.style.cssText = 'position:absolute;top:420px;left:200px';
+    b.onclick = () => { document.querySelector('#state').textContent = 'pets ' + scrollY; };
+    document.body.appendChild(b);
+    document.body.style.height = '3000px';
+  }
+  // Airbnb's live layout: the list scrolls in its own box and a static footer below it
+  // overlaps its last visible rows; nothing is sticky or fixed except the dialog.
+  if (q.get('filters') === 'list') {
+    const list = document.querySelector('#list2');
+    for (const n of ['Pool', 'Hot tub', 'EV charger', 'Crib', 'Gym', 'BBQ grill', 'Breakfast', 'Indoor fireplace']) {
+      const b = document.createElement('button');
+      b.textContent = n; b.setAttribute('aria-pressed', 'false'); b.style.cssText = 'display:block;margin:6px 12px;padding:6px 12px';
+      b.onclick = () => { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); document.querySelector('#state').textContent = [...list.children].filter(c => c.getAttribute('aria-pressed') === 'true').map(c => c.textContent).join(','); };
+      list.appendChild(b);
+    }
+    document.querySelector('#filters2').hidden = false;
+  }
+  // A fee notice that holds the page until "Got it".
+  if (q.get('notice')) {
+    const n = document.createElement('div');
+    n.id = 'notice';
+    n.innerHTML = '<div role="dialog" aria-modal="true" aria-label="Now you’ll see one price for your trip, all fees included."><p>Now you’ll see one price for your trip, all fees included.</p><button onclick="this.closest(\'#notice\').remove()">Got it</button> <button aria-label="Close" onclick="this.closest(\'#notice\').remove()">×</button></div>';
+    document.body.appendChild(n);
+  }
+  // A guest panel that redraws itself right after it is read, as Airbnb's does after each
+  // stepper click: the control a read found is gone by the time it is clicked.
+  if (q.get('redraw')) {
+    let pets = 0, drawn = 0;
+    const draw = () => {
+      drawn++;
+      document.querySelector('#panel').innerHTML = '<div>Pets <button aria-label="Increase Pets">+</button> <span id="pets">' + pets + '</span></div>';
+      document.querySelector('#panel button').onclick = () => { pets++; document.querySelector('#pets').textContent = pets; };
+    };
+    draw();
+    let c, once = true;
+    Object.defineProperty(window, '__cdp', { configurable: true, get() { return c; }, set(v) { c = v; if (once) { once = false; setTimeout(draw, 0); } } });
+  }
+</script>
+</body></html>
