@@ -582,9 +582,11 @@ names the nearest field.
 
 `read`, `text` and `items` wait up to 8 s for a loading page (skeletons, spinners,
 `aria-busy`) and say how long they waited; `--no-wait` skips it. If a command says a
-JavaScript dialog is open, run `browserctrl dialog <tab> --accept` (or `--dismiss`); if it
-says the page is stuck, `browserctrl reload <tab>`, then `reload <tab> --hard`, or add
-`--recover` to `read`.
+JavaScript dialog is open, run `browserctrl dialog <tab> --accept` (or `--dismiss`). If a
+page stops responding, `browserctrl reload <tab>` recovers it: it stops the page's script
+and reloads, restarts the renderer if needed, and as a last resort reopens the page in a
+new tab, printing the id to use from then on (`read`/`text`/`items --recover` do the same).
+A ref into a frame that loaded a new page is stale: read again.
 
 ```bash
 browserctrl click <tab> --ref ref_3 --browser dia
