@@ -121,6 +121,21 @@ test('counts grow with each run, one contradiction drops a once-seen fact, a wel
   assert.equal(f.fails, 1);
 });
 
+// Round 3 of Online-Mind2Web: an Airbnb note that had worked twice was deleted by its first
+// contradiction, so the agent's later `notes confirm` found nothing.
+test('a note that worked twice survives one contradiction and keeps its id', async () => {
+  const { id } = await notes.add('airbnb.com', 'Gym is under Search all filters', { force: true });
+  notes.confirm(id);
+  notes.contradict(id);
+  const f = notes.show('airbnb.com').facts.find(x => x.id === id);
+  assert.ok(f, 'kept');
+  assert.equal(f.count, 2);
+  assert.equal(f.fails, 1);
+  assert.equal(notes.confirm(id).ok, true);
+  notes.contradict(id); notes.contradict(id);
+  assert.equal(notes.show('airbnb.com').facts.find(x => x.id === id), undefined, 'dropped once failures catch up');
+});
+
 test('facts unseen for 90 days are pruned on the next write', () => {
   const old = Date.parse('2026-01-01T00:00:00Z');
   notes.record(notes.derive(closedRun()), { now: old });
