@@ -3,7 +3,7 @@
 [![Tests](https://github.com/seahyc/browserctrl/actions/workflows/test.yml/badge.svg)](https://github.com/seahyc/browserctrl/actions/workflows/test.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**browserctrl lets an AI use websites for you, including the fiddly ones with calendars, tiny checkboxes and fine print, faster and with fewer mistakes.**
+**browserctrl lets an AI use websites for you, including the fiddly ones with calendars, tiny checkboxes and fine print, with fewer mistakes, and often faster.**
 
 ![Codex using its own browser (left) and the same Codex using browserctrl (right) on the same Booking.com task](docs/media/booking-side-by-side.gif)
 
@@ -60,6 +60,16 @@ How we kept it honest:
 The StubHub browserctrl run comes from the notes test (with notes off), on the same connection and time zone but in branded Chrome rather than Chrome for Testing, which Codex's own browser needs for its extension.
 
 browserctrl lost the first Airbnb run, and the recording showed why. Its clicks scrolled the page a little even when a button was already on screen, and Airbnb hides its search bar whenever the page scrolls; a "Gym" button under the filters' footer couldn't be found; a notice covering "Filters" went unmentioned; and Airbnb's on/off buttons weren't tracked. After fixing those, the same task needs two `do` plans instead of about twenty steps. In the second run browserctrl finished in 2:40, while Codex's own browser ran out of its 15 minutes. Two runs are not many: Codex's own browser took 2:21 the first time and 15 minutes the second, so treat these as examples rather than averages. [Watch the first Airbnb run side by side](docs/media/airbnb-side-by-side.mp4).
+
+**On sites it had never seen.** The fixes above were made while watching those 13 tasks, so they could be tuned to those sites. To check, we set aside 10 hard tasks on 10 other sites before making the next fixes, and ran them with both methods:
+
+| 10 held-out tasks on unseen sites | Done right | Total time |
+| --- | --- | --- |
+| Codex's own browser | 6 of 10 | **27.5 min** |
+| Codex + browserctrl | **8 of 10** | 31.1 min |
+| Codex + browserctrl, after the next round of fixes | 7 of 10 | 30.9 min |
+
+On unseen sites browserctrl got more tasks right but was not faster, and the next round of fixes didn't move the score (one try per task, so 8 against 7 is within chance). That held-out set has now been studied and retired. The next one is chosen, and the 20 tasks we will report as the final unseen-site result haven't been run at all; the split is in [bench/om2w/splits.json](bench/om2w/splits.json), made by [split.py](bench/om2w/split.py).
 
 **Notes did not help yet.** browserctrl can keep notes about how each site works and show them to the next AI that visits. On 8 new tasks on sites it had already explored, runs with notes passed 7 and runs without passed 8, in about the same time. The new tasks mostly used parts of each site the notes didn't cover.
 
