@@ -121,7 +121,7 @@
    "f05e87c5b92d9869e08806103c1c15a1",
    "0e5536aaad9d3462b06cf725e6ed535a"
   ],
-  "status": "next held-out test"
+  "status": "retired into dev 2026-10-17 after one run per method (direct connection, full judge)"
  },
  "dev": {
   "sites": [
@@ -154,6 +154,7 @@
    "cars.com",
    "carvana.com",
    "cboe.com",
+   "cbp.gov",
    "chess.com",
    "coinmarketcap.com",
    "compass.com",
@@ -176,6 +177,7 @@
    "foxsports.com",
    "github.com",
    "gov.uk",
+   "healthgrades.com",
    "healthline.com",
    "iclr.cc",
    "ign.com",
@@ -199,8 +201,10 @@
    "nba.com",
    "new.mta.info",
    "nfl.com",
+   "nvidia.com",
    "nyse.com",
    "ohio.gov",
+   "ohiomeansjobs.ohio.gov",
    "osu.edu",
    "parkers.co.uk",
    "petfinder.com",
@@ -214,9 +218,11 @@
    "remax.com",
    "rottentomatoes.com",
    "ryanair.com",
+   "samsung.com",
    "sec.gov",
    "smartasset.com",
    "soundcloud.com",
+   "sourceforge.net",
    "spothero.com",
    "stubhub.com",
    "student.com",
@@ -242,7 +248,9 @@
    "versus.com",
    "wanderlog.com",
    "weather.com",
+   "webmd.com",
    "wineaccess.com",
+   "ycombinator.com",
    "zara.com",
    "ziprecruiter.com"
   ],
@@ -493,7 +501,16 @@
    "be9e7dca1222714571ef3d7d59d2a41c",
    "c577a14301a725e09ccd269a3e0b271e_110325",
    "3dca7cbe7d086619d837ff9f5312cebc_110325",
-   "d8e2a81fa621ce4737e5ea85671b630e_110325"
+   "d8e2a81fa621ce4737e5ea85671b630e_110325",
+   "b3f8bd9198d9d157e0848109563c4b23",
+   "28e7574e7bd6d14f36d2988a5ef2bd23",
+   "905cb53061c33aa2d77e485fe1fca516",
+   "3443e9c3151fef19a3c3a45eb2c13640_070826",
+   "b4aa7315e31dfcdc52baf7771be260c9",
+   "59912927c1fddee6ded8a49986896bc2_070826",
+   "fe33894188d20d7469f37a9fd855e7ff_110325",
+   "f05e87c5b92d9869e08806103c1c15a1",
+   "0e5536aaad9d3462b06cf725e6ed535a"
   ]
  }
 }

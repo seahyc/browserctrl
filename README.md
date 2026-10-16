@@ -61,15 +61,23 @@ The StubHub browserctrl run comes from the notes test (with notes off), on the s
 
 browserctrl lost the first Airbnb run, and the recording showed why. Its clicks scrolled the page a little even when a button was already on screen, and Airbnb hides its search bar whenever the page scrolls; a "Gym" button under the filters' footer couldn't be found; a notice covering "Filters" went unmentioned; and Airbnb's on/off buttons weren't tracked. After fixing those, the same task needs two `do` plans instead of about twenty steps. In the second run browserctrl finished in 2:40, while Codex's own browser ran out of its 15 minutes. Two runs are not many: Codex's own browser took 2:21 the first time and 15 minutes the second, so treat these as examples rather than averages. [Watch the first Airbnb run side by side](docs/media/airbnb-side-by-side.mp4).
 
-**On sites it had never seen.** The fixes above were made while watching those 13 tasks, so they could be tuned to those sites. To check, we set aside 10 hard tasks on 10 other sites before making the next fixes, and ran them with both methods:
+**On sites it had never seen.** The fixes above were made while watching those 13 tasks, so they could be tuned to those sites. To check, we keep held-out tasks on other sites, chosen before each round of fixes, and run both methods on them once. Each held-out set is studied afterwards and retired, so the next one is fresh.
 
-| 10 held-out tasks on unseen sites | Done right | Total time |
+| Held-out round | Codex's own browser | Codex + browserctrl |
 | --- | --- | --- |
-| Codex's own browser | 6 of 10 | **27.5 min** |
-| Codex + browserctrl | **8 of 10** | 31.1 min |
-| Codex + browserctrl, after the next round of fixes | 7 of 10 | 30.9 min |
+| Round 1: 10 hard tasks, US VPN | 6 of 10, **27.5 min** | **8 of 10**, 31.1 min |
+| Round 2: 11 hard tasks, US VPN | 3 of 9 | 3 of 10 |
+| Round 3: 9 hard tasks, direct connection | **7 of 8** | 6 of 8 |
+| Round 3, the 6 tasks both reached | 6 of 6, 13.1 min | 6 of 6, **11.5 min** |
 
-On unseen sites browserctrl got more tasks right but was not faster, and the next round of fixes didn't move the score (one try per task, so 8 against 7 is within chance). That held-out set has now been studied and retired. The next one is chosen, and the 20 tasks we will report as the final unseen-site result haven't been run at all; the split is in [bench/om2w/splits.json](bench/om2w/splits.json), made by [split.py](bench/om2w/split.py).
+What we learned from these:
+
+- **Some of browserctrl's early slowness was our test setup.** Round 1's browserctrl runs carried about 115 characters of settings on every command and waited on their own recording screenshots; Codex's own browser did neither. Fixing that, and making both methods identical in every way but the tool, is what made round 3 a fair comparison.
+- **Many failures were the websites, not the tools.** In round 2 about a third of the runs never got past a Cloudflare check through the VPN, so from round 3 on we use only sites that load directly. A few task pages still turned out to be blocked or region-locked (Healthgrades, SourceForge).
+- **The automatic judge makes mistakes.** In round 2 it failed at least three runs whose screenshots show the right answer. For held-out rounds we now use the benchmark's full multi-screenshot judge and check disputed verdicts by hand.
+- **On unseen sites the two methods are close.** browserctrl gets about as many tasks right as Codex's own browser and, on the tasks both reached in round 3, was a little faster. The big wins in the head-to-head above were on sites browserctrl had been fixed on.
+
+The final 21 tasks, which we will report as the unseen-site result, haven't been run yet; the split is in [bench/om2w/splits.json](bench/om2w/splits.json), made by [split.py](bench/om2w/split.py), and the sites reachable without a VPN are in [access.json](bench/om2w/access.json).
 
 **Notes did not help yet.** browserctrl can keep notes about how each site works and show them to the next AI that visits. On 8 new tasks on sites it had already explored, runs with notes passed 7 and runs without passed 8, in about the same time. The new tasks mostly used parts of each site the notes didn't cover.
 
