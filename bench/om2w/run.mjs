@@ -12,6 +12,7 @@
 //   node bench/om2w/run.mjs judge <run>        WebJudge (re-runnable; updates the row)
 //   node bench/om2w/run.mjs batch <file> [--parallel N]   lines of "<task_id> <arm> [reflect|off]"
 //   OM2W_JUDGE=quick (default: one call, last stills) or full (the WebJudge port)
+//   node bench/om2w/run.mjs clean <url>      drop a site's cookies and storage in the bench browser (runs do this first)
 //   node bench/om2w/run.mjs report
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -44,8 +45,10 @@ const readRun = (runId) => JSON.parse(fs.readFileSync(runPath(runId, 'run.json')
 const writeRun = (run) => fs.writeFileSync(runPath(run.runId, 'run.json'), JSON.stringify(run, null, 2));
 const tabList = () => bcJson('tabs', '--json').map((t) => ({ id: (t.targetId || t.id).slice(0, 8), url: t.url || '' }));
 const tabIds = () => tabList().map((t) => t.id);
-// Registrable-ish site: last two labels, three for short second-level labels (gov.uk, co.jp).
-const siteKey = (url) => { try { const h = new URL(url).hostname.split('.'); return h.slice(h.at(-2)?.length <= 3 && h.length > 2 ? -3 : -2).join('.'); } catch { return ''; } };
+// Registrable-ish site: last two labels, three under a country code's generic second level
+// (gov.uk, co.jp, com.sg).
+const SECOND_LEVEL = new Set(['co', 'com', 'gov', 'ac', 'org', 'net', 'edu']);
+const siteKey = (url) => { try { const h = new URL(url).hostname.split('.'); return h.slice(h.at(-1).length === 2 && SECOND_LEVEL.has(h.at(-2)) && h.length > 2 ? -3 : -2).join('.'); } catch { return ''; } };
 
 async function readyTab(url) {
   const { id } = bcJson('open', url);
@@ -114,9 +117,40 @@ function startRun(taskId, arm, notesArm) {
   return { task, runId, notesArm };
 }
 
+// Runs share one browser profile, so a cart, a recent search or a "continue your search"
+// card from an earlier run would carry into the next. Before a run, drop the task site's
+// cookies and its origins' storage; other sites' cookies (a parallel run's) are put back.
+async function browserCall(calls) {
+  const { webSocketDebuggerUrl } = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json();
+  const ws = new WebSocket(webSocketDebuggerUrl);
+  await new Promise((ok, no) => { ws.onopen = ok; ws.onerror = no; });
+  let id = 0; const pending = new Map();
+  ws.onmessage = (m) => { const d = JSON.parse(m.data); pending.get(d.id)?.(d); pending.delete(d.id); };
+  const call = (method, params = {}) => new Promise((ok) => { const i = ++id; pending.set(i, ok); ws.send(JSON.stringify({ id: i, method, params })); });
+  try { return await calls(call); } finally { ws.close(); }
+}
+async function cleanSite(website) {
+  const site = siteKey(website);
+  if (!site) return null;
+  const mine = (domain) => { const d = String(domain || '').replace(/^\./, ''); return d === site || d.endsWith(`.${site}`); };
+  return browserCall(async (call) => {
+    const { result } = await call('Storage.getCookies');
+    const cookies = result?.cookies || [];
+    const keep = cookies.filter((c) => !mine(c.domain));
+    await call('Storage.clearCookies');
+    if (keep.length) await call('Storage.setCookies', { cookies: keep });
+    const host = new URL(website).hostname;
+    const origins = [...new Set([host, site, `www.${site}`])].map((h) => `https://${h}`);
+    for (const origin of origins) await call('Storage.clearDataForOrigin', { origin, storageTypes: 'all' });
+    return { cookies: cookies.length - keep.length, origins };
+  });
+}
+
 async function start(taskId, arm, notesArm) {
   const { task, runId } = startRun(taskId, arm, notesArm);
   fs.mkdirSync(runPath(runId), { recursive: true });
+  let cleaned = null;
+  try { cleaned = await cleanSite(task.website); } catch (e) { console.error(`site data not cleared: ${e.message}`); }
   const tabsBefore = tabIds();
   const tab = await readyTab(task.website);
   let rec = null;
@@ -126,7 +160,7 @@ async function start(taskId, arm, notesArm) {
   const env = notesEnv(notesArm);
   const run = {
     runId, task_id: task.task_id, task: task.confirmed_task, website: task.website, level: task.level, reference_length: task.reference_length,
-    arm, notes_arm: notesArm || null, notes_env: env, tab, tabsBefore, rec, startedAt: new Date().toISOString(), load: os.loadavg()[0], model: MODEL, effort: EFFORT,
+    arm, notes_arm: notesArm || null, notes_env: env, tab, tabsBefore, rec, cleaned, startedAt: new Date().toISOString(), load: os.loadavg()[0], model: MODEL, effort: EFFORT,
   };
   const prompt = agentPrompt(task, tab) + notesPrompt(notesArm, env) + '\n';
   fs.writeFileSync(runPath(runId, 'prompt.txt'), prompt);
@@ -347,7 +381,7 @@ async function quickJudge(runId) {
   const scratch = runPath(runId, 'judge');
   fs.rmSync(scratch, { recursive: true, force: true });
   const history = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
-  const user = `User Task: ${result.task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day.\n\nKey Points: (derive them from the task yourself)\n\nAction History:\n${history}\n\nThe last ${images.length} snapshots of the agent's trajectory are attached.`;
+  const user = `User Task: ${result.task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day. The agent was told never to complete a purchase, booking, payment, sign-up, sign-in or message, and to stop at the step just before committing; reaching that final page or state (for example the item in the cart or bag, or a filled form) counts as completing the task.\n\nKey Points: (derive them from the task yourself)\n\nAction History:\n${history}\n\nThe last ${images.length} snapshots of the agent's trajectory are attached.`;
   const response = await model(asCall(JUDGE_SYSTEM, user), images, scratch, 'quick');
   const status = response.toLowerCase().split('status:')[1];
   run.judge = {
@@ -394,8 +428,8 @@ async function judge(runId) {
 
   const history = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
   const user = kept.length
-    ? `User Task: ${task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day.\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}\n\nThe potentially important snapshots of the webpage in the agent's trajectory and their reasons:\n${thoughts.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
-    : `User Task: ${task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day.\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}`;
+    ? `User Task: ${task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day. The agent was told never to complete a purchase, booking, payment, sign-up, sign-in or message, and to stop at the step just before committing; reaching that final page or state (for example the item in the cart or bag, or a filled form) counts as completing the task.\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}\n\nThe potentially important snapshots of the webpage in the agent's trajectory and their reasons:\n${thoughts.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+    : `User Task: ${task}\n\nThe task was done on ${runDate(run)} (New York time); read relative dates from that day. The agent was told never to complete a purchase, booking, payment, sign-up, sign-in or message, and to stop at the step just before committing; reaching that final page or state (for example the item in the cart or bag, or a filled form) counts as completing the task.\n\nKey Points: ${keyPoints}\n\nAction History:\n${history}`;
   const response = await model(asCall(JUDGE_SYSTEM, user), kept, scratch, 'final');
   const status = response.toLowerCase().split('status:')[1];
   run.judge = {
@@ -466,6 +500,8 @@ if (cmd === 'start') {
   // Off-site tabs agents opened (e.g. a streaming page linked from IMDb) outlive their run.
   for (const id of tabIds()) if (!batchBefore.has(id)) try { bc('close', id, '--steal'); } catch {}
   report();
+} else if (cmd === 'clean') {
+  console.log(JSON.stringify(await cleanSite(rest[0])));
 } else if (cmd === 'report') {
   report();
 } else {
