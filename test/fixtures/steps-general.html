@@ -1,0 +1,139 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>General controls</title>
+<style>
+  body { font: 14px sans-serif; margin: 20px; }
+  .track { position: relative; width: 300px; height: 8px; background: #ddd; margin: 18px 0; }
+  .thumb { position: absolute; top: -6px; width: 20px; height: 20px; border-radius: 10px; background: #36c; margin-left: -10px; }
+  table.cal td button { width: 36px; }
+  .day--chosen { background: #36c; color: #fff; }
+  .popup { border: 1px solid #999; padding: 8px; display: inline-block; }
+</style></head>
+<body>
+<h1>General controls</h1>
+<p id="out"></p>
+<script>
+const q = new URLSearchParams(location.search);
+const out = (k, v) => { const p = document.querySelector('#out'); const m = Object.fromEntries((p.dataset.s || '').split(';').filter(Boolean).map(x => x.split('='))); m[k] = v; p.dataset.s = Object.entries(m).map(e => e.join('=')).join(';'); p.textContent = p.dataset.s; };
+const add = (html) => { const d = document.createElement('div'); d.innerHTML = html; document.body.appendChild(d); return d; };
+
+// An ARIA slider thumb driven only by keys (it ignores attribute writes), on a track it can
+// also be dragged along. Thumbs of one group may not cross.
+function ariaThumb(track, { label, min, max, step, now, page = step * 10, onChange, lockedTo }) {
+  const t = document.createElement('div');
+  t.className = 'thumb'; t.tabIndex = 0;
+  t.setAttribute('role', 'slider'); t.setAttribute('aria-label', label);
+  t.setAttribute('aria-valuemin', min); t.setAttribute('aria-valuemax', max);
+  let v = now;
+  const draw = () => { t.setAttribute('aria-valuenow', v); t.setAttribute('aria-valuetext', '$' + v); t.style.left = ((v - min) / (max - min) * 100) + '%'; onChange && onChange(v); };
+  t.set = (x) => { const lo = lockedTo ? lockedTo.lo() : min, hi = lockedTo ? lockedTo.hi() : max; v = Math.max(lo, Math.min(hi, Math.round((x - min) / step) * step + min)); draw(); };
+  t.addEventListener('keydown', (e) => {
+    const k = e.key;
+    if (k === 'ArrowRight' || k === 'ArrowUp') t.set(v + step);
+    else if (k === 'ArrowLeft' || k === 'ArrowDown') t.set(v - step);
+    else if (k === 'PageUp') t.set(v + page);
+    else if (k === 'PageDown') t.set(v - page);
+    else if (k === 'Home') t.set(min);
+    else if (k === 'End') t.set(max);
+    else return;
+    e.preventDefault();
+  });
+  let drag = false;
+  t.addEventListener('mousedown', () => { drag = true; });
+  addEventListener('mousemove', (e) => { if (!drag) return; const r = track.getBoundingClientRect(); t.set(min + (e.clientX - r.left) / r.width * (max - min)); });
+  addEventListener('mouseup', () => { drag = false; });
+  track.appendChild(t);
+  t.value = () => v;
+  draw();
+  return t;
+}
+
+if (q.get('sliders')) {
+  // 1. A native range input with its own label.
+  const n = add('<label for="dist">Distance</label> <input type="range" id="dist" min="0" max="100" step="5" value="10"> <span id="dist-out">10</span>');
+  n.querySelector('#dist').addEventListener('input', (e) => { n.querySelector('#dist-out').textContent = e.target.value; out('dist', e.target.value); });
+  // 2. An ARIA slider that only moves with keys.
+  const vol = add('<div id="vol-label">Speaker volume</div><div class="track" id="vol-track"></div>');
+  const vt = ariaThumb(vol.querySelector('#vol-track'), { label: '', min: 0, max: 50, step: 1, now: 20, onChange: (v) => out('vol', v) });
+  vt.removeAttribute('aria-label'); vt.setAttribute('aria-labelledby', 'vol-label');
+  // 3. A two-thumb ARIA range under a group heading; the thumbs cannot cross.
+  const b = add('<fieldset id="budget"><legend>Nightly budget</legend><div class="track" id="b-track"></div><span id="b-out"></span></fieldset>');
+  let lo, hi;
+  const show = () => { if (lo && hi) { b.querySelector('#b-out').textContent = lo.value() + '-' + hi.value(); out('budget', lo.value() + '-' + hi.value()); } };
+  lo = ariaThumb(b.querySelector('#b-track'), { label: 'Minimum', min: 0, max: 1000, step: 50, now: 100, onChange: show, lockedTo: { lo: () => 0, hi: () => hi ? hi.value() : 1000 } });
+  hi = ariaThumb(b.querySelector('#b-track'), { label: 'Maximum', min: 0, max: 1000, step: 50, now: 400, onChange: show, lockedTo: { lo: () => lo.value(), hi: () => 1000 } });
+  show();
+  // 4. A pair of native ranges forming one "Model year" range.
+  const y = add('<div role="group" aria-labelledby="yr"><span id="yr">Model year</span> <input type="range" aria-label="From" min="1990" max="2025" value="1995"> <input type="range" aria-label="To" min="1990" max="2025" value="2000"></div>');
+  for (const r of y.querySelectorAll('input')) r.addEventListener('change', () => out('year', [...y.querySelectorAll('input')].map(i => i.value).join('-')));
+  // 6. A range whose ends bound each other through their ARIA limits, as the WAI-ARIA
+  // multi-thumb example does: the minimum's max is the maximum's value, and back.
+  const g6 = add('<div role="group" aria-label="Room rate"><div class="track" id="r-track"></div></div>');
+  let rlo, rhi;
+  const sync = () => { if (rlo && rhi) { rlo.setAttribute('aria-valuemax', rhi.value()); rhi.setAttribute('aria-valuemin', rlo.value()); out('rate', rlo.value() + '-' + rhi.value()); } };
+  rlo = ariaThumb(g6.querySelector('#r-track'), { label: 'Room rate minimum', min: 0, max: 400, step: 10, now: 100, onChange: sync, lockedTo: { lo: () => 0, hi: () => rhi ? rhi.value() : 250 } });
+  rhi = ariaThumb(g6.querySelector('#r-track'), { label: 'Room rate maximum', min: 0, max: 400, step: 10, now: 250, onChange: sync, lockedTo: { lo: () => rlo.value(), hi: () => 400 } });
+  sync();
+  // 5. A slider that ignores keys, writes and drags.
+  const l = add('<div id="lk">Locked dial</div><div class="track"><div class="thumb" role="slider" tabindex="0" aria-labelledby="lk" aria-valuemin="0" aria-valuemax="10" aria-valuenow="3"></div></div>');
+  l.querySelector('[role=slider]').addEventListener('keydown', (e) => e.preventDefault());
+}
+
+// Calendars. Each day is a button with its date in some form; what changes on a click differs.
+function calendar(mode) {
+  const box = add('<div class="popup" id="cal"><div>October 2026</div><table class="cal" role="grid"><tbody></tbody></table></div>');
+  const body = box.querySelector('tbody');
+  let row;
+  for (let d = 1; d <= 31; d++) {
+    if ((d - 1) % 7 === 0) row = body.insertRow();
+    const td = row.insertCell();
+    const b = document.createElement('button');
+    b.textContent = d;
+    const iso = '2026-10-' + String(d).padStart(2, '0');
+    if (mode === 'aria') b.setAttribute('aria-label', new Date(iso + 'T12:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
+    else if (mode === 'class') td.setAttribute('data-date', iso);
+    else if (mode === 'hidden') { const lab = document.createElement('span'); lab.setAttribute('aria-label', new Date(iso + 'T12:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })); b.textContent = ''; b.appendChild(lab); b.appendChild(document.createTextNode(d)); }
+    else if (mode === 'numbers') {}
+    else b.setAttribute('aria-label', 'October ' + d + ', 2026');
+    b.addEventListener('click', () => {
+      if (mode === 'aria' || mode === 'hidden' || mode === 'numbers') { for (const x of document.querySelectorAll('#cal [aria-selected]')) x.removeAttribute('aria-selected'); b.setAttribute('aria-selected', 'true'); }
+      else if (mode === 'class') { for (const x of body.querySelectorAll('.day--chosen')) x.classList.remove('day--chosen'); td.classList.add('day--chosen'); }
+      else if (mode === 'closes') { document.querySelector('#when').value = '10/' + String(d).padStart(2, '0') + '/2026'; box.remove(); }
+      // dead: nothing happens
+      out('picked', mode === 'dead' ? '' : iso);
+    });
+    td.appendChild(b);
+  }
+  return box;
+}
+if (q.get('cal')) {
+  const mode = q.get('cal');
+  if (mode === 'closes') {
+    const w = add('<label>Arrival <input id="when" readonly placeholder="MM/DD/YYYY"></label>');
+    w.querySelector('#when').addEventListener('click', () => { if (!document.querySelector('#cal')) calendar('closes'); });
+  } else if (mode === 'opener') {
+    // A collapsed control with no date word in its name, which opens a dialog holding a grid.
+    const o = add('<button id="trip" aria-haspopup="dialog" aria-expanded="false" aria-controls="cal">Travel window: Add</button>');
+    o.querySelector('#trip').addEventListener('click', (e) => { e.target.setAttribute('aria-expanded', 'true'); if (!document.querySelector('#cal')) calendar('aria'); });
+  } else if (mode === 'numbers') {
+    // September before October, side by side: the day is the 17th of the month heading its own grid.
+    const box = calendar('numbers');
+    const sep = document.createElement('div');
+    sep.innerHTML = '<div>September 2026</div><table class="cal" role="grid"><tbody><tr>' + Array.from({ length: 7 }, (_, i) => '<td><button>' + (14 + i) + '</button></td>').join('') + '</tr></tbody></table>';
+    box.insertBefore(sep, box.firstChild);
+  } else calendar(mode);
+}
+
+// Guards worded unlike any demo site.
+if (q.get('guards')) {
+  add('<button id="reserve">Reserve now</button> <button id="booking">Start a booking</button> <button id="purchase">Complete purchase</button>');
+  for (const id of ['reserve', 'booking', 'purchase']) document.querySelector('#' + id).addEventListener('click', () => out('clicked', id));
+  if (q.get('checkout')) add('<label>Card number <input autocomplete="cc-number"></label>');
+  const f = add('<form id="f" novalidate><label for="nom">Nom</label> <input id="nom" aria-errormessage="nom-err"> <button type="button" id="envoyer">Valider</button><div id="nom-err" role="alert"></div></form>');
+  f.querySelector('#envoyer').addEventListener('click', () => { f.querySelector('#nom-err').textContent = 'Le champ est obligatoire.'; });
+}
+if (q.get('progress')) {
+  const p = add('<progress id="pg" max="100" value="40"></progress> <span id="state">loading</span>');
+  setTimeout(() => { p.querySelector('#pg').remove(); p.querySelector('#state').textContent = 'loaded'; }, 1500);
+}
+</script>
+</body></html>
