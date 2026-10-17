@@ -927,6 +927,7 @@ const main = async () => {
           force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
           dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,
           open: flags.open ? Number(flags.open) : 0, grep: flags.grep, prefetch: !flags['no-prefetch'], context: flags.context != null ? Number(flags.context) : 1,
+          diff: !flags['no-diff'],
         });
         if (!r.done) process.exitCode = 3;
         return out(flags.json ? r : formatSteps(r));

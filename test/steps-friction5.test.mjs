@@ -111,3 +111,20 @@ t('a short page that has finished loading is not waited on as a loading shell', 
   assert.ok(Date.now() - t0 < 3000, `waited ${Date.now() - t0} ms`);
   await ops.closeTab(conn, id);
 });
+
+t('a do report says what the plan changed on the page', async () => {
+  const id = await open();
+  const r = await runSteps(conn, id, ['click "Salary"', 'click "Gym"', 'select "State" = "OH"'], { jev: noJev, noNotes: true });
+  const text = formatSteps(r);
+  console.log(text);
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.match(text, /changed on the page:/);
+  assert.match(text, /button "Salary": closed → open/);
+  assert.match(text, /checkbox "Gym": unchecked → checked/);
+  assert.match(text, /select "State": "ID" → "OH"/);
+  assert.match(text, /\+ 1 new: link "Middle Income Jobs/);
+  // Nothing changed: no section.
+  const same = await runSteps(conn, id, ['scroll down'], { jev: noJev, noNotes: true });
+  assert.doesNotMatch(formatSteps(same), /changed on the page/);
+  await ops.closeTab(conn, id);
+});

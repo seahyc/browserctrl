@@ -46,6 +46,9 @@ recipes (the site's own API: no page at all) and its flow notes (facts earlier a
   changed the address (`url: +state=closed`); a `nav` to a filtered address beats clicking.
 - A report whose steps all show ✓ did what it says: answer from it, don't re-read. ⚠ means
   check the page.
+- Each report ends with `changed on the page:` (boxes ticked, values set, sections opened,
+  result counts, notices, controls that appeared or went): read it instead of reading the
+  page again. A step that landed on a different page says so; `--no-diff` drops the section.
 - Only the last step commits: adding to a cart, choosing options and filling a form are
   not commits. After an add, check the page confirms it.
 - Options that change after each pick (chips, counts): one pick per `do` call.
