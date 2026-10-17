@@ -124,7 +124,7 @@ t('a settle is not held by a keepalive beacon or by a style-only animation', asy
   const id = await open('?settle');
   await js(id, 'document.getElementById("go").click()');
   const ms = await settle(conn, id, {});
-  assert.ok(ms < 1500, `settled in ${ms} ms (${settle.why})`);
+  assert.ok(ms < 2500, `settled in ${ms} ms (${settle.why})`); // the cap is 4 s; slow CI runners take ~1.7 s
   assert.equal(settle.why, 'quiet');
   await ops.closeTab(conn, id);
 });

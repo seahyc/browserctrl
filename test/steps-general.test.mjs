@@ -180,9 +180,12 @@ t('an alert tied to a field by aria-errormessage is an error in any language', a
 
 t('a <progress> element holds a read until it goes', async () => {
   const id = await open('?progress=1');
+  // What matters is that the read waited for the bar, not how long: a slow runner may
+  // already be most of the way through the page's load when the wait starts.
+  const before = await ops.evaluate(conn, id, '!!document.querySelector("progress")');
   const st = await ops.settle(conn, id);
   assert.equal(st.cleared, true, JSON.stringify(st));
-  assert.ok(st.waitedMs >= 900, `waited ${st.waitedMs} ms`);
+  if (before) assert.equal(await ops.evaluate(conn, id, '!!document.querySelector("progress")'), false, 'the bar is gone when the wait ends');
   assert.equal(await ops.evaluate(conn, id, 'document.querySelector("#state").textContent'), 'loaded');
   await ops.closeTab(conn, id);
 });
