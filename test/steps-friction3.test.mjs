@@ -69,10 +69,13 @@ const text = (id, sel) => ops.evaluate(conn, id, `document.querySelector(${JSON.
 
 t('a date step reopens a date picker the previous click closed', async () => {
   const id = await open();
-  const r = await runSteps(conn, id, ['click "When Add dates"', 'date 2026-10-17'], { jev: fakeJev(), noNotes: true });
+  // The picker opens on load. Mid-plan, a click on its open control would be skipped (it is
+  // already open), so close it as a plan's last step, then ask for a date.
+  await runSteps(conn, id, ['click "When Add dates"'], { jev: fakeJev(), noNotes: true });
+  const r = await runSteps(conn, id, ['date 2026-10-17'], { jev: fakeJev(), noNotes: true });
   console.log(formatSteps(r));
   assert.equal(r.done, true, JSON.stringify(r.stopped));
-  assert.match(r.steps[1].how, /opened "When Add dates"/);
+  assert.match(r.steps[0].how, /opened "When Add dates"/);
   assert.equal(await text(id, '#picked'), 'Picked October 17, 2026');
   await ops.closeTab(conn, id);
 });

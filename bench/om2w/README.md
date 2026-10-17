@@ -8,17 +8,20 @@ run with browserctrl by Codex agents and graded by a port of the benchmark's own
 - **Tasks:** the official task file is gated on Hugging Face (`osunlp/Online-Mind2Web`).
   Accept its terms, then download `Online_Mind2Web.json` to `bench/om2w/tasks.json`
   (gitignored). `suggested.txt` lists the task ids we run.
-- **A US browser:** the tasks assume a US visitor (zip codes, US-only stores, USD). Runs
-  use a separate Chrome on CDP port 9230 whose traffic goes through a US WireGuard exit
-  (Proton's free tier, via `wireproxy` as a local SOCKS proxy), so only the benchmark
-  browser is routed:
+- **The bench browser:** a separate Chrome for Testing on CDP port 9230 with its own
+  profile, New York time, and both extensions loaded (browserctrl, and a copy of the ChatGPT
+  extension for the native arm; branded Chrome ignores `--load-extension`). Since
+  2026-10-16 it uses a direct connection from Singapore, no VPN: tasks are drawn only from
+  sites `access.json` lists as reachable that way (a Proton VPN exit was tried first, and
+  Cloudflare blocked many sites through it).
   ```sh
-  wireproxy -c ~/.config/wireproxy/proton-us.conf      # [Socks5] BindAddress = 127.0.0.1:25344
-  open -n --env TZ=America/New_York -a "Google Chrome" --args --user-data-dir=$HOME/.local/share/browserctrl/bench-chrome-us \
-    --remote-debugging-port=9230 --proxy-server=socks5://127.0.0.1:25344 --load-extension=$HOME/Code/browserctrl/extension
-  curl -s --socks5-hostname 127.0.0.1:25344 https://www.cloudflare.com/cdn-cgi/trace | grep loc=   # loc=US
+  CFT="$HOME/.cache/chrome-for-testing/chrome/mac_arm-155.0.8059.84/chrome-mac-arm64/Google Chrome for Testing.app"
+  open -n --env TZ=America/New_York -a "$CFT" --args --user-data-dir="$HOME/.local/share/browserctrl/bench-cft-us" \
+    --remote-debugging-port=9230 --no-first-run --no-default-browser-check \
+    --load-extension="$HOME/Code/browserctrl/extension,$HOME/.local/share/browserctrl/chatgpt-extension" about:blank
   ```
-  Set `OM2W_PORT` for another browser.
+  Put that in a script and set `OM2W_LAUNCH` to it: each run checks the browser answers
+  and relaunches it if it quit. Set `OM2W_PORT` for another browser.
 - **Agents and judge:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort="low"` on the
   Codex subscription (`OM2W_MODEL`, `OM2W_EFFORT` override). The agent runs with
   `-s danger-full-access` so it can reach the browser's debugging port.
@@ -39,6 +42,12 @@ still per action, `runs/<run>/rec/`), runs the agent with the prompt in
 (`runs/<run>/om2w/<task_id>/`), and appends a row to `results.jsonl`. A task id prefix is
 enough. The agent stops before any purchase, booking, payment, sign-in or message;
 reaching that step counts, as in the benchmark.
+
+**Same conditions for every arm:** the site's cookies and storage are cleared before each
+run; the harness and the agent act as one browserctrl owner; the browser port and notes
+settings are set once in the agent's shell, not in each command; every arm gets the same
+judge stills (a quiet `text` read every 4 s from outside the agent); and each run keeps its
+own captcha cool-downs, so a challenge one arm met does not keep the next arm off the site.
 
 **Notes arms:** `--notes reflect` shows the arm's flow notes and asks the agent to write
 notes afterwards; `--notes off` hides them. Each arm keeps its own store in

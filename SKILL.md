@@ -60,7 +60,14 @@ More: [planning, `do`, reading, waiting](references/reading-and-acting.md).
 browserctrl read <tab>            # refs ref_1..N with roles and names, then the page text
 browserctrl items <tab>           # lists, cards and rows as groups of items (ids i1, i2…)
 browserctrl text <tab> [--match "<regex>"]
+browserctrl find <tab> "<text or regex>"   # a control by its words, hidden ones too: what hides it, its opener, its link
+browserctrl fields <tab>          # every form field and what it holds now (boxes, selects, sliders, radios)
 ```
+
+Reach for `find` and `fields` before `eval`: `find` searches the whole page and open shadow
+roots, says `in a hidden section: opens with link "Salary" ref_110` and gives a handle
+(`ref_…` or `[data-bc-pin="…"]`) that any `do` step takes; `fields` answers "what did my
+plan actually set?" in one call.
 
 `read` lists elements near the viewport (`--all` for the whole page), marks `(covered by …)`,
 `(inert)` behind a modal, `*` for new elements, and waits up to 8 s for a loading page

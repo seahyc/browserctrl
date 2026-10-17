@@ -102,7 +102,7 @@ function agentPrompt(task, tab, arm = 'D') {
 
 Task: ${task.confirmed_task}
 
-${arm === 'native' ? `Browser: use your built-in browser tool, the js tool's \`cua\` object (\`await cua.getState()\` lists the Chrome browser, type extension, and its tabs). This is the approved way to do this task. A tab is already open on ${task.website}: take it over (browser.user.openTabs(), choosing it by its URL) and work in that tab; leave it open when you finish. Do not touch other tabs, and do not use browserctrl or curl to reach the site.` : `Browser: a dedicated Chrome you address with on every browserctrl command (never --browser). Your start tab is ${tab}, already open on ${task.website}. Work in that tab and leave it open when you finish. Do not touch other tabs.`} Today is ${today}; you are browsing from the United States.
+${arm === 'native' ? `Browser: use your built-in browser tool, the js tool's \`cua\` object (\`await cua.getState()\` lists the Chrome browser, type extension, and its tabs). This is the approved way to do this task. A tab is already open on ${task.website}: take it over (browser.user.openTabs(), choosing it by its URL) and work in that tab; leave it open when you finish. Do not touch other tabs, and do not use browserctrl or curl to reach the site.` : `Browser: a dedicated Chrome that browserctrl already points at (BROWSERCTRL_PORT is set in your shell), so pass neither --browser nor --port. Your start tab is ${tab}, already open on ${task.website}. Work in that tab and leave it open when you finish. Do not touch other tabs.`} Today is ${today}; you are browsing from the United States.
 Rules:
 ${arm === 'native' ? "- Use the website's UI. Do not call the site's APIs directly." : "- Use the website's UI. Reading the page (browserctrl read/text/items, eval of the DOM) is fine. Do not call the site's APIs with curl or fetch(), do not use browserctrl recipes, and do not run browserctrl rec commands."}
 - Never complete a purchase, booking, payment, sign-up, sign-in, or message. Stop at the step just before committing: reaching that final page or state counts as done. Adding to a cart or bag, choosing options and filling a form are not commits: do them when the task asks, then check the page confirms it (an "Added to bag" message, the cart count).
@@ -168,13 +168,21 @@ async function ensureBrowser() {
   throw new Error(`browser on port ${PORT} did not come back after relaunching`);
 }
 
+// One owner per run: the harness (recording, timed reads) and the run's agent act on the tab
+// as the same browserctrl agent, so neither is refused by the other's claim. Each run also
+// keeps its own captcha cool-downs: a challenge one method met must not keep the next
+// method's run off the site (WebMD, rotation 3).
+function runIdentity(runId) {
+  const env = { CDP_AGENT_ID: `om2w-${runId}`, BROWSERCTRL_COOLDOWN: runPath(runId, 'cooldown.json') };
+  Object.assign(process.env, env);
+  return env;
+}
+
 async function start(taskId, arm, notesArm) {
   const relaunched = await ensureBrowser();
   const { task, runId } = startRun(taskId, arm, notesArm);
-  // One owner per run: the harness (recording, timed reads) and the run's agent act on the tab
-  // as the same browserctrl agent, so neither is refused by the other's claim.
-  process.env.CDP_AGENT_ID = `om2w-${runId}`;
   fs.mkdirSync(runPath(runId), { recursive: true });
+  runIdentity(runId);
   let cleaned = null;
   try { cleaned = await cleanSite(task.website); } catch (e) { console.error(`site data not cleared: ${e.message}`); }
   const tabsBefore = tabIds();
@@ -225,7 +233,7 @@ function codexStats(eventsFile) {
 
 async function agent(runId) {
   const run = readRun(runId);
-  process.env.CDP_AGENT_ID = `om2w-${runId}`; // `agent <run>` may run in a fresh process
+  runIdentity(runId); // `agent <run>` may run in a fresh process
   const t0 = Date.now();
   // Codex's own browser tool acts without browserctrl, so nothing would add judge stills:
   // read the tab quietly every few seconds (a read adds a still only when the page changed).
@@ -241,7 +249,7 @@ async function agent(runId) {
   const r = await codex(['--json', '-s', 'danger-full-access', '-o', runPath(runId, 'answer.txt')],
     { input: fs.readFileSync(runPath(runId, 'prompt.txt'), 'utf8'), cwd: os.tmpdir(), timeoutMs: AGENT_TIMEOUT_MS, eventsFile: runPath(runId, 'agent-events.jsonl'),
       // Set once for the agent's shell: long per-command prefixes measurably slow the model.
-      env: { BROWSERCTRL_PORT: String(PORT), BROWSERCTRL_REC_STILLS: 'off', CDP_AGENT_ID: `om2w-${runId}`, ...(run.notes_env || {}) } });
+      env: { BROWSERCTRL_PORT: String(PORT), BROWSERCTRL_REC_STILLS: 'off', ...runIdentity(runId), ...(run.notes_env || {}) } });
   watching = false;
   if (watch) clearInterval(watch);
   run.agent = { ms: Date.now() - t0, exit: r.code, timed_out: r.timedOut, ...codexStats(runPath(runId, 'agent-events.jsonl')) };
@@ -256,7 +264,7 @@ function parseAnswer(raw) {
 
 function finish(runId) {
   const run = readRun(runId);
-  process.env.CDP_AGENT_ID = `om2w-${runId}`;
+  runIdentity(runId);
   let rec = null;
   try { bc('text', run.tab); } catch {} // the final page, taken from outside the agent's path for every arm
   if (run.rec) { try { rec = bcJson('rec', 'stop', run.tab); } catch (e) { console.error(`recording not stopped: ${String(e.stderr || e).trim()}`); } }

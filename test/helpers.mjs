@@ -23,6 +23,9 @@ process.env.BROWSERCTRL_NOTES_DIR ||= path.join(os.tmpdir(), `browserctrl-test-n
 // test files, and the solver config must never come from the real home dir.
 process.env.BROWSERCTRL_COOLDOWN ||= path.join(os.tmpdir(), `browserctrl-test-cooldown-${process.pid}.json`);
 process.env.BROWSERCTRL_CAPTCHA_CONFIG ||= path.join(os.tmpdir(), `browserctrl-test-captcha-${process.pid}.json`);
+// Site trouble (timeouts, pages that never finish) is remembered per site; 127.0.0.1 collects
+// it from every test file, which then adds a "site is slowing" note to later reads.
+process.env.BROWSERCTRL_SITE_TROUBLE ||= path.join(os.tmpdir(), `browserctrl-test-site-trouble-${process.pid}.json`);
 // One path for every test process: the daemon that writes a recording may have been
 // started by an earlier test file.
 process.env.BROWSERCTRL_REC_STATE ||= path.join(os.tmpdir(), 'browserctrl-test-rec-tabs.json');

@@ -39,6 +39,7 @@ import * as notes from '../lib/notes.mjs';
 import * as site from '../lib/site.mjs';
 import * as rec from '../lib/rec.mjs';
 import * as readtokens from '../lib/readtokens.mjs';
+import * as finder from '../lib/find.mjs';
 
 // Commands that act on a page take a still when their tab is being recorded; reads
 // only when the page moved on since the last one.
@@ -232,6 +233,9 @@ function usage() {
   Read before you act:
     browserctrl read <tab> --browser dia [--json] [--all] snapshot with ref_1..N + page text (--all: whole page, not just near the viewport)
     browserctrl text <tab> [--max-text 8000] [--match re] visible text, bounded by default
+    browserctrl find <tab> "<text or regex>" [--json]    controls whose name matches, hidden ones too: what hides them, the
+                                                          control that opens them, their link; handles work in do steps
+    browserctrl fields <tab> [--all] [--json]            every form field and what it holds now (selects, boxes, sliders, radios)
     browserctrl items <tab> [--group g2] [--all] [--json]  repeated items (results, cards, rows, messages) grouped by page region
                        read, text and items first wait up to 8 s for skeletons/spinners to clear (--no-wait skips);
                        --recover reloads a page that stopped responding and reads it again
@@ -954,8 +958,9 @@ const main = async () => {
         if (snap.recovered) snap.waitNote = [snap.waitNote, snap.recovered].filter(Boolean).join('; ');
         hint(snap.url, flags);
         snap.params = await ops.evaluate(conn, readId, PAGE_PARAMS).catch(() => []);
-        if (flags.json) return out(snap);
-        return out(formatRead(snap) + (snap.params?.length ? `\nurl params (set them with a nav step): ${formatParams(snap.params)}` : ''));
+        const blocked = await captcha.notice(conn, readId, positional[1]);
+        if (flags.json) return out(blocked ? { ...snap, challenge: blocked } : snap);
+        return out((blocked ? `${blocked}\n\n` : '') + formatRead(snap) + (snap.params?.length ? `\nurl params (set them with a nav step): ${formatParams(snap.params)}` : ''));
       }
       case 'text': {
         await waitToRead(conn, targetId, flags);
@@ -972,7 +977,21 @@ const main = async () => {
         const limit = flags['max-text'] === undefined ? 20000 : Number(flags['max-text']);
         const clipped = limit > 0 && selected.length > limit;
         const text = clipped ? `${selected.slice(0, limit)}\n\n[truncated ${selected.length - limit} characters]` : selected;
-        return out(flags.json ? { text, textLength: selected.length, truncated: clipped } : text);
+        const blocked = source.length < 3000 ? await captcha.notice(conn, targetId, positional[1]) : null;
+        return out(flags.json ? { text, textLength: selected.length, truncated: clipped, ...(blocked ? { challenge: blocked } : {}) } : (blocked ? `${blocked}\n\n${text}` : text));
+      }
+      case 'find': {
+        const pattern = positional.slice(2).join(' ');
+        if (!pattern) throw new Error('Usage: browserctrl find <tab> "<text or regex>"');
+        try { new RegExp(pattern, 'i'); } catch (e) { throw new Error(`Invalid pattern: ${e.message}`); }
+        await waitToRead(conn, targetId, flags);
+        const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, finder.FIND(pattern, { limit: Number(flags.max) || 25 }), { retry: true }));
+        return out(flags.json ? r : finder.formatFind(r, pattern));
+      }
+      case 'fields': {
+        await waitToRead(conn, targetId, flags);
+        const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, finder.FIELDS({ all: !!flags.all }), { retry: true }));
+        return out(flags.json ? r : finder.formatFields(r));
       }
       case 'html':
         return out(await ops.html(conn, targetId, positional[2]));

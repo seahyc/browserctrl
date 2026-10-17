@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><title>Job search</title></head><body>
+<form onsubmit="event.preventDefault(); document.getElementById('state').textContent = 'searched ' + document.getElementById('q').value">
+  <input id="q" placeholder="Search" aria-label="Search">
+  <button type="submit">Search</button>
+</form>
+<p id="state">idle</p>
+<h3><button id="salary" aria-expanded="false" aria-controls="sal" onclick="const s=document.getElementById('sal'); s.hidden=!s.hidden; this.setAttribute('aria-expanded', String(!s.hidden))">Salary</button></h3>
+<ul id="sal" hidden>
+  <li><a href="#mid" onclick="document.getElementById('state').textContent='middle income'; return false">Middle Income Jobs ($30K-$49K)</a></li>
+</ul>
+<details><summary>Education</summary><a href="#hs" onclick="document.getElementById('state').textContent='high school'; return false">High school diploma or equivalent</a></details>
+<label><input type="checkbox" checked> Spa (3)</label>
+<label><input type="checkbox"> Gym</label>
+<select aria-label="State"><option>OH</option><option selected>ID</option></select>
+<p>A short page.</p>
+</body></html>

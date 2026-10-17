@@ -319,7 +319,8 @@ t('a reveal note that does not bring the target out is contradicted', async () =
   const n = await notes.add(shop, 'Maximum appears after Search', { force: true, reveal: { target: 'Maximum', steps: ['click Search'] } });
   const id = await open('steps-shop.html');
   const r = await runSteps(conn, id, ['fill Maximum = 600'], { jev: fakeJev({ targets: { Maximum: /^Maximum$/ } }).opts });
-  assert.equal(r.done, false);
+  // The step may still find Maximum by opening the section that holds it; the note is wrong
+  // either way.
   assert.deepEqual(r.notes_applied, [{ id: n.id, ok: false }]);
   // Worked once (when added), failed once: dropped.
   assert.equal(notes.show('127.0.0.1').facts.find(f => f.id === n.id), undefined);
