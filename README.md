@@ -7,11 +7,9 @@ browserctrl gives an AI agent a better pair of hands for websites. It's meant fo
 
 I tested it the only way I trust: same AI, same task, same browser, once with Codex's own built-in browser and once with browserctrl. Here's Kaggle, a site browserctrl had never been tuned on. The task was "find the ongoing competition with the highest prize, and the code that got the most votes in it". Codex's own browser is on the left and took 3 min 25 s. Codex with browserctrl is on the right and took 1 min 40 s.
 
-![Codex using its own browser (left) and Codex with browserctrl (right) on the Kaggle task, sped up 4 times](docs/media/kaggle-side-by-side.gif)
+![Codex using its own browser (left) and Codex with browserctrl (right) on the Kaggle task, at 4x speed](docs/media/kaggle.webp)
 
-The GIF runs at 4x. Here's the real-time version:
-
-https://github.com/user-attachments/assets/70861a56-af97-4f83-a000-733364cf41c8
+*4x speed, startup cut. A green caption marks the one step where Jev picked the control: the agent wrote "Code" and Jev chose the tab "Code, 3 of 7". [Real-time video](https://seahyingcong.com/browserctrl/media/kaggle.mp4).*
 
 Over 21 hard tasks on 17 sites it had never seen, it got as many right as Codex's own browser, and was faster on most of them:
 
@@ -37,39 +35,51 @@ It won't press buttons that look like they spend money or send something (Buy, P
 
 For sites it already knows, a *recipe* skips the clicking and asks the site's own API. A whole Shopee order history comes back in about 7 seconds that way.
 
-It doesn't record anything by default. You can ask it to record a run (about 1 MB for 3 minutes) and replay it as a video, which is how every clip on this page was made.
+It doesn't record a run unless you ask. A recording is about 1 MB for 3 minutes and replays as a video, which is how every clip on this page was made. It does keep a short log of each plan, capped in size, so you can see later what a plan did.
 
 ## More runs, on very different sites
 
-I picked these to cover different kinds of sites, including two where browserctrl lost. Each one is a real benchmark run, with Codex's own browser on the left and browserctrl on the right, on one shared clock.
+I picked these to cover different kinds of sites, including two where browserctrl lost. Each one is a real benchmark run, with Codex's own browser on the left and browserctrl on the right, on one shared clock, shown at 4x with the agent's startup cut. Captions on the right describe each browserctrl step, and they turn green when Jev picked the control. Codex's own browser leaves no log of its steps, so its side has no captions.
 
 **League of Legends.** "Browse the final skin in the list for the champion Ahri." Own browser 3:37, browserctrl 1:19.
 
-https://github.com/user-attachments/assets/b28a8d84-e813-442c-87cb-9209667f333b
+![League of Legends side by side, 4x speed](docs/media/leagueoflegends.webp)
+
+*4x speed, startup cut. No step needed Jev here: every control the agent named exists by that name. [Real-time video](https://seahyingcong.com/browserctrl/media/leagueoflegends.mp4).*
 
 **WebMD.** "Find the best audiologist within 50 miles of New York, NY, with a rating of 4 and above." Own browser 2:48, browserctrl 1:02.
 
-https://github.com/user-attachments/assets/fa1307c9-629a-4014-af04-d7dbed5b544c
+![WebMD side by side, 4x speed](docs/media/webmd-doctors.webp)
+
+*4x speed, startup cut. No step needed Jev: every control was named exactly. [Real-time video](https://seahyingcong.com/browserctrl/media/webmd-doctors.mp4).*
 
 **Stanford.** "Browse the class schedule of graduate-level chemistry courses on Monday afternoons in the winter of 2023." Own browser 3:28, browserctrl 2:01.
 
-https://github.com/user-attachments/assets/73186adb-e3a8-47e8-a18a-f556ba7cb77c
+![Stanford side by side, 4x speed](docs/media/stanford.webp)
+
+*4x speed, startup cut. No step needed Jev: every control was named exactly. [Real-time video](https://seahyingcong.com/browserctrl/media/stanford.mp4).*
 
 **Google Maps.** "Find the top-rated hotel in Manhattan, NY, suitable for 4 guests, and identify the fastest public transportation option from the hotel to LGA airport." Own browser 5:55, browserctrl 3:42.
 
-https://github.com/user-attachments/assets/25f5ab22-843c-416f-87d9-dd20de49f012
+![Google Maps side by side, 4x speed](docs/media/googlemaps.webp)
+
+*4x speed, startup cut. Jev picked 3 controls (the green captions), among them "Sort by" and "Guest rating"; the rest were named exactly. [Real-time video](https://seahyingcong.com/browserctrl/media/googlemaps.mp4).*
 
 ### The runs it lost
 
 **Chase.** "How much can I have in my 401(k) at retirement, working from 22 to 65, at 3% a year, with $8,000 from me and $8,000 from my employer every year?" Own browser 2:24, browserctrl 4:50.
 
-https://github.com/user-attachments/assets/bc828ad1-e2c2-4036-98bd-55536c81ea8c
+![Chase side by side, 4x speed](docs/media/chase.webp)
+
+*4x speed, startup cut. No step needed Jev; the time went into the sliders, below. [Real-time video](https://seahyingcong.com/browserctrl/media/chase.mp4).*
 
 The calculator is five sliders drawn inside web components, and browserctrl's slider command couldn't see inside those, so the AI ended up pressing arrow keys one at a time. I fixed that afterwards. The same five settings now take 4 seconds in one call.
 
 **FlightAware.** "Find United or American flights from London to New York that arrive between 8 and 11 PM." Own browser 2:32, browserctrl 5:05.
 
-https://github.com/user-attachments/assets/30d9cb17-2ec4-48e5-86cf-e2266789ef1c
+![FlightAware side by side, 4x speed](docs/media/flightaware.webp)
+
+*4x speed, startup cut. Jev picked 3 controls (the green captions), among them the airport suggestions "New York, NY / All Airports" and "London, England, UK / All Airports". [Real-time video](https://seahyingcong.com/browserctrl/media/flightaware.mp4).*
 
 The airport boxes suggest matches as you type, and the AI spent several plans getting London and New York to stick. Then it struggled with the airline and arrival-time filters, until it typed the filtered web address directly.
 
@@ -90,13 +100,17 @@ Jev gets a few lines of text, with no screenshot. Below is the exact input from 
 
 ![The exact text Jev was given for one step on Google Maps, and its answer: 99% on button "Sort by" in 340 ms](docs/media/jev-card-googlemaps.png)
 
-Here's what that looks like while it runs. browserctrl can draw on the page as it works: every control Jev was offered gets a numbered box, its pick gets a red outline, and a panel in the corner logs each step. Steps the agent named exactly say "exact name match, no model call". Steps that needed Jev show its top choices and how sure it was.
+Here's what that looks like while it runs. browserctrl can draw on the page as it works: every control Jev was offered gets a numbered box, its pick gets a red outline, and a panel in the corner logs each step. Steps the agent named exactly say "exact name match, no model call". At each Jev call the clip stops on the card, so you can read what went in and what came out.
 
-https://github.com/user-attachments/assets/82e2933e-6bf1-4075-8feb-f63d0505dcb5
+![Jev choosing controls on Google Maps: the page at 4x, pausing on each call to show what Jev was given and what it answered](docs/media/jev-googlemaps.webp)
+
+*4x speed. At each Jev call the clip pauses on what Jev was given and what it answered. [Real-time video](https://seahyingcong.com/browserctrl/media/jev-googlemaps.mp4).*
 
 On Uniqlo, one plan picked men's blazers, size M, in black. Five of its seven steps named a control exactly and needed no model. Jev picked "Filter" (the button is actually called "Filter 1") at 94%, and "View results" (the button says "VIEW ITEMS (3)") at 97%. The report ended with "Results: 51 items → 3 items" and the new heading "Men's Blazers (M, BLACK)", which was everything the agent needed.
 
-https://github.com/user-attachments/assets/0408b1b8-78c3-4b4b-920c-12a7aefb2b4f
+![A seven-step plan on Uniqlo at 4x, pausing on the two steps Jev resolved](docs/media/jev-uniqlo.webp)
+
+*4x speed, pausing on the two Jev calls. [Real-time video](https://seahyingcong.com/browserctrl/media/jev-uniqlo.mp4).*
 
 Across 95 browserctrl runs in this benchmark, agents wrote 926 plans. About 3 steps in 4 named a control exactly and went straight through. About 1 in 4 needed Jev, for names an agent can't know in advance: "Filter 1", "VIEW ITEMS (3)", or a YouTube Kids age card whose real name is "Younger. Ages 5 to 8. Hit Enter to select." Jev's typical confidence was 98%. About 1 pick in 9 came in under 75%, and browserctrl still acts on those but marks them ⚠ so the agent checks. When nothing fits, it stops and lists the closest controls instead of guessing.
 
@@ -144,11 +158,15 @@ On those same sites, against Codex's own browser:
 
 The Booking.com run:
 
-https://github.com/user-attachments/assets/190fc67c-091e-4f97-8c12-f7faa57471b2
+![Booking.com side by side, 4x speed](docs/media/booking.webp)
+
+*4x speed, startup cut. Jev picked 5 controls here (green captions). [Real-time video](https://seahyingcong.com/browserctrl/media/booking.mp4).*
 
 And the first Airbnb run, where browserctrl lost. Its clicks scrolled the page a little, and Airbnb hides its search bar whenever the page scrolls.
 
-https://github.com/user-attachments/assets/1174ef3f-8828-4e18-99eb-deca607e8144
+![The first Airbnb run side by side, 4x speed](docs/media/airbnb.webp)
+
+*4x speed, startup cut. [Real-time video](https://seahyingcong.com/browserctrl/media/airbnb.mp4).*
 
 Three held-out rounds on fresh sites came before the final set, and I studied and retired each one. That's where most of the lessons on this page came from: my test setup was slowing browserctrl down, many failures were websites blocking automated browsers, and the automatic judge makes mistakes. Once the setup was fixed, round 3 already showed the two sides close on accuracy, with browserctrl a little faster (6 of 6 tasks in 11.5 minutes, against 6 of 6 in 13.1).
 
@@ -247,7 +265,7 @@ browserctrl replay --side-by-side <a> <b> --labels "Before,After" --video ab.mp4
 
 Nothing is recorded unless you start it. A recording is the page's DOM changes (brotli) plus a small JPEG per action, about 1 MB for a 3-minute run. Videos replay it at real speed with captions in plain words and a clock; every clip in this README was made that way. `rec om2w` exports a run for the Online-Mind2Web judge. rrweb 2.1.7 is vendored in `vendor/rrweb/` (MIT).
 
-Two other logs are off by default too. `browserctrl capture on` keeps the fetch/XHR traffic of tabs you drive (bodies, headers and tokens included), which `recipe endpoints` reads when you build a recipe; `browserctrl trace on` keeps a line per `do` step for `browserctrl trace <tab>`. Turn them off again with `off`.
+Recordings in the default folder are capped at 1 GB in total (oldest deleted first), and one recording stops growing at 300 MB. Two logs sit alongside them. `do` keeps a short trace of every plan for `browserctrl trace <tab>`: it's on by default, capped at 2 MB per tab and 50 MB in all, and `browserctrl trace off` stops it. `browserctrl capture on` keeps the fetch/XHR traffic of tabs you drive (bodies, headers and tokens included), which `recipe endpoints` reads when you build a recipe. It's off by default and capped at 200 MB. Each cap can be changed with `BROWSERCTRL_TRACE_MAX_MB`, `BROWSERCTRL_REC_MAX_MB` or `BROWSERCTRL_CAPTURE_MAX_MB`.
 
 ### Sharing a browser safely
 
