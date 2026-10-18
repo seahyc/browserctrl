@@ -1,0 +1,11 @@
+jev-googlemaps https://github.com/user-attachments/assets/82e2933e-6bf1-4075-8feb-f63d0505dcb5
+jev-uniqlo https://github.com/user-attachments/assets/0408b1b8-78c3-4b4b-920c-12a7aefb2b4f
+kaggle-side-by-side https://github.com/user-attachments/assets/70861a56-af97-4f83-a000-733364cf41c8
+leagueoflegends-side-by-side https://github.com/user-attachments/assets/b28a8d84-e813-442c-87cb-9209667f333b
+webmd-doctors-side-by-side https://github.com/user-attachments/assets/fa1307c9-629a-4014-af04-d7dbed5b544c
+stanford-side-by-side https://github.com/user-attachments/assets/73186adb-e3a8-47e8-a18a-f556ba7cb77c
+googlemaps-side-by-side https://github.com/user-attachments/assets/25f5ab22-843c-416f-87d9-dd20de49f012
+flightaware-side-by-side https://github.com/user-attachments/assets/30d9cb17-2ec4-48e5-86cf-e2266789ef1c
+chase-side-by-side https://github.com/user-attachments/assets/bc828ad1-e2c2-4036-98bd-55536c81ea8c
+booking-side-by-side https://github.com/user-attachments/assets/190fc67c-091e-4f97-8c12-f7faa57471b2
+airbnb-side-by-side https://github.com/user-attachments/assets/1174ef3f-8828-4e18-99eb-deca607e8144
