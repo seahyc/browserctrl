@@ -43,7 +43,8 @@
    "7680a920359cb1a508fbddb001b98167",
    "442a450e696a96085257db6297891a4d",
    "9ed3827266b3b804f485859c3d00401e_070826"
-  ]
+  ],
+  "status": "run once per method on 2026-10-17 (direct connection, full judge, verdicts hand-checked in handcheck.json); spent, so studied and fixed against afterwards like dev"
  },
  "rotation-1": {
   "sites": [

@@ -3,85 +3,144 @@
 [![Tests](https://github.com/seahyc/browserctrl/actions/workflows/test.yml/badge.svg)](https://github.com/seahyc/browserctrl/actions/workflows/test.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**browserctrl lets an AI use websites for you, including the fiddly ones with calendars, tiny checkboxes and fine print, with fewer mistakes, and often faster.**
+**browserctrl lets an AI use websites for you: the fiddly ones with filters, calendars, sliders and fine print. On 21 hard tasks on websites it had never seen, it got as many right as Codex's own built-in browser, finished them faster, and read a third less.**
 
-![Codex using its own browser (left) and the same Codex using browserctrl (right) on the same Booking.com task](docs/media/booking-side-by-side.gif)
+![Codex using its own browser (left) and the same Codex using browserctrl (right) on Kaggle](docs/media/kaggle-side-by-side.gif)
 
-*The same AI on the same hard task, on its first try. Left: Codex using its own built-in browser. Right: the same Codex using browserctrl. Shown 4× faster; [watch it in real time](docs/media/booking-side-by-side.mp4).*
+*The same AI, on its first try, on a site neither side had seen before. The task: "Identify the ongoing competition that offers the highest prize and find the code that received the most votes in that competition." Left: Codex using its own browser, 3 min 25 s. Right: the same Codex using browserctrl, 1 min 40 s. Shown 4× faster; [watch it in real time](docs/media/kaggle-side-by-side.mp4).*
 
-The task: *"Find the cheapest hotel + flight + car package from New York to San Francisco, departing tomorrow and returning on the fourth day, for two adults and a six-year-old child, one room with free breakfast and spa access."*
-
-| | Codex's own browser | Codex + browserctrl |
+| 21 hard tasks on 17 sites it had never seen | Codex's own browser | Codex + browserctrl |
 | --- | --- | --- |
-| Got it right | ✅ | ✅ |
-| Time | 5 min 3 s | **3 min 10 s** |
-| Actions | 33 | **18** |
-| Text the AI had to read (tokens) | 3.7 million | **1.1 million** |
+| Tasks done right (checked by hand) | 17 | **18** |
+| Time on the 15 tasks both got right | 45.8 min | **40.0 min** |
+| Typical (median) task | 2 min 48 s | **2 min 20 s** |
+| Faster on | 6 of the 15 | **9 of the 15** |
+| Text the AI had to read (tokens) | 17.7 million | **11.9 million** |
 
-It doesn't always win. In the first of two Airbnb runs, Codex's own browser was faster; [the results section](#does-it-really-work) shows both runs and what we changed in between.
+Same AI model (`gpt-6.1-sol`, low reasoning), same browser, same machine, one try each. [How we kept it fair](#how-we-kept-it-fair), [where it lost](#where-it-lost), and [every run](docs/results/om2w-2026-10.runs.md).
 
 ## What it does, in plain words
 
 Think of browserctrl as a better pair of hands for an AI that uses the web.
 
-- **It does several steps in one go.** Instead of looking at the whole page before every click, the AI writes a short plan: *type "Cleveland", pick 17 to 20 October, add a pet, tick "Free parking"*. browserctrl carries it out and only stops if something looks wrong. A small, fast model called Jev works out which button each step means, in about a third of a second.
-- **It handles the fiddly parts.** Calendars, plus and minus buttons, small checkboxes, menus that only appear when clicked, and pop-ups that get in the way.
-- **It checks its own work.** If a box didn't tick, or the page shows an error, it stops and says so rather than carrying on as if it worked. When it isn't sure it picked the right button, it says that too.
+- **It does several steps in one go.** Instead of looking at the whole page before every click, the AI writes a short plan: *open Filter, pick size M, pick Black, show the results*. browserctrl carries it out and only stops if something looks wrong.
+- **It tells the AI what changed.** After a plan it reports what is different on the page ("Results: 51 items → 3 items", "Black: now ticked"), so the AI doesn't have to read the whole page again to find out.
+- **It handles the fiddly parts.** Calendars, sliders, plus and minus buttons, small checkboxes, menus that only appear when clicked, controls hidden inside other components, and pop-ups that get in the way.
+- **It checks its own work.** If a box didn't tick or the page shows an error, it stops and says so. When it isn't sure it picked the right button, it says that too.
 - **It never pays for you.** It won't press Buy, Pay, Book or Send unless it is told to in so many words.
-- **It skips the clicking when it can.** For sites it knows, a *recipe* asks the site for the information directly. Your whole Shopee order history comes back in about 7 seconds instead of minutes of scrolling.
-- **It keeps a small recording of every run.** About 1 MB per run, which you can watch later as a video, like the one above.
-- **It asks you about captchas** instead of fighting them, and hands the tab back once you've solved it.
+- **It skips the clicking when it can.** For sites it knows, a *recipe* asks the site for the information directly: a whole Shopee order history comes back in about 7 seconds instead of minutes of scrolling.
+- **It keeps a small recording of every run,** about 1 MB, which you can watch later as a video like the ones on this page.
 
-## Does it really work?
+## Watch it on different kinds of websites
+
+Every clip below is a real benchmark run on a site browserctrl had never been tuned on, with Codex's own browser on the left and Codex with browserctrl on the right, on one shared clock.
+
+| | Task | Codex's own browser | Codex + browserctrl |
+| --- | --- | --- | --- |
+| 🎮 [League of Legends](docs/media/leagueoflegends-side-by-side.mp4) | "Browse the final skin in the list for the champion Ahri." | 3:37 | **1:19** |
+| 🩺 [WebMD doctors](docs/media/webmd-doctors-side-by-side.mp4) | "Find the best audiologist within 50 miles of New York with a rating of 4 and above." | 2:48 | **1:02** |
+| 📊 [Kaggle](docs/media/kaggle-side-by-side.mp4) | The highest-prize competition and its most-voted code. | 3:25 | **1:40** |
+| 🎓 [Stanford](docs/media/stanford-side-by-side.mp4) | "Graduate-level chemistry courses on Monday afternoons in the winter of 2023." | 3:28 | **2:01** |
+| 🗺️ [Google Maps](docs/media/googlemaps-side-by-side.mp4) | The top-rated Manhattan hotel for 4 guests, and the fastest transit from it to LaGuardia. | 5:55 | **3:42** |
+| ✈️ [FlightAware](docs/media/flightaware-side-by-side.mp4) | United or American flights from London arriving in New York between 8 and 11 PM. | **2:32** | 5:05 |
+| 🏦 [Chase](docs/media/chase-side-by-side.mp4) | How much a 401(k) grows from age 22 to 65 at 3% with $8,000 + $8,000 a year. | **2:24** | 4:50 |
+
+<table><tr>
+<td><img alt="League of Legends side by side" src="docs/media/leagueoflegends-side-by-side.gif"></td>
+<td><img alt="WebMD doctor search side by side" src="docs/media/webmd-doctors-side-by-side.gif"></td>
+</tr><tr>
+<td colspan="2"><img alt="Google Maps side by side" src="docs/media/googlemaps-side-by-side.gif"></td>
+</tr></table>
+
+### Where it lost
+
+**Chase:** the retirement calculator is five sliders drawn inside web components, which browserctrl's slider command couldn't see. The AI fell back to pressing arrow keys one at a time. browserctrl now finds sliders inside components, and the same five settings take 4 seconds. **FlightAware:** the airport boxes suggest matches as you type, and the AI spent several plans getting London and New York to stick, then more on the airline and arrival-time filters, before typing the filtered web address directly. **Statista and Steam** ran out of their 15 minutes: a greyed-out Apply button on one, and a playtime slider on the other that `set` couldn't reach (fixed since: it now takes one step).
+
+**Codex's own browser** lost one task to the same Statista filters and three to its own safety rules: it refused to open BabyCenter at all (twice), and it refused to press "I agree" on YouTube Kids. browserctrl's misses include arXiv answering "Rate exceeded".
+
+## How Jev fits in, and why that's the important part
+
+browserctrl uses two models. The AI agent (here Codex) is the big, careful one: it plans, reads results and decides when the task is done. **Jev** is a small, fast model with one job: given a short description of the page and a list of its controls, it says which control a step means. It answers in about a third of a second.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/how-jev-fits-dark.svg">
+  <img alt="The agent writes a plan; for each step browserctrl reads the page, acts at once when a control is named exactly, and otherwise asks Jev which control the step means; it acts, flags or stops depending on Jev's confidence, checks the result, and sends one report back" src="docs/media/how-jev-fits-light.svg" width="860">
+</picture>
+
+**What Jev actually sees.** Not a screenshot: a few lines of text. Here is the exact input from one real step. The agent wrote `click "Sort by"` on Google Maps, and Jev received the page's address, title, visible text and its 57 clickable controls by role and name. It put 99% on the right one in 340 ms.
+
+![The exact text Jev was given for one step on Google Maps, and its answer: 99% on button "Sort by" in 340 ms](docs/media/jev-card-googlemaps.png)
+
+**What that looks like while it runs.** browserctrl can draw on the page as it works (`--show`): every control Jev was offered gets a numbered box, Jev's pick is outlined in red, and a panel logs each step. Steps the agent named exactly say "exact name match, no model call"; steps that needed Jev show its top choices and their odds.
+
+| Google Maps: "Sort by", then "Guest rating" | Uniqlo: blazers, size M, black, in one plan |
+| --- | --- |
+| ![Jev choosing controls on Google Maps](docs/media/jev-googlemaps.gif) | ![browserctrl running a seven-step plan on Uniqlo, with two steps chosen by Jev](docs/media/jev-uniqlo.gif) |
+
+In the Uniqlo plan, five of the seven steps named a control exactly and needed no model at all; Jev chose "Filter" (the button is called "Filter 1") at 94% and "View results" (the button says "VIEW ITEMS (3)") at 97%. The report ended with "Results: 51 items → 3 items" and the new heading "Men's Blazers (M, BLACK)", which is everything the agent needed to answer.
+
+### Jev in the right place
+
+Across 95 browserctrl runs in this benchmark, agents wrote 926 plans:
+
+- **About 3 steps in 4 named a control exactly** ("Search", "Apply", "Size") and went straight through without any model.
+- **About 1 in 4 needed Jev**, for names the agent can't know in advance: "Filter 1", "VIEW ITEMS (3)", a YouTube Kids age card that is really a web component called "Younger. Ages 5 to 8. Hit Enter to select."
+- **Jev's typical confidence was 98%.** About 1 pick in 9 came in under 75%; browserctrl still acts on those but marks them ⚠ for the agent to check, and when nothing fits it stops and lists the closest controls instead of guessing.
+- **Exact matches are cheaper than Jev, so we make more of them.** Google's "Sort by" button is really named "Sort by" plus an icon character; that one invisible character sent it to Jev. browserctrl now ignores icon characters, and that step needs no model at all.
+
+The gain doesn't come from Jev's third of a second. It comes from what Jev makes possible: one call from the agent can carry a whole plan, because the agent can write steps in plain words instead of reading the page to look up an ID for each click. Each agent turn takes several seconds, so cutting turns is what saves time.
+
+### Why not let Jev drive?
+
+That was the first thing we tried, and the data was clear. In an earlier benchmark we gave Jev whole tasks (filter a search, open a chat, add an item to a cart), with the agent finishing whatever Jev left. Over 21 runs on seven tasks:
+
+- **Jev finished none of them.** It made 1 to 7 moves and then stopped, at the first control outside what it was allowed to do: a sort menu, a filter, a chat button, even an "Add to cart" it had been given permission for.
+- **It looped on pages that change as you use them**, retrying 30 times on one Shopee search without acting.
+- **It doesn't read.** Most of an agent's time goes into reading results and checking the answer, which Jev doesn't do, so the agent had to read everything anyway.
+- **It was never 30% faster**, the bar we set before running, on any task.
+
+Then we turned it around: the agent plans and reads, and Jev only chooses which control each step means, inside browserctrl. Under the same rule, that won 5 of the same 7 tasks. Each win was a chain of clicks and fills that used to cost the agent one turn per step. The two ties were tasks that are mostly reading one list. In a later round on six new sites, plans were never less accurate, but they lost where a page can be reached by a web address the agent can guess (a Hacker News item, a Stack Overflow tag), since going straight there beats any clicking. The details are in [bench/RESULTS.md](bench/RESULTS.md).
+
+**The lesson:** a small fast model is excellent at a narrow question with every possible answer listed ("which of these 57 controls is 'Sort by'?"), and poor at an open one ("what should happen next, and is the task done?"). Give each model the question it's good at.
+
+## How we kept it fair
+
+The tasks come from [Online-Mind2Web](https://github.com/OSU-NLP-Group/Online-Mind2Web), a public test of AI agents on real, live websites. We used only its *hard* tasks, the ones most published agents (OpenAI Operator, Claude Computer Use, Browser Use and others) get wrong.
+
+- **Sites chosen before any fixing.** The tasks are split by website, by a fixed random seed, into sites we may study and fix against and sites we may not ([splits.json](bench/om2w/splits.json), [split.py](bench/om2w/split.py)). The 21 final tasks were picked that way and run once. Every fix on this page that mentions those sites was made afterwards.
+- **One difference only: the tool.** Same model and settings, same browser (Chrome for Testing on New York time), same machine, cookies cleared before each run, settings passed the same way, and the same screenshots recorded for every run. In early rounds browserctrl carried extra settings on every command and waited on its own screenshots; it looked slower than it was until we fixed that.
+- **Only websites that load from here.** Through a VPN, about a third of runs never got past a Cloudflare check, so the final set uses only sites that load directly ([access.json](bench/om2w/access.json)).
+- **Verdicts checked by hand.** The benchmark's automatic judge grades from screenshots. On the final set it passed 11 browserctrl runs and 10 native runs, and failed 14 runs whose own logs show the task done: often the screenshot caught a page still loading, and once it passed one method and failed the other on identical evidence. It never passed a run that was wrong. We re-checked all 42 runs against their logs ([handcheck.json](bench/om2w/handcheck.json)); Three of our calls are debatable (both WebMD runs read "best" as best-rated; one arXiv run skipped a sort the judge wanted); counting those as failures makes it 17 to 15.
+- **Problems outside the methods were redone, and marked.** Codex's own browser tool stopped responding for about 20 minutes, so three of its runs were redone; one browserctrl run was redone after a test on the same machine restarted its background process. Both versions of each are in [the run list](docs/results/om2w-2026-10.runs.md).
+
+## Earlier rounds
+
+Before the final set, we took 13 hard tasks and ran them in rounds: watch where browserctrl got in the way, fix that, run again. Tasks done right went from 5 of 13 to 10 of 12. These were the sites the fixes were made on, so they show what fixing can do, not what to expect elsewhere.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/rounds-dark.svg">
   <img alt="Hard tasks done right: 5 of 13 in round 1, 8 of 13 in round 2, 8 of 12 in round 3, 10 of 12 in round 4" src="docs/media/rounds-light.svg" width="720">
 </picture>
 
-We took 13 hard tasks from [Online-Mind2Web](https://github.com/OSU-NLP-Group/Online-Mind2Web), a public test of AI agents on real, live websites: ordering food for pickup, booking packages, filtering rentals, finding a garage that fits a pickup truck. These are the tasks that most published agents (OpenAI Operator, Claude Computer Use, Browser Use and others) got wrong. We ran each one, watched where browserctrl got in the way, fixed that, and ran them all again. After four rounds, 10 of the 12 tasks were done right, up from 5 of 13.
-
-How we kept it honest:
-
-- **One try per task per round**, by Codex (`gpt-6.1-sol` at low reasoning), on the live sites, through a US internet connection on New York time, since the tasks assume a US visitor.
-- **Graded from screenshots** by a port of the benchmark's own judge, which saw the task, the AI's actions and the final pages. The AI is never allowed to actually buy, book or send; stopping at the last step counts.
-- **Two grading mistakes were fixed and rescored**: the judge didn't know the date (so "the day after tomorrow" looked wrong), and it failed a run for not completing a purchase the rules forbid.
-- **What still fails:** Best Buy throttles automated browsers (its trade-in page never loads), and Raising Cane's answered "temporarily unavailable" in the last round. We dropped one gov.uk task from round 3 on, because it requires an answer the task never gives.
-
-**Against Codex's own browser** (same model, same browser, same recording, no recipes, first try):
+On those same sites, against Codex's own browser:
 
 | Task | Codex's own browser | Codex + browserctrl |
 | --- | --- | --- |
-| Booking.com package, New York to San Francisco | ✅ 5:03, 33 actions, 3.7M tokens | ✅ **3:10, 18 actions, 1.1M tokens** |
+| [Booking.com package](docs/media/booking-side-by-side.mp4), New York to San Francisco | ✅ 5:03, 33 actions, 3.7M tokens | ✅ **3:10, 18 actions, 1.1M tokens** |
 | StubHub: NHL games in Boston | ✅ 2:12, 12 actions, 0.69M tokens | ✅ **1:56, 11 actions, 0.60M tokens** |
-| Airbnb: Cleveland, 3 nights, kids, a pet, parking, washer, gym (first run) | ✅ **2:21, 17 actions, 0.98M tokens** | ✅ 3:43, 26 actions, 1.75M tokens |
-| The same Airbnb task, after the fixes below (second run) | ❌ ran out of time at 15:00, 33 actions | ✅ **2:40, 17 actions, 1.04M tokens** |
+| [Airbnb](docs/media/airbnb-side-by-side.mp4): Cleveland, 3 nights, kids, a pet, parking, washer, gym | ✅ **2:21, 17 actions** | ✅ 3:43, 26 actions |
+| The same Airbnb task after fixes | ❌ ran out of its 15 minutes | ✅ **2:40, 17 actions** |
 
-The StubHub browserctrl run comes from the notes test (with notes off), on the same connection and time zone but in branded Chrome rather than Chrome for Testing, which Codex's own browser needs for its extension.
+Three held-out rounds on fresh sites came before the final set, each studied and then retired. They are where most of this page's lessons were learned: that our test setup was slowing browserctrl down, that many failures were websites blocking automated browsers, and that the automatic judge makes mistakes. With the setup fixed, round 3 already showed the two methods close on accuracy, with browserctrl a little faster (6 of 6 tasks in 11.5 minutes against 6 of 6 in 13.1).
 
-browserctrl lost the first Airbnb run, and the recording showed why. Its clicks scrolled the page a little even when a button was already on screen, and Airbnb hides its search bar whenever the page scrolls; a "Gym" button under the filters' footer couldn't be found; a notice covering "Filters" went unmentioned; and Airbnb's on/off buttons weren't tracked. After fixing those, the same task needs two `do` plans instead of about twenty steps. In the second run browserctrl finished in 2:40, while Codex's own browser ran out of its 15 minutes. Two runs are not many: Codex's own browser took 2:21 the first time and 15 minutes the second, so treat these as examples rather than averages. [Watch the first Airbnb run side by side](docs/media/airbnb-side-by-side.mp4).
+**Notes didn't help yet.** browserctrl can keep notes about how a site works for the next AI that visits. On 8 new tasks on sites it had explored, runs with notes passed 7 and runs without passed 8, in about the same time; the new tasks mostly used parts of each site the notes didn't cover.
 
-**On sites it had never seen.** The fixes above were made while watching those 13 tasks, so they could be tuned to those sites. To check, we keep held-out tasks on other sites, chosen before each round of fixes, and run both methods on them once. Each held-out set is studied afterwards and retired, so the next one is fresh.
+## What we learned the hard way
 
-| Held-out round | Codex's own browser | Codex + browserctrl |
-| --- | --- | --- |
-| Round 1: 10 hard tasks, US VPN | 6 of 10, **27.5 min** | **8 of 10**, 31.1 min |
-| Round 2: 11 hard tasks, US VPN | 3 of 9 | 3 of 10 |
-| Round 3: 9 hard tasks, direct connection | **7 of 8** | 6 of 8 |
-| Round 3, the 6 tasks both reached | 6 of 6, 13.1 min | 6 of 6, **11.5 min** |
-
-What we learned from these:
-
-- **Some of browserctrl's early slowness was our test setup.** Round 1's browserctrl runs carried about 115 characters of settings on every command and waited on their own recording screenshots; Codex's own browser did neither. Fixing that, and making both methods identical in every way but the tool, is what made round 3 a fair comparison.
-- **Many failures were the websites, not the tools.** In round 2 about a third of the runs never got past a Cloudflare check through the VPN, so from round 3 on we use only sites that load directly. A few task pages still turned out to be blocked or region-locked (Healthgrades, SourceForge).
-- **The automatic judge makes mistakes.** In round 2 it failed at least three runs whose screenshots show the right answer. For held-out rounds we now use the benchmark's full multi-screenshot judge and check disputed verdicts by hand.
-- **On unseen sites the two methods are close.** browserctrl gets about as many tasks right as Codex's own browser and, on the tasks both reached in round 3, was a little faster. The big wins in the head-to-head above were on sites browserctrl had been fixed on.
-
-The final 21 tasks, which we will report as the unseen-site result, haven't been run yet; the split is in [bench/om2w/splits.json](bench/om2w/splits.json), made by [split.py](bench/om2w/split.py), and the sites reachable without a VPN are in [access.json](bench/om2w/access.json).
-
-**Notes did not help yet.** browserctrl can keep notes about how each site works and show them to the next AI that visits. On 8 new tasks on sites it had already explored, runs with notes passed 7 and runs without passed 8, in about the same time. The new tasks mostly used parts of each site the notes didn't cover.
-
-Every run, with its task, method, verdict, time, actions and tokens, is in [docs/results/om2w-2026-10.runs.md](docs/results/om2w-2026-10.runs.md). The harness that ran them is [bench/om2w](bench/om2w/README.md).
+- **Graders need the evidence, not just pictures.** A third of the final runs were graded wrong from screenshots alone. A run's own log of what it set and what the page answered settles most disputes in seconds.
+- **The built-in browser has rules of its own.** Codex's browser refused BabyCenter outright and refused a consent button on YouTube Kids. A tool that drives an ordinary browser doesn't hit those walls, but that also puts the responsibility on you.
+- **Small mismatches cost minutes.** An icon character in a button's name, a sticky bar covering the first of three "Blazers" tabs, sliders hidden inside components, a filter panel that closes when the mouse leaves it. Each one turned a one-step action into several agent turns, and each fix was a few lines.
+- **Most of the time is the agent thinking, not the browser.** Across the final set, browserctrl's `do` plans took under a fifth of its total run time. What speeds runs up is fewer, smaller turns: whole plans in one call, and a short "what changed" report instead of a full page read.
 
 ## Try it
 
@@ -125,14 +184,16 @@ browserctrl fill <tab> ref_3 "Example" --browser chrome
 
 On macOS, enable Chrome's remote debugging at `chrome://inspect/#remote-debugging`, or launch a separate profile with `--remote-debugging-port=9222 --user-data-dir=/tmp/browserctrl-chrome` and use `--port 9222`. `read` waits for a loading page and says how long it waited. A ref keeps meaning what your last `read` showed; if the page changed, browserctrl says the ref is stale instead of clicking something else. It never replays an action whose result is uncertain, and a stuck page can be recovered with `reload`.
 
-### Plans with `do`
+### Plans with `do`, and finding things
 
 ```sh
 browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 'date 2026-10-20' \
   'click "Increase Pets"' 'click "Search"' --then items --browser chrome
 ```
 
-Each step names an element in words (or by ref or CSS selector). `do` matches exact names itself and asks Jev for the rest, waits for each result, and stops at the first step it can't do with confidence: a missing element, an unsure pick (marked ⚠), a checkbox that didn't change, an error on the page, or anything that would commit a purchase (`click!` marks a step you mean to commit). `date YYYY-MM-DD` picks a day in any calendar. `=> "<expected>"` checks a result, `--dismiss` closes cookie banners, and `--repeat … --until …` pages through lists.
+Each step names an element in words (or by ref or CSS selector). `do` matches exact names itself and asks Jev for the rest, waits for each result, and stops at the first step it can't do with confidence: a missing element, an unsure pick (marked ⚠), a checkbox that didn't change, an error on the page, or anything that would commit a purchase (`click!` marks a step you mean to commit). `date YYYY-MM-DD` picks a day in any calendar, and `set "<slider>" = 30-65` moves sliders, including ones inside web components. `=> "<expected>"` checks a result, `--dismiss` closes cookie banners, and `--repeat … --until …` pages through lists. Each report ends with `changed on the page:` (states that flipped, result counts, notices, controls that appeared or went); `--no-diff` drops it.
+
+`find <tab> "<words>"` searches the whole page, hidden sections and web components included, and says what hides a match and which control opens it; `fields <tab>` lists every form field and its current value. `BROWSERCTRL_JEV_LOG=<file>` records each Jev call's exact input and answer, which is how the card above was made ([make_jev_card.mjs](docs/media/make_jev_card.mjs)).
 
 ### Recipes, notes, profiles and captchas
 

@@ -1,0 +1,26 @@
+{
+ "about": "Hand-checked verdicts for the final set (2026-10-17), from each run's own command log, answer and stills. The automatic judge grades only trajectory stills and missed final states. 'outside' marks failures not caused by the method.",
+ "runs": {
+  "1ab384fb D": [true, "Be-6 built, proton emission done, Li-5 shown"], "1ab384fb native": [true, "same"],
+  "1b867afe D": [true, "IL vs MI women's unemployment chart"], "1b867afe native": [true, "same"],
+  "1c3b747a D": [true, "Active filter, sorted by reward, code sorted by most votes"], "1c3b747a native": [true, "same"],
+  "27fa3ac2 D": [true, "graduate, winter 2023, Monday afternoon: CHEM 300"], "27fa3ac2 native": [true, "same (rerun after a tool outage)"],
+  "3ef64f34 D": [true, "birth year, signed out, ages 5-8, search off, panda video open"], "3ef64f34 native": [false, "tool policy: auto-review refused the consent click", "outside"],
+  "442a450e D": [true, "22-65, 3%, $8k/$8k: $1,239,722"], "442a450e native": [true, "every value confirmed on the page; judge saw only a loading still"],
+  "50d91eab D": [true, "dates and measurements entered; newborn percentiles"], "50d91eab native": [false, "tool policy: site-safety gate blocked BabyCenter", "outside"],
+  "71f8de18 D": [false, "arXiv answered 'Rate exceeded' twice", "outside"], "71f8de18 native": [true, "term, cs+math, Sept 2024 to Jan 2025 applied; the judge added a sort the task doesn't ask for (debatable)"],
+  "7680a920 D": [true, "all inputs entered: 5'4\""], "7680a920 native": [false, "tool policy: site-safety gate blocked BabyCenter", "outside"],
+  "78baf9db D": [false, "timed out at 15 min on a disabled Apply button"], "78baf9db native": [false, "one page, no 2026 filter or latest sort"],
+  "8244409b D": [true, "50 mi, 4+ rating, sorted by rating (judge read 'best' as 'Best Match'; debatable)"], "8244409b native": [true, "same"],
+  "949dc965 D": [true, "AA/UA, arrivals 8-11 PM"], "949dc965 native": [true, "same"],
+  "9ed38272 D": [true, "Roth $84.4k with all six inputs"], "9ed38272 native": [true, "page confirms all six values; judge said 'not confirmed'"],
+  "b7a9a6b5 D": [true, "M + Black, 3 results"], "b7a9a6b5 native": [true, "same"],
+  "ba01ea55 D": [true, "4 guests, by rating, shortest transit (45 min); Maps has no 'fastest' sort"], "ba01ea55 native": [true, "same, 44 min (rerun after a tool outage)"],
+  "c03ee2be D": [true, "nail trimming, 10005, 100 mi; the groomer lists no prices to compare"], "c03ee2be native": [true, "same"],
+  "c39d6c24 D": [true, "last of 22 skins active, its splash shown"], "c39d6c24 native": [true, "last skin highlighted (rerun after a tool outage)"],
+  "c801d1c9 D": [false, "timed out at 15 min on the playtime slider (fixed since)"], "c801d1c9 native": [true, "negative, over 100 h, recent"],
+  "d1970c16 D": [true, "red + dry + US + 2020 = 0 results; the judge passed the same evidence for native"], "d1970c16 native": [true, "same empty result"],
+  "d4fb78b7 D": [true, "Ohio vs New York comparison with chart"], "d4fb78b7 native": [true, "same"],
+  "f2be37a9 D": [true, "obedience, NY, Nov 1-30 2026"], "f2be37a9 native": [true, "same"]
+ }
+}
