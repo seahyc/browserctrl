@@ -128,3 +128,17 @@ t('a do report says what the plan changed on the page', async () => {
   assert.doesNotMatch(formatSteps(same), /changed on the page/);
   await ops.closeTab(conn, id);
 });
+
+t('a ref in a do step means what the caller last read, after another plan read the page again', async () => {
+  const id = await open();
+  const mine = await ops.readPage(conn, id, { all: true });
+  const gym = mine.elements.find(e => e.name === 'Gym');
+  // The page grows controls above it, and a later plan's read renumbers every ref.
+  await ops.evaluate(conn, id, `document.body.insertAdjacentHTML('afterbegin', '<button>One</button><button>Two</button><button>Three</button>')`);
+  const later = await ops.readPage(conn, id, { all: true });
+  assert.notEqual(later.elements.find(e => e.ref === gym.ref)?.name, 'Gym', 'the ref now names something else in the latest snapshot');
+  const r = await runSteps(conn, id, [`click ${gym.ref}`], { jev: noJev, noNotes: true, refToken: mine.token });
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.match(r.steps[0].target, /checkbox "Gym"/);
+  await ops.closeTab(conn, id);
+});

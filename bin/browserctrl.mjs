@@ -886,8 +886,11 @@ const main = async () => {
       await show.busy(conn, targetId, false); // the idle timer runs from here until the next command
     }
 
-    // Refs that do and --intent print come from their own snapshot, the page's latest.
-    if (cmd === 'do' || flags.intent) readtokens.forget(port, targetId);
+    // Refs that --intent prints come from its own snapshot, the page's latest. A do plan reads
+    // the caller's refs in the caller's last read, and hands over its own snapshot only when
+    // its report prints refs.
+    const callerToken = cmd === 'do' ? readtokens.recall(port, targetId) : null;
+    if (flags.intent) readtokens.forget(port, targetId);
     // --intent: Jev picks the target from the page instead of the caller naming a ref.
     if (flags.intent && ['click', 'fill', 'select', 'hover'].includes(cmd)) {
       const cfg = jev.jevKey();
@@ -927,8 +930,9 @@ const main = async () => {
           force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
           dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,
           open: flags.open ? Number(flags.open) : 0, grep: flags.grep, prefetch: !flags['no-prefetch'], context: flags.context != null ? Number(flags.context) : 1,
-          diff: !flags['no-diff'],
+          diff: !flags['no-diff'], refToken: callerToken,
         });
+        if (r.refsToken) readtokens.remember(port, targetId, r.refsToken);
         if (!r.done) process.exitCode = 3;
         return out(flags.json ? r : formatSteps(r));
       }
