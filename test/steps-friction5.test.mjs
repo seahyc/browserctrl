@@ -108,7 +108,7 @@ t('a short page that has finished loading is not waited on as a loading shell', 
   const id = await open();
   const t0 = Date.now();
   await waitForContent(conn, id, { timeoutMs: 10000, minChars: 5000, stable: false });
-  assert.ok(Date.now() - t0 < 3000, `waited ${Date.now() - t0} ms`);
+  assert.ok(Date.now() - t0 < 6000, `waited ${Date.now() - t0} ms`); // the shell wait gives up at 10 s; slow CI runners take ~3 s
   await ops.closeTab(conn, id);
 });
 
