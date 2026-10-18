@@ -40,6 +40,7 @@ import * as site from '../lib/site.mjs';
 import * as rec from '../lib/rec.mjs';
 import * as readtokens from '../lib/readtokens.mjs';
 import * as finder from '../lib/find.mjs';
+import * as recording from '../lib/recording.mjs';
 
 // Commands that act on a page take a still when their tab is being recorded; reads
 // only when the page moved on since the last one.
@@ -213,7 +214,7 @@ function usage() {
     browserctrl recipe run shopee.sg/orders --browser dia run one; key=value args override params; --raw skips output mapping
     browserctrl recipe list                               all recipes, local and tapped
     browserctrl recipe tap add <git-url> [name]           add a shared recipe repo; tap list | update [name] | remove <name>
-    browserctrl recipe endpoints [host]                   fetch/XHR endpoints captured from attached tabs
+    browserctrl recipe endpoints [host]                   fetch/XHR endpoints captured from attached tabs (after capture on)
     browserctrl recipe inspect <host> [match]             full captured exemplars (headers, tokens, bodies)
 
   Safari 27 on macOS, through Apple's MCP interface:
@@ -251,6 +252,8 @@ function usage() {
                                                    [--repeat 'click Next' --until "<condition>" --max 10 --collect items|text]
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
     browserctrl trace <tab> [--last N] [--json]          what recent do runs did: targets, expectations, overlays, notices
+    browserctrl trace on|off                              keep that log (off by default)
+    browserctrl capture on|off|status                     keep tabs' fetch/XHR traffic for recipe endpoints (off by default)
     browserctrl site <site|url> [--json]                 before planning on a site: its recipes (run usage), then flow notes (ids, this page first)
     browserctrl notes [site|url] [--clear] [--json]      flow notes alone; open/nav/read and do steps hint recipes + notes
     browserctrl notes add <site|url> [--path /p] [--api] [--recipe <name>] "<fact>" [--force]
@@ -458,6 +461,13 @@ const main = async () => {
   }
 
   if (cmd === 'launch') return out(await launch(positional[1]));
+  // Nothing is logged unless switched on: capture keeps the fetch/XHR traffic recipes are built
+  // from, trace keeps a line per do step.
+  if ((cmd === 'capture' || cmd === 'trace') && ['on', 'off', 'status', undefined].includes(positional[1]) && (cmd === 'capture' || positional[1])) {
+    const what = cmd === 'capture' ? 'capturing fetch/XHR traffic for recipes' : 'tracing do plans';
+    if (positional[1] === 'on' || positional[1] === 'off') recording.set(cmd, positional[1] === 'on');
+    return out(`${recording.enabled(cmd) ? 'on' : 'off'}: ${what}${recording.enabled(cmd) ? ` (browserctrl ${cmd} off to stop)` : ` (browserctrl ${cmd} on to start)`}`);
+  }
   if (cmd === 'trace') {
     if (!positional[1]) throw new Error('Usage: browserctrl trace <tab> [--last N] [--json]');
     const runs = trace.read(positional[1], { last: Number(flags.last || 5) });
@@ -579,9 +589,10 @@ const main = async () => {
     }
     const store = createStore();
     if (sub === 'endpoints') {
-      if (!positional[2]) return out(store.hosts().join('\n') || '(nothing captured yet)');
+      const off = recording.enabled('capture') ? '' : ' Capture is off: browserctrl capture on, then use the site.';
+      if (!positional[2]) return out(store.hosts().join('\n') || `(nothing captured yet)${off}`);
       const rows = store.catalog(positional[2]);
-      return out(flags.json ? rows : rows.map(r => `${String(r.count).padStart(4)}  ${r.lastSeen.slice(0, 16)}  ${r.status ?? '-'}  ${r.template}`).join('\n') || '(nothing captured for this host)');
+      return out(flags.json ? rows : rows.map(r => `${String(r.count).padStart(4)}  ${r.lastSeen.slice(0, 16)}  ${r.status ?? '-'}  ${r.template}`).join('\n') || `(nothing captured for this host)${off}`);
     }
     if (sub === 'inspect') return out(store.exemplars(positional[2], positional[3]));
     throw new Error('Usage: browserctrl recipe list | find <url or words> | run <site/name> [key=value ...] [--raw] --browser B | endpoints [host] | inspect <host> [match] | tap ...');

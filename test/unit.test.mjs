@@ -134,3 +134,21 @@ test('an unknown command names the nearest one instead of printing all of help',
   assert.match(await run('shto'), /Did you mean "shot"\?/);
   assert.match(await run('zzqqxx'), /Unknown command "zzqqxx"\. Run browserctrl help/);
 });
+
+test('nothing is logged by default: capture and traces are off until switched on', async () => {
+  const rec = await import('../lib/recording.mjs');
+  const saved = { c: process.env.BROWSERCTRL_CAPTURE, t: process.env.BROWSERCTRL_TRACE, f: process.env.BROWSERCTRL_RECORDING };
+  process.env.BROWSERCTRL_RECORDING = path.join(os.tmpdir(), `bc-recording-${process.pid}-${Date.now()}.json`);
+  delete process.env.BROWSERCTRL_CAPTURE; delete process.env.BROWSERCTRL_TRACE;
+  try {
+    assert.equal(rec.enabled('capture'), false);
+    assert.equal(rec.enabled('trace'), false);
+    rec.set('trace', true);
+    assert.equal(rec.enabled('trace'), true);
+    process.env.BROWSERCTRL_TRACE = '0';
+    assert.equal(rec.enabled('trace'), false, 'the environment wins');
+  } finally {
+    fs.rmSync(process.env.BROWSERCTRL_RECORDING, { force: true });
+    for (const [k, v] of [['BROWSERCTRL_CAPTURE', saved.c], ['BROWSERCTRL_TRACE', saved.t], ['BROWSERCTRL_RECORDING', saved.f]]) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+});

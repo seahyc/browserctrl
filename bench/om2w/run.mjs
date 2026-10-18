@@ -173,7 +173,8 @@ async function ensureBrowser() {
 // keeps its own captcha cool-downs: a challenge one method met must not keep the next
 // method's run off the site (WebMD, rotation 3).
 function runIdentity(runId) {
-  const env = { CDP_AGENT_ID: `om2w-${runId}`, BROWSERCTRL_COOLDOWN: runPath(runId, 'cooldown.json') };
+  // Traces stay on for the bench (they are how runs are studied); they are off by default.
+  const env = { CDP_AGENT_ID: `om2w-${runId}`, BROWSERCTRL_COOLDOWN: runPath(runId, 'cooldown.json'), BROWSERCTRL_TRACE: '1' };
   Object.assign(process.env, env);
   return env;
 }

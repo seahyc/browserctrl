@@ -19,13 +19,15 @@ browserctrl recipe run shopee.sg/orders --browser dia   # key=value args overrid
 Shared recipes come from taps, git repos of recipes:
 `browserctrl recipe tap add https://github.com/seahyc/browserctrl-recipes`.
 
-The daemon records fetch/XHR traffic from tabs you drive. When no recipe fits
-and the task is worth repeating, do it through the UI once, then look at what the
-page called and write a recipe from it:
+When no recipe fits and the task is worth repeating, switch on capture (off by
+default: it keeps request and response bodies, headers and tokens), do the task
+through the UI once, then look at what the page called and write a recipe from it:
 
 ```sh
+browserctrl capture on                                  # the daemon keeps tabs' fetch/XHR traffic
 browserctrl recipe endpoints shopee.sg                  # endpoint templates, counts, last seen
 browserctrl recipe inspect shopee.sg get_all_order      # full exemplars: headers, tokens, bodies
+browserctrl capture off                                 # when the recipe works
 ```
 
 Before writing or fixing a recipe, read [the recipe format](recipes.md).

@@ -25,6 +25,10 @@ process.env.BROWSERCTRL_COOLDOWN ||= path.join(os.tmpdir(), `browserctrl-test-co
 process.env.BROWSERCTRL_CAPTCHA_CONFIG ||= path.join(os.tmpdir(), `browserctrl-test-captcha-${process.pid}.json`);
 // Site trouble (timeouts, pages that never finish) is remembered per site; 127.0.0.1 collects
 // it from every test file, which then adds a "site is slowing" note to later reads.
+// Capture and traces are off by default; the suite turns them on, since tests exercise both.
+process.env.BROWSERCTRL_RECORDING ||= path.join(os.tmpdir(), `browserctrl-test-recording-${process.pid}.json`);
+process.env.BROWSERCTRL_CAPTURE ??= '1';
+process.env.BROWSERCTRL_TRACE ??= '1';
 process.env.BROWSERCTRL_SITE_TROUBLE ||= path.join(os.tmpdir(), `browserctrl-test-site-trouble-${process.pid}.json`);
 // One path for every test process: the daemon that writes a recording may have been
 // started by an earlier test file.
