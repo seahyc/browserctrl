@@ -135,20 +135,37 @@ test('an unknown command names the nearest one instead of printing all of help',
   assert.match(await run('zzqqxx'), /Unknown command "zzqqxx"\. Run browserctrl help/);
 });
 
-test('nothing is logged by default: capture and traces are off until switched on', async () => {
+test('traces are on and capture is off by default, each switchable, the environment winning', async () => {
   const rec = await import('../lib/recording.mjs');
   const saved = { c: process.env.BROWSERCTRL_CAPTURE, t: process.env.BROWSERCTRL_TRACE, f: process.env.BROWSERCTRL_RECORDING };
   process.env.BROWSERCTRL_RECORDING = path.join(os.tmpdir(), `bc-recording-${process.pid}-${Date.now()}.json`);
   delete process.env.BROWSERCTRL_CAPTURE; delete process.env.BROWSERCTRL_TRACE;
   try {
     assert.equal(rec.enabled('capture'), false);
-    assert.equal(rec.enabled('trace'), false);
-    rec.set('trace', true);
     assert.equal(rec.enabled('trace'), true);
-    process.env.BROWSERCTRL_TRACE = '0';
-    assert.equal(rec.enabled('trace'), false, 'the environment wins');
+    rec.set('trace', false);
+    assert.equal(rec.enabled('trace'), false);
+    rec.set('capture', true);
+    assert.equal(rec.enabled('capture'), true);
+    process.env.BROWSERCTRL_CAPTURE = '0';
+    assert.equal(rec.enabled('capture'), false, 'the environment wins');
   } finally {
     fs.rmSync(process.env.BROWSERCTRL_RECORDING, { force: true });
     for (const [k, v] of [['BROWSERCTRL_CAPTURE', saved.c], ['BROWSERCTRL_TRACE', saved.t], ['BROWSERCTRL_RECORDING', saved.f]]) if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
+});
+
+test('caps keep a log under its size and a folder under its total, oldest first', async () => {
+  const caps = await import('../lib/caps.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-caps-'));
+  try {
+    const log = path.join(dir, 'a.jsonl');
+    fs.writeFileSync(log, Array.from({ length: 2000 }, (_, i) => JSON.stringify({ i })).join('\n') + '\n');
+    assert.equal(caps.trimLog(log, 4000), true);
+    const lines = fs.readFileSync(log, 'utf8').trim().split('\n');
+    assert.ok(fs.statSync(log).size <= 4000 && JSON.parse(lines.at(-1)).i === 1999 && JSON.parse(lines[0]).i > 0, 'kept the newest whole lines');
+    for (const [n, t] of [['old', 1], ['mid', 2], ['new', 3]]) { fs.writeFileSync(path.join(dir, n), 'x'.repeat(1000)); fs.utimesSync(path.join(dir, n), t * 1000, t * 1000); }
+    caps.prune(dir, fs.statSync(log).size + 1500, { keep: ['a.jsonl'] }); // room for the log and one more file
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['a.jsonl', 'new']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

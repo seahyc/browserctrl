@@ -204,7 +204,7 @@ function usage() {
     browserctrl rec stop <tab> --browser dia                            stop; prints sizes
     browserctrl rec status [--browser dia]                              tabs being recorded
     browserctrl replay <DIR> [--out FILE] [--no-open]                   one self-contained HTML: DOM replay + step timeline
-    browserctrl replay <DIR> --video out.mp4 [--gif out.gif] [--gif-speed 4] [--speed 1] [--width 1280] [--label L] [--proxy socks5://…] [--no-captions] [--no-clock]
+    browserctrl replay <DIR> --video out.mp4 [--gif out.gif] [--webp out.webp] [--gif-speed 4] [--trim-start] [--speed 1] [--width 1280] [--label L] [--proxy socks5://…] [--no-captions] [--no-clock]
                                                           real-time MP4: captions in plain words, a clock, stills where DOM replay is blank
     browserctrl replay --side-by-side <A> <B> --labels "Without,With" --video out.mp4 [--gif out.gif]   two runs on one clock
     browserctrl rec om2w <DIR> --task-id ID --task "…" [--answer "…"] [--root R]   Online-Mind2Web result.json for its judge
@@ -252,8 +252,8 @@ function usage() {
                                                    [--repeat 'click Next' --until "<condition>" --max 10 --collect items|text]
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
     browserctrl trace <tab> [--last N] [--json]          what recent do runs did: targets, expectations, overlays, notices
-    browserctrl trace on|off                              keep that log (off by default)
-    browserctrl capture on|off|status                     keep tabs' fetch/XHR traffic for recipe endpoints (off by default)
+    browserctrl trace on|off                              keep that log (on by default; 2 MB per tab, 50 MB in all)
+    browserctrl capture on|off|status                     keep tabs' fetch/XHR traffic for recipe endpoints (off by default; 200 MB)
     browserctrl site <site|url> [--json]                 before planning on a site: its recipes (run usage), then flow notes (ids, this page first)
     browserctrl notes [site|url] [--clear] [--json]      flow notes alone; open/nav/read and do steps hint recipes + notes
     browserctrl notes add <site|url> [--path /p] [--api] [--recipe <name>] "<fact>" [--force]
@@ -525,9 +525,9 @@ const main = async () => {
     const labels = typeof flags.labels === 'string' ? flags.labels.split(/\s*[,|]\s*/) : typeof flags.label === 'string' ? [flags.label] : [];
     const num = (v, d) => (v === undefined || v === true ? d : Number(v));
     return out(await renderVideo(dirs, {
-      out: flags.video, gif: typeof flags.gif === 'string' ? flags.gif : null, gifSpeed: num(flags['gif-speed'], 4),
+      out: flags.video, gif: typeof flags.gif === 'string' ? flags.gif : null, webp: typeof flags.webp === 'string' ? flags.webp : null, gifSpeed: num(flags['gif-speed'], 4),
       fps: num(flags.fps, 12), width: flags.width ? Number(flags.width) : undefined, speed: num(flags.speed, 1), labels,
-      captions: !flags['no-captions'], clock: !flags['no-clock'], ...(typeof flags.proxy === 'string' ? { proxy: flags.proxy } : {}),
+      captions: !flags['no-captions'], clock: !flags['no-clock'], trimStart: Boolean(flags['trim-start']), ...(typeof flags.proxy === 'string' ? { proxy: flags.proxy } : {}),
       onProgress: (i, f, n) => process.stderr.write(`video${dirs.length > 1 ? ` ${i + 1}/${dirs.length}` : ''}: ${Math.round((f / n) * 100)}%\r`),
     }));
   }
@@ -936,7 +936,9 @@ const main = async () => {
         if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text] [--open N --grep "label|label"]');
         const recording = rec.get(targetId);
         const r = await runSteps(conn, targetId, lines, { show: show.showing(flags), noNotes: Boolean(flags['no-notes']),
-          onStep: recording ? row => rec.still(conn, targetId, `do: ${row.do}`, { status: row.stopped ? 'FAILED' : row.skipped ? 'SKIPPED' : 'SUCCESS' }) : undefined,
+          onStep: recording ? row => rec.still(conn, targetId, `do: ${row.do}`, { status: row.stopped ? 'FAILED' : row.skipped ? 'SKIPPED' : 'SUCCESS',
+            // A step Jev resolved: what it picked and how sure it was, for the video's captions.
+            extra: /jev p=([\d.]+)/.test(row.how || '') && row.target ? { jev: { target: row.target, p: Number(row.how.match(/jev p=([\d.]+)/)[1]) } } : null }) : undefined,
           then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
           force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
           dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,
