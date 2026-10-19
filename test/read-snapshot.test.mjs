@@ -59,16 +59,6 @@ const state = (id) => ops.evaluate(conn, id, `document.querySelector('#state').t
 const rowOf = (snap, re) => snap.elements.find(e => re.test(e.name || ''));
 const title = (id) => ops.evaluate(conn, id, 'document.title');
 const byName = (snap, re) => snap.elements.filter(e => re.test(e.name || ''));
-const page = { url: 'https://x.io/s', title: 't', scroll: { y: 0, h: 1, vh: 1 }, groups: [
-  { id: 'g1', region: 'nav', chrome: true, count: 3, items: [{ id: 'i1', text: 'Home', link: '/' }] },
-  { id: 'g2', region: 'main', count: 4, items: [
-    { id: 'i2', text: 'Spotlight · Chair A · S$10', link: '/p/a' },
-    { id: 'i3', text: 'Chair B · S$20', link: '/p/b' },
-    { id: 'i4', text: 'Chair C · S$30', link: '/p/c', hints: ['card-sponsored'] },
-    { id: 'i5', text: 'Chair D · S$40', link: '/p/d' },
-  ] },
-  { id: 'g3', region: 'aside', count: 3, items: [{ id: 'i6', text: 'Related one' }, { id: 'i7', text: 'Related two' }, { id: 'i8', text: 'Related three' }] },
-] };
 
 t('a card that is one link reads as one row; its Like button and input stay separate', async () => {
   const id = await open('read-cards.html');

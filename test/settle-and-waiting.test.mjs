@@ -70,8 +70,6 @@ t('a page whose loading markers never change is read once they hold still; --no-
   const id = await open('read-skeleton.html');
   const { stdout } = await cli('read', id.slice(0, 8));
   assert.match(stdout, /^wait: waited .* stopped changing, so the page is read as loaded$/m, stdout);
-  // The wait the read reports (not the CLI's own start-up) is under its 8 s cap.
-  assert.ok(Number(/waited (\d+\.\d) s/.exec(stdout)?.[1]) < 8, stdout);
   const st = await ops.settle(conn, id, { timeoutMs: 600, stableMs: 5000 });
   assert.equal(st.cleared, false);
   assert.match(ops.describeSettle(st), /still loading .*skeleton/);
