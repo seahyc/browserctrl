@@ -110,3 +110,19 @@ test('labelTabs maps tabs to profile names from cached probes without opening ta
     fs.rmSync(ud, { recursive: true, force: true });
   }
 });
+
+import { parseWindowsProcess, browserKeyFor } from '../lib/profiles.mjs';
+
+test('parses the PowerShell process row, quoted or not', () => {
+  const row = c => JSON.stringify({ ProcessId: 4242, ExecutablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', CommandLine: c });
+  const a = parseWindowsProcess(row('"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 "--user-data-dir=C:\\Users\\a b\\prof" about:blank'));
+  assert.equal(a.pid, 4242);
+  assert.equal(a.userDataDir, 'C:\\Users\\a b\\prof');
+  assert.equal(parseWindowsProcess(row('chrome.exe --user-data-dir=C:\\prof --x')).userDataDir, 'C:\\prof');
+  assert.equal(parseWindowsProcess(row('chrome.exe --user-data-dir="C:\\my prof"')).userDataDir, 'C:\\my prof');
+  assert.equal(parseWindowsProcess(row('chrome.exe')).userDataDir, null);
+  assert.equal(parseWindowsProcess('[' + row('chrome.exe') + ']').pid, 4242);
+  assert.equal(parseWindowsProcess(''), null);
+  assert.equal(browserKeyFor('C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', 9222), 'edge');
+  assert.equal(browserKeyFor('C:\\x\\unknown.exe', 9225), 'edge');
+});

@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, requireBrowser, httpGetJson } from '../lib/discovery.mjs';
-import { relaunchWithDebugPort, planLaunch } from '../lib/launch.mjs';
+import { relaunchWithDebugPort, planLaunch, planDirectLaunch, startDetached } from '../lib/launch.mjs';
 import { safariCLI } from '../lib/safari-frontend.mjs';
 import { BROWSERS } from '../lib/env.mjs';
 import { diagnose } from '../lib/diagnostics.mjs';
@@ -314,9 +314,21 @@ function usage() {
 }
 
 async function launch(name) {
-  if (process.platform !== 'darwin') throw new Error('Automatic relaunch currently requires macOS. Enable debugging in the browser, then use --browser or --port.');
   const meta = BROWSERS[String(name).toLowerCase()];
   if (!meta) throw new Error(`Unknown browser "${name}". Known: ${Object.keys(BROWSERS).join(', ')}`);
+  if (process.platform !== 'darwin') {
+    // Linux and Windows: only ever start a separate instance on its own profile; the running browser is left alone.
+    const key = String(name).toLowerCase();
+    const ext = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'extension');
+    const plan = planDirectLaunch({
+      key, meta, userDataDir: flags['user-data-dir'] ? path.resolve(String(flags['user-data-dir'])) : null,
+      extension: !flags['no-extension'] && fs.existsSync(ext) ? ext : null,
+    });
+    fs.mkdirSync(plan.userDataDir, { recursive: true });
+    const r = await startDetached({ plan, probe: () => httpGetJson(meta.port, '/json/version', 1000) });
+    return { launched: meta.label, port: meta.port, ready: r.ready, browser: r.version.Browser, waited_ms: r.waitedMs, profile: plan.userDataDir,
+      note: r.alreadyRunning ? `something already answers on port ${meta.port}; nothing was started` : `started a separate ${meta.label} on its own profile; your normal ${meta.label} was not touched` };
+  }
   const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, e => (e ? rej(e) : res())));
   // Load the handoff extension alongside the debug port, so a browser started
   // this way has both halves: CDP for the agent, extension UI for the human.

@@ -9,6 +9,9 @@ Evidence collected on 2026-10-12. These are capability checks, not a comparative
 | Chrome-family Chromium, Linux | [Full CI passed](https://github.com/seahyc/browserctrl/actions/runs/38226804230) | Ubuntu, Node 22 and 24: 223 Node tests passed, 4 platform/optional tests skipped, zero failures; all 15 Python tests passed. Includes isolated-browser input, screenshots, waits, ten-agent concurrency, and shared activity controls. |
 | Safari 27.0.1, macOS | Live local fixture tested | Official MCP discovery and an owned local fixture tab were verified. See the [fixture results](safari-test-results.json). Protocol tests cover serialized tab selection, claims, failed switches and shutdown protection. Typing and clicking changed the local fixture while Finder was active and while a normal Safari window was selected; document.hasFocus() stayed false. A foreign agent was refused. A background screenshot returned a dark image, so screenshot rendering is not verified. |
 | Chrome-family Chromium, Windows | [Full CI passed](https://github.com/seahyc/browserctrl/actions/runs/38226804230) | Node 22 and 24: 209 Node tests passed, 18 platform/optional tests skipped, zero failures; all 15 Python tests passed. Includes named pipes, kernel mutex locking, process identity, browser input, CLI/Python/MCP activity controls, and screenshots on an active owned target. Background capture workarounds were inconsistent, so these results do not establish seamless background screenshot support. |
+| Firefox, any platform | Not supported | Firefox removed CDP, and browserctrl speaks only CDP (plus Safari's separate MCP). WebDriver BiDi would be the way in; that is future work and nothing here is implemented or tested. |
+| Edge and Brave, any platform | Intended, unverified | They are Chromium and share the CDP core, and `launch` knows their install paths. Debugging a real signed-in Edge or Brave profile has not been tested here; do not assume it behaves like Dia or like Chrome's separate-profile mode. |
+| Chrome-family Chromium, macOS CI | Intended | `macos-latest` is in the CI matrix; no result is recorded here yet. |
 
 ## Dia boundaries
 
@@ -16,7 +19,9 @@ Page snapshots, input, waits, shared connections, tab claims, and extension APIs
 
 The optional extension's tab-group APIs are Chromium APIs, not Dia-specific. Chrome can use them after loading the extension, but extension grouping in Chrome has not yet been tested here. Dormant tabs absent from both CDP and the extension require the Dia native adapter. Do not infer that Chrome or another browser has the same dormant-tab behavior.
 
-Browser profile discovery supports macOS, Linux and Windows. Automatic relaunch remains macOS-only; elsewhere enable debugging or start an owned profile, then select `--browser` at its configured port or `--port` explicitly. Screen-video capture uses macOS-specific APIs; screenshots use CDP.
+Browser profile discovery supports macOS, Linux and Windows. Relaunching your running browser with a debug port is macOS-only.
+
+`browserctrl launch <browser>` on Linux and Windows (intended behaviour; unit-tested for path and argument planning only, not yet run against a real browser on those systems): it finds Chrome, Edge, Brave or Chromium (Program Files and LocalAppData on Windows; `/usr/bin`, `/opt` and `/snap/bin` locations plus `PATH` on Linux; `BROWSERCTRL_<BROWSER>_BIN` overrides) and starts a separate, detached instance with `--remote-debugging-port` and its own profile folder (`--user-data-dir`, default under browserctrl's data folder). It never quits or restarts the browser you are already using, and Dia and Arc are macOS-only. If something already answers on the port, nothing is started. Screen-video capture uses macOS-specific APIs; screenshots use CDP.
 
 ## Safari boundaries
 

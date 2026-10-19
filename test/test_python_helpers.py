@@ -9,7 +9,7 @@ from unittest.mock import patch
 PYTHON_ROOT = Path(__file__).resolve().parents[1] / "python"
 sys.path.insert(0, str(PYTHON_ROOT))
 
-from chrome_cdp.helpers import helpers_for, init_workspace, load_helper
+from browserctrl.helpers import helpers_for, init_workspace, load_helper
 
 
 class HelperWorkspaceTests(unittest.TestCase):
@@ -34,7 +34,7 @@ class HelperWorkspaceTests(unittest.TestCase):
     def test_environment_selects_default_workspace(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "from-environment"
-            with patch.dict(os.environ, {"CDP_HELPER_WORKSPACE": str(root)}):
+            with patch.dict(os.environ, {"BROWSERCTRL_HELPER_WORKSPACE": str(root)}):
                 self.assertEqual(init_workspace(), root)
 
     def test_helpers_for_matches_only_the_exact_host_and_sorts(self):
