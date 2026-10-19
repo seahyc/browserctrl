@@ -121,7 +121,7 @@ t('none diagnostics show probability and coverage without zero candidates', asyn
   const jev = fakeJev({choice: () => ({choice:'none', probabilities:{none:.97}})});
   const r = await run(tab, ['extract "primary language" as $lang'], jev);
   assert.match(r.stopped.reason, /Jev: no offered line answers \(none p=0\.97\); \d+ of 500 lines offered/);
-  assert.equal(jev.calls.filter(c => c.questions.extract).length, 2);
+  assert.equal(jev.calls.filter(c => c.questions.extract).length, 3, 'two evidence passes plus one young-page retry');
 });
 
 t('extraction diagnostics print two decimal probabilities', async () => {
@@ -132,4 +132,65 @@ t('extraction diagnostics print two decimal probabilities', async () => {
   const r = await run(tab, ['extract "the total" as $price'], jev);
   assert.match(r.stopped.reason, /p=0\.29/);
   assert.doesNotMatch(formatSteps(r), /0\.29000000000000004/);
+});
+
+t('extract joins sidebar inline facts and marks attribute evidence', async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<h2>Languages</h2><div role="progressbar" aria-label="JavaScript: 100%"><span>JavaScript</span><span style="display:block">100%</span></div>'`);
+  const joined = await run(tab, ['extract "the primary language" as $lang'], fakeJev({choice: q => optionWith(q, 'Languages: JavaScript 100%')}));
+  assert.equal(joined.done, true);
+  assert.equal(joined.bindings[0].raw, 'JavaScript 100%');
+  const attr = await run(tab, ['extract "the primary language" as $lang'], fakeJev({choice: q => optionWith(q, 'JavaScript: 100%')}));
+  assert.equal(attr.done, true);
+  assert.equal(attr.bindings[0].source_attribute, 'aria-label');
+  assert.match(formatSteps(attr), /aria-label/);
+});
+
+t('extract asks once more for late content after an initial none', async () => {
+  const tab = await open();
+  let asks = 0;
+  const jev = fakeJev({choice: (q, id) => {
+    if (id !== 'extract') return;
+    asks++;
+    if (asks === 1) {
+      // Schedule from the first ask so initial plan readiness cannot consume the delay.
+      void ops.evaluate(conn, tab, `setTimeout(() => { document.body.innerHTML='<h2>Languages</h2><p>JavaScript 100%</p>'; }, 1500)`);
+      return 'none';
+    }
+    return optionWith(q, 'JavaScript 100%');
+  }});
+  const r = await run(tab, ['extract "the primary language" as $lang'], jev);
+  assert.equal(r.done, true);
+  assert.equal(asks, 2);
+  assert.match(formatSteps(r), /waited \d+ ms for the page to fill in/);
+});
+
+t('old quiet page with no answer does not wait or ask again', async () => {
+  const tab = await open();
+  await new Promise(resolve => setTimeout(resolve, 8100));
+  const jev = fakeJev();
+  const start = Date.now();
+  const r = await run(tab, ['extract "a missing answer" as $missing'], jev);
+  assert.equal(r.done, false);
+  assert.equal(jev.calls.filter(c => c.questions.extract).length, 1);
+  assert.equal(r.steps[0].content_wait_ms, undefined);
+  assert.ok(Date.now() - start < 3000);
+});
+
+t('pick retries a young empty list after none', async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<h1>Loading hotels</h1>'`);
+  let asks = 0;
+  const jev = fakeJev({choice: (q, id) => {
+    if (id !== 'pick') return;
+    if (++asks === 1) {
+      void ops.evaluate(conn, tab, `setTimeout(() => { document.body.innerHTML='<main><ul><li><a href="/fixtures/page.html">Hotel A</a></li><li><a href="/fixtures/page.html">Hotel B</a></li><li><a href="/fixtures/page.html">Hotel C</a></li></ul></main>'; }, 1500)`);
+      return 'none';
+    }
+    return optionWith(q, 'Hotel B');
+  }});
+  const r = await run(tab, ['pick "Hotel B"'], jev);
+  assert.equal(r.done, true);
+  assert.equal(asks, 2);
+  assert.ok(r.steps[0].content_wait_ms >= 1500);
 });

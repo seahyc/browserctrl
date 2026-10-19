@@ -586,3 +586,5 @@ browserctrl check <tab> [--expect "the price filter is open"] --browser dia
   address and title, the candidate elements' roles, names and links, and up to 3,000
   characters of on-screen text. Exact names, refs and selectors need no key and send nothing.
   [settings.md](settings.md) lists the Jev settings.
+
+Extraction joins visible block text, includes accessible attributes with their source, and retries a missing or uncertain extract/pick once for up to 3 seconds when the page is under 8 seconds old or still changing.

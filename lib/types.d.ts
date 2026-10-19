@@ -64,6 +64,7 @@ export interface ListItem {
 
 /** A line of page text offered to extract. */
 export interface Span {
+  source_attribute?: string;
   context?: string;
   text: string;
   i?: number;
