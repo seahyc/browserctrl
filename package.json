@@ -24,7 +24,8 @@
     "mcp": "node mcp/server.mjs",
     "sync-extension": "node scripts/sync-extension.mjs",
     "prepack": "node scripts/sync-extension.mjs",
-    "check-extension": "node scripts/sync-extension.mjs --check"
+    "check-extension": "node scripts/sync-extension.mjs --check",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1"
@@ -55,5 +56,9 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
   }
 }

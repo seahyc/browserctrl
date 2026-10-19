@@ -31,6 +31,7 @@ jobs:
         with:
           chrome-version: stable
       - run: npm ci
+      - run: npm run typecheck
       - name: Check the npm package and the bundled extension copy
         run: |
           npm pack --dry-run
