@@ -294,6 +294,38 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
 - Intent targets, expectations, `--until` and `--dismiss` need `TYPESAFE_API_KEY` (see
   [Jev](#jev)). Exact names work without it; overlay checks are then skipped.
 
+### Whole-task plans: `extract`, `pick`, `if` and alternatives
+
+Each agent turn costs seconds of model time, so the fastest run is the one with the fewest
+turns. When you can foresee the task to its answer, write it as one plan:
+
+```bash
+browserctrl do <tab> 'fill "Where" = "Manhattan"' 'key Enter' \
+  'if "a cookie banner covers the page" then click "Accept all" | "Accept"' \
+  'click "Sort by" | "Sort"' 'click "Price: low to high"' \
+  'pick "the cheapest hotel rated 4 or more"' \
+  'extract "the nightly price"' 'extract "the cancellation policy"'
+```
+
+- `extract "<what>"`: Jev chooses the line of the page (all of it, not just the screen) that
+  answers `<what>`, and the report copies it verbatim under `extracted:`. Jev never writes an
+  answer, so a value is always text the page shows. Below 75% it is marked ⚠ with the other
+  likely lines; when no line answers, the step is skipped and says so.
+- `pick "<criterion>"`: Jev chooses the item of the page's main list (ads left out) that fits
+  best, judged from each item's own text: prices, ratings, dates, labels. It opens the item's
+  link, or clicks it. When none fits, the plan stops with the closest items.
+- `if "<condition>" then <step>`: runs `<step>` only when the page shows the condition;
+  otherwise the step is skipped (–), and the plan goes on.
+- `click "A" | "B"`: alternatives for one control; the first exact name on the page is used
+  with no model call, otherwise Jev looks for either.
+
+All four ask in the step's one Jev request, so they add no round trips. They need a TypeSafe
+key. Keep criteria to what the items' text shows: "under $200 with free cancellation" works;
+"the best value" asks Jev to weigh things it cannot see.
+
+On Codex, a `do` that runs longer than the shell's 10 s wait comes back empty and costs a turn
+to collect: pass a longer wait (`yield_time_ms` 30000) for long plans, or use the MCP server.
+
 ### Single actions
 
 Every action takes a ref or selector, positionally (`click <tab> ref_3`, `click <tab>

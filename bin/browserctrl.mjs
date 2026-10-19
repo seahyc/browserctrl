@@ -251,6 +251,9 @@ function usage() {
                                                    [--dismiss "cookie banner, app-install prompt"] closes only those overlays
                                                    [--repeat 'click Next' --until "<condition>" --max 10 --collect items|text]
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
+                                                   whole task in one call: 'extract "<what>"' (copies the answering line),
+                                                   'pick "<criterion>"' (opens the best-fitting item), 'if "<page shows>" then <step>',
+                                                   'click "A" | "B"' (the first name present)
     browserctrl trace <tab> [--last N] [--json]          what recent do runs did: targets, expectations, overlays, notices
     browserctrl trace on|off                              keep that log (on by default; 2 MB per tab, 50 MB in all)
     browserctrl capture on|off|status                     keep tabs' fetch/XHR traffic for recipe endpoints (off by default; 200 MB)

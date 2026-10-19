@@ -139,7 +139,7 @@ const TOOLS = [
   },
   {
     name: 'browser_do',
-    description: 'Run a multi-step plan on a tab in one call, the fastest way through a page task. Steps: click <el>, fill <el> = <value>, select <el> = <option>, hover, key Enter, type "<text>", scroll down|up, nav <url>, wait <ms>, expect <state>, date YYYY-MM-DD. Name elements as they appear. Append => "<expected>" to check a step; prefix optional to skip a missing element; click! "<exact name>" for a committing control the user authorized. Stops at the first uncertain step and reports candidates. Full grammar: resource browserctrl://guide.',
+    description: 'Run a multi-step plan on a tab in one call, the fastest way through a page task. Steps: click <el>, fill <el> = <value>, select <el> = <option>, hover, key Enter, type "<text>", scroll down|up, nav <url>, wait <ms>, expect <state>, date YYYY-MM-DD, set <slider> = <value>, extract "<what>" (copies the answering line into the report), pick "<criterion>" (opens the best-fitting list item), if "<page shows>" then <step>; click "A" | "B" takes the first name present. Write the whole task to its answer in one plan. Name elements as they appear. Append => "<expected>" to check a step; prefix optional to skip a missing element; click! "<exact name>" for a committing control the user authorized. Stops at the first uncertain step and reports candidates. Full grammar: resource browserctrl://guide.',
     inputSchema: obj({
       ...browserProp,
       ...tabProp,

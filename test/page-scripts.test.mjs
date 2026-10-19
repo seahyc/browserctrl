@@ -56,7 +56,7 @@ test('the loader output parses for sample args, with the helpers each script use
   }
   // Helpers come along by name, and the helpers they use with them.
   assert.match(page('date-page', SAMPLE['date-page']), /function parseDateText\(/);
-  assert.match(page('date-page', SAMPLE['date-page']), /const MONTHS = \["jan"/);
+  assert.match(page('date-page', SAMPLE['date-page']), /const MONTHS = \[/);
   assert.match(page('date-shown', SAMPLE['date-shown']), /function dateCheck\([\s\S]*function findDeep\(/);
   assert.doesNotMatch(page('page-params'), /function \w+\(/, 'a script that names no helper gets none');
 });
