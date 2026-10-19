@@ -27,7 +27,7 @@ import * as captcha from '../lib/captcha.mjs';
 import * as cooldown from '../lib/cooldown.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
-import { setting, number, dirs, configPath, migrateLegacy, requireNode } from '../lib/config.mjs';
+import { setting, number, dirs, configPath, migrateLegacy, legacyMoves, requireNode } from '../lib/config.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { formatRead, deepTextExpression } from '../lib/refs.mjs';
 import { runSteps, formatSteps, PAGE_PARAMS, formatParams, mainLinks } from '../lib/steps.mjs';
@@ -182,6 +182,7 @@ function usage() {
 
   Pick a browser first. There is no default:
     browserctrl browsers                                 what is debuggable right now
+    browserctrl migrate [--apply]                       move an earlier version's folders to this OS's (shows the plan first)
     browserctrl where                                    the install folder and the data, config, state and runtime folders
     browserctrl launch <browser> [--user-data-dir D]     relaunch with its debug port; waits until ready (D = separate instance)
     browserctrl tabs --browser dia                       tabs, with who has claimed them
@@ -407,7 +408,6 @@ export function suggestCommand(word, known = knownCommands()) {
 
 const main = async () => {
   requireNode();
-  migrateLegacy();
   if (!cmd || cmd === 'help' || flags.help) return out(usage());
   if (/^[a-z][a-z_-]*$/.test(cmd)) {
     const near = suggestCommand(cmd);
@@ -447,6 +447,17 @@ const main = async () => {
     return out(report);
   }
 
+  if (cmd === 'migrate') {
+    // Folders an earlier version made are used in place until this moves them (lib/config.mjs).
+    const apply = Boolean(flags.apply);
+    const moves = migrateLegacy({ moves: legacyMoves(), dry: !apply });
+    if (apply) {
+      const { retireLegacyDaemon } = await import('../lib/daemon.mjs');
+      for (const port of Object.values(BROWSERS).map(b => b.port).concat(flags.port ? [Number(flags.port)] : [])) retireLegacyDaemon(port);
+    }
+    const lines = moves.map(m => `${m.skipped ? 'kept ' : apply ? 'moved' : 'would move'} ${m.from} -> ${m.to}${m.skipped ? `  (${m.skipped})` : ''}`);
+    return out(lines.length ? `${lines.join('\n')}${apply ? '' : '\n\nStop any older browserctrl first (its agents and daemons), then: browserctrl migrate --apply'}` : 'Nothing to move: no folders from an earlier version.');
+  }
   if (cmd === 'where') {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     return out({ install: root, stdio: path.join(root, 'bin', 'stdio.mjs'), ...dirs });
