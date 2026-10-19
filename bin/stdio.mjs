@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Persistent, sequential JSON-lines programmatic frontend. One daemon connection per client.
 import readline from 'node:readline';
+import { requireNode } from '../lib/config.mjs';
+requireNode();
 import {connect} from '../lib/daemon.mjs';
 import {requireBrowser} from '../lib/discovery.mjs';
 import {resolveTab, focus, wake, reload} from '../lib/ops.mjs';

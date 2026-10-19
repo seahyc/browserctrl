@@ -28,7 +28,7 @@ import * as cooldown from '../lib/cooldown.mjs';
 import * as jigsaw from '../lib/jigsaw.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
-import { setting, number, dirs, migrateLegacy } from '../lib/config.mjs';
+import { setting, number, dirs, migrateLegacy, requireNode } from '../lib/config.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { formatRead, deepTextExpression } from '../lib/refs.mjs';
 import { runSteps, formatSteps, PAGE_PARAMS, formatParams, mainLinks } from '../lib/steps.mjs';
@@ -392,6 +392,7 @@ export function suggestCommand(word, known = knownCommands()) {
 }
 
 const main = async () => {
+  requireNode();
   migrateLegacy();
   if (!cmd || cmd === 'help' || flags.help) return out(usage());
   if (/^[a-z][a-z_-]*$/.test(cmd)) {
