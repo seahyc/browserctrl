@@ -1,0 +1,59 @@
+<!doctype html><meta charset="utf-8" /><title>Visual controls</title>
+<style>
+  body {
+    margin: 0;
+    background: #f1f5f9;
+  }
+  button,
+  canvas {
+    position: absolute;
+    left: 120px;
+    top: 120px;
+    width: 80px;
+    height: 80px;
+    background: white;
+    border: 2px solid #333;
+  }
+  svg {
+    width: 48px;
+    height: 48px;
+  }
+  #state {
+    position: absolute;
+    top: 300px;
+  }
+</style>
+<button id="icon">
+  <svg viewBox="0 0 24 24">
+    <circle cx="10" cy="10" r="6" fill="none" stroke="black" stroke-width="3" />
+    <path d="m15 15 6 6" stroke="black" stroke-width="3" />
+  </svg></button
+><output id="state">idle</output>
+<script>
+  icon.onclick = () => {
+    state.textContent = "clicked";
+  };
+  icon.onmouseover = () => {
+    document.body.dataset.hovered = "yes";
+  };
+  const mode = new URLSearchParams(location.search).get("mode");
+  if (mode === "named") icon.setAttribute("aria-label", "Inspect");
+  if (mode === "commit" || mode === "visual-commit") {
+    if (mode === "commit") icon.setAttribute("aria-label", "Delete");
+    icon.innerHTML =
+      '<svg viewBox="0 0 24 24"><path d="M6 7h12l-1 14H7zM4 4h16" fill="red"/></svg>';
+  }
+  if (mode === "canvas") {
+    const c = document.createElement("canvas");
+    c.width = 80;
+    c.height = 80;
+    c.id = "widget";
+    c.onclick = () => {
+      state.textContent = "canvas clicked";
+    };
+    icon.replaceWith(c);
+    const x = c.getContext("2d");
+    x.fillStyle = "blue";
+    x.fillRect(10, 10, 60, 60);
+  }
+</script>

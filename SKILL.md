@@ -60,6 +60,7 @@ browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 
 - **Naming:** elements in words as they appear. Exact names need no model; Jev picks the rest
   and needs `TYPESAFE_API_KEY` (see [settings](references/settings.md)). A step can name
   `ref_25`, an items id `i140` or a CSS selector; those never go to Jev.
+  If text cannot find a target, `do` can try a screenshot; `BROWSERCTRL_VISION=off` disables it.
 - **It stops instead of guessing:** an unsure pick is marked ⚠; a missing value, an unchanged
   checkbox, an error or a dialog in the way stops with what is there.
 - **Lists:** `--repeat 'click "Next"' --until "<condition>" --collect items`.

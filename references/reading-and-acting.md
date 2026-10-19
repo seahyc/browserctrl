@@ -453,6 +453,21 @@ cart, order lookup) and tied on tasks that only read a list. Handing a whole tas
 Jev (`jev-tool`) was never faster and finished none of 21 runs. Results:
 [bench/RESULTS.md](../bench/RESULTS.md).
 
+### Screenshot fallback
+
+When text grounding finds no candidate, Jev chooses none, or its pick is below `--min-p`,
+`do` can try one viewport screenshot for `click`, `hover`, `fill` or `select`.
+Refs, items ids and CSS selectors never use it. The capture does not select the tab.
+Failed or blank captures and dormant tabs skip it. `BROWSERCTRL_VISION=off` disables it.
+
+This path sends the screenshot to pinned `jev-1.14.0`, even with another `TYPESAFE_MODEL`.
+It adds about 3k input tokens, $0.0001 and 0.2-0.4 s only when the fallback runs.
+TypeSafe calls images "dreamer-ready". The fallback requires visibility p ≥ 0.75,
+box confidence ≥ 0.6 and a box covering less than 15% of the viewport, then applies
+the usual visibility, hit and commit checks. A screenshot pick shows ⚠ unless visibility
+p ≥ 0.9 and confidence ≥ 0.85. Canvas and unnamed targets allow only click or hover
+at the point and always show ⚠. Check those results before relying on them.
+
 ### Intent targets and page checks (experimental)
 
 Instead of reading the page to find a ref, name the element and let Jev pick it from

@@ -6,15 +6,21 @@
 // with no surprises gets.
 //   const jev = fakeJev({ choice: (q, id) => …, noul: (q, id) => … });
 //   runSteps(conn, tab, steps, { jev, noNotes: true })
-export function fakeJev({ choice, noul, fail } = {}) {
+export function fakeJev({ choice, noul, box, fail, model, usage = { input_tokens: 2600 } } = {}) {
   const calls = [];
+  const requests = [];
   const fetchImpl = async (url, init) => {
     if (fail) throw new Error(typeof fail === 'string' ? fail : 'Jev is unreachable');
     const body = JSON.parse(init.body);
     calls.push(body);
+    requests.push({ body, headers: init.headers });
+    const imageHeader = new Headers(init.headers).get('TypeSafe-Danger-Zone-Images');
+    if (imageHeader !== (body.assets ? 'true' : null)) throw new Error('images header must match assets');
+    if (model && body.model !== model) throw new Error(`expected model ${model}, got ${body.model}`);
     const answers = {};
     for (const [id, q] of Object.entries(body.questions)) {
       if (q.type === 'noul') answers[id] = { type: 'noul', noul: noul?.(q, id, body.state) ?? 0.04 };
+      else if (q.type === 'box') answers[id] = { type: 'box', ...(box?.(q, id, body.state, body.assets) ?? { box: { top: 0, bottom: 1, left: 0, right: 1 }, confidence: 0.04 }) };
       else {
         const rule = choice?.(q, id, body.state) ?? 'none';
         const { choice: pick, p, confidence } = typeof rule === 'string' ? { choice: rule } : rule;
@@ -25,9 +31,9 @@ export function fakeJev({ choice, noul, fail } = {}) {
         }
       }
     }
-    return { ok: true, status: 200, json: async () => ({ answers, model: 'fake' }) };
+    return { ok: true, status: 200, json: async () => ({ answers, model: body.model, usage }) };
   };
-  return { cfg: { key: 'fake', model: 'fake' }, fetchImpl, calls };
+  return { cfg: { key: 'fake', model: model || 'fake' }, fetchImpl, calls, requests };
 }
 
 // The id of the option whose text (or its text field) includes `words`.

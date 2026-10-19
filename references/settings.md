@@ -75,10 +75,11 @@ Jev answers "which control does this step mean?" for names that are not exact. S
 | Name | Default | What it does |
 | --- | --- | --- |
 | `TYPESAFE_API_KEY` | none | API key for api.typesafe.ai. Read from the environment, else from the Jev env file. Without it, exact names, refs and selectors still work and nothing is sent. |
-| `TYPESAFE_MODEL` | `jev-latest` | Model name. Can also be set in the Jev env file. |
+| `TYPESAFE_MODEL` | `jev-1.14.0` | Model name. Can also be set in the Jev env file. Screenshot grounding always uses pinned `jev-1.14.0`. |
+| `BROWSERCTRL_VISION` | `auto` | Screenshot fallback in `do` when text grounding cannot act. `off` disables it. |
 | `BROWSERCTRL_JEV_ENV` | `<config>/jev.env` | Another file to read the key from. |
 | `BROWSERCTRL_JEV_ENDPOINT` | `https://api.typesafe.ai/v1/systemone` | Another endpoint, for tests or a proxy. |
-| `BROWSERCTRL_JEV_LOG` | off | A file. Every Jev call's exact input and answer is appended, one JSON line each. |
+| `BROWSERCTRL_JEV_LOG` | off | A file. Every Jev call's input and answer is appended, one JSON line each. Images log only their references and byte sizes. |
 
 ## Features
 
