@@ -1,19 +1,21 @@
 # API recipe format
 
 A recipe is one JSON file at `<site>/<name>.json`, either in your own
-`~/.config/browserctrl/recipes` (override with `BROWSERCTRL_RECIPES`) or in a tap.
+`recipes` folder (in the config folder that `browserctrl where` prints; override with `BROWSERCTRL_RECIPES`) or in a tap.
 `browserctrl recipe run <site>/<name>` and the MCP `browser_recipe` tool run it. Every request runs inside
 a tab on the recipe's origin, so the site's cookies, request signing and
 anti-fraud wrappers apply as they do for the page itself.
 
 A tap is a git repo of recipes (at its root or under `recipes/`), cloned with
-`browserctrl recipe tap add <git-url>` into `~/.config/browserctrl/taps/<tap>/`
-and refreshed with `recipe tap update`. A local recipe overrides a tapped one with
-the same name. To share a recipe, copy it into a tap repo and open a pull request.
+`browserctrl recipe tap add <git-url>` into the `taps/<tap>/` folder of the config folder.
+A tap is code from someone else, so it is pinned to the commit you accepted. Recipes run from
+that commit only. `recipe tap update [name]` fetches and shows what changed; `--accept` applies
+it. A tap that is not at its pinned commit, or has local edits, does not run.
+A local recipe overrides a tapped one with the same name. To share a recipe, copy it into a tap repo and open a pull request.
 
 Recipes hold no secrets. Auth is a source that is read when the recipe runs.
 Captured exemplars, which do contain tokens, stay in
-`~/.local/share/browserctrl/exemplars` and are never copied into a recipe.
+the `exemplars` folder of the data folder and are never copied into a recipe.
 
 ## Fields
 
@@ -25,7 +27,7 @@ Captured exemplars, which do contain tokens, stay in
 | `match` | Optional URL regexes for the pages this recipe serves, used by `recipe find <url>` and the `hint:` line. Default: any page on the recipe's site or origin host, including subdomains. |
 | `keywords` | Optional words for `recipe find`, e.g. `["orders", "purchases", "history"]`. |
 | `warm_path` | Page to open when browserctrl creates the tab. |
-| `tab` | Omit for a background tab browserctrl opens, reuses and keeps rendering (`wake` in SKILL.md). `handoff` uses a tab the human opened (marked tabs first, matched by `handoff_match`); it is never opened, navigated or reloaded. Use it for sites that drop the session on automation-started page loads. |
+| `tab` | Omit for a background tab browserctrl opens, reuses and keeps rendering (`wake`: see [tabs-and-browser.md](tabs-and-browser.md)). `handoff` uses a tab the human opened (marked tabs first, matched by `handoff_match`); it is never opened, navigated or reloaded. Use it for sites that drop the session on automation-started page loads. |
 | `settle_ms` | Wait after a newly created tab loads (default 1500). Some anti-fraud SDKs sign requests only once they finish starting. |
 | `pace_ms` | Delay between paginated calls. |
 | `timeout_ms` | Deadline for each in-page call (default 20000). A call that does not finish is aborted in the page. A `read` recipe that stalls is retried once; a `write` is never retried. |

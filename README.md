@@ -31,7 +31,7 @@ After the plan runs, browserctrl tells the AI what changed: "Results: 51 items �
 
 It checks its own work. If a box didn't tick, a section didn't open or the page shows an error, it stops there and says so, instead of carrying on three steps later as if all was fine. When it's unsure it picked the right button, it says that too.
 
-It won't press buttons that look like they spend money or send something (Buy, Pay, Book, Send, Place order, Delete, and so on) unless the plan marks that step on purpose. To be clear about how that works: it's a fixed list of English words plus a check for card fields and order totals on the page. It doesn't use a model. So it can miss a "Comprar" button, and it sometimes blocks a harmless "Submit" on a quiz.
+It won't press buttons that look like they spend money or send something (Buy, Pay, Book, Send, Place order, Delete, and so on) unless the plan marks that step on purpose. To be clear about how that works: it's still a word list, now covering about 20 languages, plus some page structure. Ticking, choosing and following a link never count, and the submit button of a checkout form always does. A button whose label is in a script or language the list doesn't cover goes to Jev as a yes/no question before it's clicked. So it can miss a button with an unusual label, and it sometimes blocks a harmless "Submit" on a quiz.
 
 For sites it already knows, a *recipe* skips the clicking and asks the site's own API. A whole Shopee order history comes back in about 7 seconds that way.
 
@@ -186,31 +186,113 @@ Most of the time goes to the agent thinking. Across the final set, browserctrl's
 
 Copy and paste this into your coding agent:
 
-> Please install browserctrl from https://github.com/seahyc/browserctrl. Read its instructions, check my operating system and Node.js version, and set up whichever interface my agent supports: CLI, MCP or an agent skill. Use a local checkout and tell me what you configured. Ask which browser I want to use, and get my permission before enabling browser access or restarting it. Verify setup on a disposable test page, then show me how to use and uninstall it.
+> Please install browserctrl (`@seahyc/browserctrl` on npm, source at https://github.com/seahyc/browserctrl). Read its instructions, check my operating system and Node.js version, and set up whichever interface my agent supports: CLI, MCP or an agent skill. Tell me what you configured. Ask which browser I want to use, and get my permission before enabling browser access or restarting any browser. Tell me what data browserctrl sends out and stores before you turn anything on. Verify setup on a disposable test page, then show me how to use and uninstall it.
 
-To set it up yourself, install [Node.js 22 or newer](https://nodejs.org/), then:
+To set it up yourself, the steps are: install it, turn on remote debugging in one browser, then connect your agent.
+
+### 1. Install
+
+browserctrl needs [Node.js 22 or newer](https://nodejs.org/) on macOS, Linux or Windows. It checks this when it starts.
+
+```sh
+npx -y @seahyc/browserctrl browsers     # try it without installing
+npm i -g @seahyc/browserctrl            # or install the browserctrl and browserctrl-mcp commands
+```
+
+The package is not on npm yet. Until it is, install from a clone:
 
 ```sh
 git clone https://github.com/seahyc/browserctrl.git
 cd browserctrl
 npm ci
-node bin/browserctrl.mjs help
+npm link                                # puts browserctrl and browserctrl-mcp on your PATH
+browserctrl help
 ```
 
-`npm link` makes `browserctrl` available everywhere (plus the older names `cdp` and `browserctl`).
+`browserctrl where` prints the install folder and the folders where browserctrl keeps its data, config, state and runtime files. On macOS that is `~/Library/Application Support/browserctrl`, on Linux the XDG data, config and state folders, and on Windows `%LOCALAPPDATA%` and `%APPDATA%`. `BROWSERCTRL_HOME=<folder>` puts everything in one folder. Every setting is listed in [references/settings.md](references/settings.md).
+
+### 2. Turn on remote debugging in a browser
+
+browserctrl talks to Chromium browsers (Chrome, Dia, Brave, Edge, Chromium, Arc) over their debugging port, and to Safari 27 or later through Apple's automation interface. It never picks a browser for you: run `browserctrl browsers` to see which are ready, then name one with `--browser <name>` or set `BROWSERCTRL_BROWSER` once. There are two ways to get a debugging port.
+
+- **Your normal Chrome, on any OS:** open `chrome://inspect/#remote-debugging` and switch the toggle on. Chrome asks you to allow each new connection.
+- **A separate profile, on any OS:** `browserctrl launch chrome` starts a separate Chrome with its own empty profile and the debugging port on (on macOS add `--user-data-dir <folder>`). On Linux and Windows this is how `launch` always works, and it never touches a browser you already have open. By hand, it is the same as running the browser with `--remote-debugging-port=9222 --user-data-dir=<a new folder>`, then using `--port 9222`. Sign in inside that profile if you need to.
+- **macOS, other browsers:** `browserctrl launch dia` (or `brave`, `edge`, `chromium`, `arc`) quits that browser and reopens it with the port on, so only run it when you are happy to restart it. Chrome 136 and later refuses a debugging port on its real profile, so use the toggle or `--user-data-dir` there.
+- **Safari:** enable Settings > Advanced > Show features for web developers, then Settings > Developer > Allow remote automation and external agents. browserctrl does not enable this for you.
+
+### 3. Connect your agent
+
+The CLI works with any agent that can run terminal commands. For agents that speak MCP, add the server. All of these start `browserctrl-mcp` through npx, so they work without a global install. If you installed from a clone with `npm link`, use `browserctrl-mcp` as the command, or `node /absolute/path/to/browserctrl/mcp/server.mjs`.
+
+**Claude Code**
+
+```sh
+claude mcp add browserctrl -- npx -y -p @seahyc/browserctrl browserctrl-mcp
+```
+
+**Codex**, in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.browserctrl]
+command = "npx"
+args = ["-y", "-p", "@seahyc/browserctrl", "browserctrl-mcp"]
+```
+
+**Cursor**, in `.cursor/mcp.json` (or `~/.cursor/mcp.json`), and **Gemini CLI**, in `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "browserctrl": {
+      "command": "npx",
+      "args": ["-y", "-p", "@seahyc/browserctrl", "browserctrl-mcp"]
+    }
+  }
+}
+```
+
+**Any other MCP client** takes the same command, `npx -y -p @seahyc/browserctrl browserctrl-mcp`, over stdio. Settings go in the entry's `env` block, for example `"env": { "BROWSERCTRL_BROWSER": "chrome" }`.
+
+The server lists 18 core tools by default, to keep the start of every run short. `BROWSERCTRL_MCP_TOOLS=all` lists every tool, or name the extra ones in a comma list. It also offers `browserctrl://guide` and `browserctrl://reference/<name>` as MCP resources.
+
+**Agent skill.** Harnesses that load a `SKILL.md` need the package folder in their skills folder under the name `browserctrl`. A link or a copy both work. For example, Claude Code reads `~/.claude/skills`, and Codex and some other harnesses read `~/.agents/skills`:
+
+```sh
+ln -s "$(npm root -g)/@seahyc/browserctrl" ~/.claude/skills/browserctrl
+```
+
+From a clone, link the clone's folder instead. [SKILL.md](SKILL.md) is the short guide the agent reads, and it points at [the references](references/) when a task needs more. On Windows, copy the folder or use a junction.
+
+**Python:** `pip install ./python` from a clone gives the `browserctrl` package. It starts a Node sidecar, so Node 22+ and the npm package must be installed. See [the Python README](python/README.md).
+
+### What leaves your computer, and what it keeps
+
+**Jev sends a little page text to TypeSafe.** When a `do` step, an `--intent` or a `check` names a control in words that are not its exact name, browserctrl asks Jev, a model run by [TypeSafe](https://typesafe.ai) at api.typesafe.ai, which control is meant. For that call it sends the page address, the page title, up to about 3,000 characters of the page's visible text, and each candidate control's role and name (with its current value, link path and nearby label when it has them). It sends no screenshot. Exact names, refs and CSS selectors never go to Jev, and they work with no key at all. Without a key, a step that needs Jev stops with a message saying so. The commit guard may also send one button label to Jev as a yes/no question (see below).
+
+Jev needs `TYPESAFE_API_KEY`, set either in the environment of the agent, or in a `jev.env` file in the config folder (`TYPESAFE_API_KEY=...`). `BROWSERCTRL_JEV_ENV` names another file. `BROWSERCTRL_JEV_LOG=<file>` writes every call's exact input and answer, so you can see what was sent.
+
+**What stays on your machine.**
+
+- A trace of each `do` plan (targets, expectations, notices, address changes) is on by default, capped at 2 MB per tab and 50 MB in all. `browserctrl trace off` stops it.
+- Capturing fetch/XHR traffic, with bodies, headers and tokens, is off by default. Only `browserctrl capture on` starts it, and it is capped at 200 MB.
+- Recordings only happen when you start one.
+- Flow notes, tab claims, and short connection logs (lifecycle events, no page content) are kept locally. `BROWSERCTRL_TELEMETRY=0` turns the connection logs off.
+- A local bridge on 127.0.0.1 serves the annotation overlay, the tab tray and recordings. It refuses any request without a per-install token. The URLs the CLI prints carry the token.
+- Shared recipe repositories ("taps") are pinned to the commit you accepted. `browserctrl recipe tap update` shows what changed, and `--accept` applies it.
+
+If you loaded the optional extension before this version, remove it and load it again. The bridge now trusts it by its fixed extension id.
+
+### Uninstall
+
+1. Run `browserctrl where` and note the folders. Stop the background processes: `browserctrl stop --browser <name>` for each browser you used.
+2. Remove the package: `npm rm -g @seahyc/browserctrl` (from a clone: `npm unlink -g @seahyc/browserctrl`). `pip uninstall browserctrl` if you installed the Python client.
+3. Remove the MCP entry: `claude mcp remove browserctrl`, or delete the `browserctrl` block from `~/.codex/config.toml`, `.cursor/mcp.json` or `~/.gemini/settings.json`. Remove the skill link or copy from the skills folder.
+4. Delete the data, config, state and runtime folders from step 1. This removes your notes, recordings, traces, recipes, Jev key file and any separate browser profile that `launch` made.
+5. Remove the extension from `chrome://extensions`, and switch off the `chrome://inspect/#remote-debugging` toggle if you turned it on.
 
 ## For developers
 
-### Connecting your agent
-
-- **CLI:** the default when your agent can run terminal commands; it needs no skill or MCP support.
-- **MCP:** point your agent's MCP configuration at `node /absolute/path/to/browserctrl/mcp/server.mjs`.
-- **Agent skill:** for agents that load skills from `~/.agents/skills`, link or clone this repository at `~/.agents/skills/browserctrl`. [SKILL.md](SKILL.md) is the full guide agents read.
-- **Python:** `python/chrome_cdp` has a persistent client that starts a Node sidecar. See [the Python helpers](python/chrome_cdp/HELPERS.md).
-
-All Chromium interfaces share one browser-control core. Safari uses Apple's official MCP server through its own adapter.
-
-### The basics
+### Using the CLI
 
 Pick a browser by name; browserctrl never guesses:
 
@@ -222,7 +304,7 @@ browserctrl click <tab> ref_2 --browser chrome
 browserctrl fill <tab> ref_3 "Example" --browser chrome
 ```
 
-On macOS, enable Chrome's remote debugging at `chrome://inspect/#remote-debugging`, or launch a separate profile with `--remote-debugging-port=9222 --user-data-dir=/tmp/browserctrl-chrome` and use `--port 9222`. `read` waits for a loading page and says how long it waited. A ref keeps meaning what your last `read` showed; if the page changed, browserctrl says the ref is stale instead of clicking something else. It never replays an action whose result is uncertain, and a stuck page can be recovered with `reload`.
+`read` waits for a loading page and says how long it waited. A ref keeps meaning what your last `read` showed; if the page changed, browserctrl says the ref is stale instead of clicking something else. It never replays an action whose result is uncertain, and a stuck page can be recovered with `reload`. Give each agent its own identity with `BROWSERCTRL_AGENT_ID` so two agents never share a tab claim. Without it, the harness session id or the parent process stands in, and a claim whose owner has gone counts as released.
 
 ### Plans with `do`, and finding things
 
@@ -247,7 +329,7 @@ browserctrl recipe run shopee.sg/orders --browser chrome
 
 Recipes use sites' internal APIs, which can change without notice; you are responsible for using them within each site's terms. The format is in [references/recipes.md](references/recipes.md).
 
-**Notes** are short facts about how a site works, written by agents after a task (`notes add <site> "<fact>"`) and checked by Jev so a note can't carry the task's answer or personal data. They are shown as hints, passed to Jev as context in `do`, and can carry runnable steps: `--reveal "<target>" '<step>'` runs when a target is hidden, `--on "<situation>" '<step>'` when a situation appears. Notes that run are confirmed or contradicted automatically, and unused ones expire after 90 days. They stay local in `~/.local/share/browserctrl/notes/`; `BROWSERCTRL_NOTES=quiet` records without hinting and `=off` disables them.
+**Notes** are short facts about how a site works, written by agents after a task (`notes add <site> "<fact>"`) and checked by Jev so a note can't carry the task's answer or personal data. They are shown as hints, passed to Jev as context in `do`, and can carry runnable steps: `--reveal "<target>" '<step>'` runs when a target is hidden, `--on "<situation>" '<step>'` when a situation appears. Notes that run are confirmed or contradicted automatically, and unused ones expire after 90 days. They stay local, in the `notes` folder of the data folder (`browserctrl where`); `BROWSERCTRL_NOTES=quiet` records without hinting and `=off` disables them.
 
 **Profiles:** `profiles --browser chrome` lists a Chromium browser's profiles; `open <url> --profile <name>` opens a tab in one.
 
@@ -263,7 +345,7 @@ browserctrl replay <dir> --video run.mp4 --gif run.gif
 browserctrl replay --side-by-side <a> <b> --labels "Before,After" --video ab.mp4 --gif ab.gif
 ```
 
-Nothing is recorded unless you start it. A recording is the page's DOM changes (brotli) plus a small JPEG per action, about 1 MB for a 3-minute run. Videos replay it at real speed with captions in plain words and a clock; every clip in this README was made that way. `rec om2w` exports a run for the Online-Mind2Web judge. rrweb 2.1.7 is vendored in `vendor/rrweb/` (MIT).
+Nothing is recorded unless you start it. A recording is the page's DOM changes (brotli) plus a small JPEG per action, about 1 MB for a 3-minute run. Videos replay it at real speed with captions in plain words and a clock; every clip in this README was made that way. `node bench/om2w/export.mjs` turns a recording into Online-Mind2Web judge input (it lives with the benchmark). rrweb 2.1.7 is vendored in `vendor/rrweb/` (MIT).
 
 Recordings in the default folder are capped at 1 GB in total (oldest deleted first), and one recording stops growing at 300 MB. Two logs sit alongside them. `do` keeps a short trace of every plan for `browserctrl trace <tab>`: it's on by default, capped at 2 MB per tab and 50 MB in all, and `browserctrl trace off` stops it. `browserctrl capture on` keeps the fetch/XHR traffic of tabs you drive (bodies, headers and tokens included), which `recipe endpoints` reads when you build a recipe. It's off by default and capped at 200 MB. Each cap can be changed with `BROWSERCTRL_TRACE_MAX_MB`, `BROWSERCTRL_REC_MAX_MB` or `BROWSERCTRL_CAPTURE_MAX_MB`.
 
@@ -271,7 +353,7 @@ Recordings in the default folder are capped at 1 GB in total (oldest deleted fir
 
 The CLI, MCP server and Python client share one long-lived connection per browser debugging port, so console messages and network errors stay available across commands. Agents claim a tab while they work on it; claims expire after 15 minutes unless renewed. Claims coordinate agents that use browserctrl, but they don't hide your browser data or control other tools. `browserctrl activity --browser chrome` shows who owns which tab and what they're doing, and `activity pause --owner <id>` pauses an agent.
 
-browserctrl supports Chromium browsers (Chrome, Dia, Brave, Edge, Chromium, Arc) on macOS, Linux and Windows. An optional extension adds tab groups and other browser-level features; Dia also has native controls for dormant tabs. Details and test evidence are in [compatibility](docs/compatibility.md).
+browserctrl supports Chromium browsers (Chrome, Dia, Brave, Edge, Chromium, Arc) on macOS, Linux and Windows. Firefox is not supported. An optional extension adds tab groups and other browser-level features; Dia also has native controls for dormant tabs. Details and test evidence are in [compatibility](docs/compatibility.md).
 
 **Safari** 27 or later on macOS works through Apple's own automation interface, in a separate automation session with its own element IDs. Enable Settings → Advanced → Show features for web developers, then Settings → Developer → Allow remote automation and external agents. browserctrl does not enable this for you.
 

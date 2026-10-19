@@ -1,6 +1,6 @@
 # Recording: runs, replay and video, plays, annotation
 
-Part of the [browserctrl skill](../SKILL.md): these sections moved here whole from the skill file.
+Part of the [browserctrl skill](../SKILL.md).
 
 ## Annotation: point at elements for the agent
 
@@ -16,7 +16,7 @@ test id and several selectors, a cropped screenshot, and which tab it was.
 Annotating a tab marks it too.
 
 Delivery to the agent, in order of portability: the `browser_annotations` MCP
-tool works everywhere; every `browser_*` result appends a line when the queue
+tool (`action: read`, `consume`, `clear`, `marks`, `arm`) works everywhere; every `browser_*` result appends a line when the queue
 is non-empty, which needs nothing from the harness; and in Claude Code a
 `UserPromptSubmit` hook puts them in front of the agent automatically.
 
@@ -41,9 +41,14 @@ browserctrl record start --browser dia --video --label "shortlist flow"
 # ... drive the browser, and anything else on screen ...
 browserctrl record stop
 browserctrl recording <id> --steps        # readable steps with element identity
-browserctrl annotate <id> --browser dia   # mark moments on the video
+browserctrl annotate <id> --browser dia   # opens the annotator page (its URL carries the bridge token)
 browserctrl recording <id>                # marks resolved to real events
 ```
+
+The annotator, the tray and the recording API are served by a local bridge that needs a
+per-install token. The CLI prints URLs that already carry it; open those rather than typing the
+address. The extension is trusted by its fixed id, so an extension loaded before that id was
+fixed must be removed and loaded again.
 
 `record arm` is opt-in on purpose: an armed capture writes video continuously
 whether or not you ever record. `browserctrl record status` says whether one is warm,
@@ -66,7 +71,6 @@ browserctrl rec stop <tab> --browser dia      # prints the directory and its siz
 browserctrl replay DIR                        # one self-contained HTML: DOM replay + step timeline
 browserctrl replay DIR --video run.mp4 --gif run.gif   # real-time video: plain-words captions, clock, "Thinking…" gaps
 browserctrl replay --side-by-side DIR_A DIR_B --labels "Without,With" --video ab.mp4 --gif ab.gif   # one clock, "Done in m:ss"
-browserctrl rec om2w DIR --task-id ID --task "…" --answer "…" --root R   # Online-Mind2Web judge input
 ```
 
 A recording is rrweb DOM events (`rrweb.ndjson.br`, brotli) plus one 1280-px JPEG
@@ -81,5 +85,9 @@ replay to each frame's time, so they keep the run's real timing however busy the
 is; frames that did not change cost nothing. Pages load their images from the live site
 during rendering: if the run went through a proxy (a geo-blocked site), pass the same one
 with `--proxy socks5://…` (or `BROWSERCTRL_VIDEO_PROXY`). The GIF is sped up 4× by
-default (`--gif-speed`) and kept under 8 MB; the MP4 stays real-time. Needs ffmpeg. The MCP tool is `browser_rec`. The
-bench harness records every run into `bench/runs/<run>/rec/`.
+default (`--gif-speed`) and kept under 8 MB; the MP4 stays real-time. Needs ffmpeg. The MCP tool is `browser_record` with `action` `tab_start`, `tab_stop` or
+`tab_status` (the old name `browser_rec` still answers); the human's plays use `start`, `stop`, `list`
+and `show` (old name `browser_recording`). The Online-Mind2Web judge input is made by
+`node bench/om2w/export.mjs <recording dir> <out dir> --task-id ID --task "…" [--answer "…"]`,
+which lives with the benchmark and is not part of the CLI. Recordings go to the data folder
+(`browserctrl where`), capped at 1 GB in total. The bench harness records every run into `bench/runs/<run>/rec/`.

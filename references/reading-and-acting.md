@@ -1,6 +1,6 @@
 # Reading and acting: planning, read, items, do, single actions, waiting, Jev
 
-Part of the [browserctrl skill](../SKILL.md): these sections moved here whole from the skill file.
+Part of the [browserctrl skill](../SKILL.md).
 
 ## Fastest way through a task
 
@@ -251,7 +251,8 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   each step's target, how it was found (exact or Jev p), URL changes, expectations
   with p, dismissed overlays and notices. Review traces after the task, or when a
   result looks wrong, instead of adding read steps to the plan. Traces live in
-  `~/.local/share/browserctrl/traces/` (`BROWSERCTRL_TRACES` overrides).
+  the `traces` folder of the data folder (`browserctrl where`; `BROWSERCTRL_TRACES` overrides).
+  Tracing is on by default, capped at 2 MB per tab and 50 MB in all; `browserctrl trace off` stops it.
 - **Flow notes** are short facts about how a site works, written by agents after
   earlier tasks. Read them all with `browserctrl site <site>` (or `notes <page URL>`,
   that page first) before planning. `open`, `nav`, `read` and each `do` step that lands
@@ -443,6 +444,8 @@ browserctrl check <tab> [--expect "the price filter is open"] --browser dia
   a dialog and an empty state, plus `--expect`, from what is on screen. `check` runs the
   same checks alone. `--no-check` skips them. These are judgments; confirm the result
   you report.
-- Needs `TYPESAFE_API_KEY` in the environment or in `BROWSERCTRL_JEV_ENV`
-  (default `~/Code/jev-ultrafast/.env`). Jev receives the intent, the candidate
-  elements' roles, names and links, and up to 3,000 characters of on-screen text.
+- Needs `TYPESAFE_API_KEY` in the environment, or in `jev.env` in the config folder
+  (`BROWSERCTRL_JEV_ENV` names another file). Jev (api.typesafe.ai) receives the intent, the page
+  address and title, the candidate elements' roles, names and links, and up to 3,000
+  characters of on-screen text. Exact names, refs and selectors need no key and send nothing.
+  [settings.md](settings.md) lists the Jev settings.

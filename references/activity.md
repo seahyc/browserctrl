@@ -5,7 +5,7 @@ driving a browser, or when repeated navigation interrupts their browsing.
 
 ## Describe the work
 
-Keep one stable `CDP_AGENT_ID` across CLI and Python calls, or supply the same
+Keep one stable `BROWSERCTRL_AGENT_ID` across CLI and Python calls, or supply the same
 `agentId` on MCP calls. Before a link audit or another bulk task, register a
 short description and the expected number of items:
 
@@ -54,16 +54,16 @@ browserctrl reload <tab> --browser dia --until load --timeout 30000
 Reload waits for the actual new document. `--until` accepts `load`,
 `domcontentloaded`, `networkidle` or `none`. The timeout defaults to 30000
 milliseconds. Choose `none` only when a later observation will verify the result.
-`ready` observes the existing page; `focus` selects it; `reload` reloads it.
-`wake` remains a compatibility alias for `focus`, and `refresh` aliases `reload`.
-Focus requires no additional approval flag.
+`ready` observes the existing page; `focus` selects it; `wake` keeps it rendering in
+the background without selecting it; `reload` reloads it (`refresh` is the old name and
+still works). Focus requires no additional approval flag.
 
-The MCP tools are `browser_focus` and `browser_reload`; `browser_wake` and
-`browser_refresh` are compatibility aliases. The SDK provides `ops.focus` and
-`ops.reload`, with `ops.wake` and `ops.refresh` as aliases. The persistent
-Chromium Python client provides `client.focus(tab)` and `client.reload(tab,
-wait_until='load', timeout=None)`, with `client.wake` and `client.refresh` as
-aliases.
+The MCP tools are `browser_focus`, `browser_wake` and `browser_reload`. They are not in the
+default core list: add them with `BROWSERCTRL_MCP_TOOLS=browser_focus,browser_wake,browser_reload`
+(or `all`). The old name `browser_refresh` still answers and runs `browser_reload`. The SDK
+provides `ops.focus`, `ops.wake` and `ops.reload` (`ops.refresh` is an alias). The persistent
+Chromium Python client provides `client.focus(tab)`, `client.wake(tab, off=False)` and
+`client.reload(tab, wait_until='load', timeout=None)` (`client.refresh` is an alias).
 
 Safari uses the same `reload` and `refresh` commands in Apple's separate
 automation session. The adapter schedules one `location.reload()` through

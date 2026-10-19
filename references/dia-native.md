@@ -5,9 +5,6 @@ or when you must select and group exact Dia tabs without creating or closing
 tabs. This workflow uses Dia's native scripting interface for inventory and
 focus, then the loaded handoff extension for tab groups.
 
-The skill and primary CLI are named `browserctrl`. The `cdp` command remains
-a compatibility alias.
-
 ## Inspect the native inventory
 
 `native-tabs` reads every Dia window and its tabs, including dormant tabs that

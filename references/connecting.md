@@ -1,20 +1,15 @@
 # Connecting: the shared connection, browsers, Safari, diagnostics
 
-Part of the [browserctrl skill](../SKILL.md): these sections moved here whole from the skill file.
-
-## About this skill
-
-Project source and issues: [seahyc/browserctrl](https://github.com/seahyc/browserctrl).
-
-Invoke this skill as `$browserctrl`. The primary CLI is `browserctrl`; `cdp`
-and `browserctl` remain compatibility commands. Legacy runtime paths under
-`skills/chrome-cdp` have no SKILL.md and are not a second skill.
+Part of the [browserctrl skill](../SKILL.md). Project source and issues:
+[seahyc/browserctrl](https://github.com/seahyc/browserctrl). Folders and settings:
+[settings.md](settings.md); `browserctrl where` prints the install and data folders.
 
 ## Safari and platform selection
 
 Select the browser explicitly. Chromium uses the existing CDP commands on macOS,
 Linux and Windows. Windows uses named pipes and a PowerShell lock adapter, not
-AppleScript. Automatic relaunch and screen video remain macOS-only. See
+AppleScript. Relaunching the real profile and screen video remain macOS-only; on Linux and
+Windows `browserctrl launch` starts a separate profile instead. Firefox is not supported. See
 [compatibility and test evidence](../docs/compatibility.md) before promising support.
 
 For Safari 27+ on macOS, use `--browser safari` and the separate Apple MCP adapter.
@@ -34,7 +29,7 @@ browserctrl safari call page_interactions --tab <full-tab-handle> --args '{"inte
 Safari calls use full native tab handles and node UIDs from Safari's own content
 read, never Chromium `ref_N` values. Every page call needs an explicit handle;
 the daemon checks the claim and serializes tab selection plus the call. Supply a
-stable `CDP_AGENT_ID` for CLI workflows or `agentId` on every shared MCP call.
+stable `BROWSERCTRL_AGENT_ID` for CLI workflows or `agentId` on every shared MCP call.
 Release your claims at handoff. The MCP `browser_safari` tool supports `tools`,
 `call`, `status` and `stop`; common browser tools also route supported operations
 when `browser="safari"`. Unsupported operations fail explicitly. Python's
@@ -49,7 +44,7 @@ against a disposable page before offering an unattended workflow.
 
 ## Start here: reuse the shared connection
 
-For every browser action, use this skill's CLI, MCP server, or SDK. They share
+For every browser action, use the `browserctrl` CLI, the MCP server, or the SDK. They share
 one daemon connection per browser. Do not create direct WebSocket clients or use
 Playwright `connect_over_cdp` against the signed-in browser: those bypass the pool
 and can trigger a fresh debugging approval for each connection.
@@ -57,7 +52,9 @@ and can trigger a fresh debugging approval for each connection.
 1. Select Dia explicitly with `--browser dia` or MCP `browser: "dia"` when using
    the user's Dia session.
 2. Choose one unique identity for this agent and keep it across all calls:
-   `CDP_AGENT_ID` for CLI/Python, or `agentId` for MCP. Give sibling agents
+   `BROWSERCTRL_AGENT_ID` for CLI/Python, or `agentId` for MCP. With none set, the
+   harness session id (Codex, Claude Code) or the parent process stands in, and a claim
+   whose owner process has gone counts as released. Give sibling agents
    different identities, even when they share one MCP server.
 3. Before bulk browsing, describe the work and its progress with `activity describe`.
    Read [activity and background readiness](activity.md) for status,
@@ -73,11 +70,11 @@ and can trigger a fresh debugging approval for each connection.
    callers before changing the connection. See
    [Repeated debugging approvals](#repeated-debugging-approvals).
 
-For CLI use, set `CDP_AGENT_ID` to your unique task identity on every invocation
+For CLI use, set `BROWSERCTRL_AGENT_ID` to your unique task identity on every invocation
 (or export it once in a persistent shell), then run:
 
 ```sh
-node ~/.agents/skills/browserctrl/scripts/browserctrl.mjs tabs --browser dia
+browserctrl tabs --browser dia
 ```
 
 One initial approval or a new approval after browser reconnection can still be
@@ -85,14 +82,11 @@ required. The pool cannot suppress approvals from clients that bypass it.
 
 For a task on a page (search, filter, open, read a list), send the whole plan in one
 `browserctrl do` call: see [Fastest way through a task](reading-and-acting.md#fastest-way-through-a-task).
-Guarded batches and the workflow runner are for filling the same prepared fields many
-times; read the [batch contract](batch.md) and
-[workflow contract](workflow.md) before using them.
 
-Chrome DevTools Protocol control for agents. Two frontends over one core:
+Two frontends over one core:
 
-- **CLI**: `scripts/browserctrl.mjs <command>` (also `bin/browserctrl.mjs`)
-- **MCP server**: `mcp/server.mjs`, exposing `browser_*` tools to Claude Code, Codex, or any MCP client
+- **CLI**: `browserctrl <command>` (`bin/browserctrl.mjs`)
+- **MCP server**: `browserctrl-mcp` (`mcp/server.mjs`), exposing `browser_*` tools to any MCP client
 
 Prefer the MCP tools when they are available in your session: screenshots come back
 inline, and `browser_do` / `browser_items` are the same `do` and `items` as the CLI.
@@ -125,16 +119,24 @@ profile and leaves the user's running browser untouched. Chrome 136+ refuses a d
 profile, so `launch chrome` without `--user-data-dir` refuses before quitting anything and points to
 the `chrome://inspect/#remote-debugging` toggle or the separate-profile option.
 
+On Linux and Windows, `browserctrl launch <browser>` never touches a running browser. It finds the
+program (set `BROWSERCTRL_<BROWSER>_BIN`, for example `BROWSERCTRL_CHROME_BIN`, if it cannot), and
+starts a separate instance on its own profile in the data folder (`profiles/<browser>`), or in
+`--user-data-dir <dir>`, with the debug port on. If something already answers on that port,
+nothing is started. Do the same by hand with
+`--remote-debugging-port=9222 --user-data-dir=<a new folder>`, then use `--port 9222`.
+
 ## Tests
 
+From a clone of the repository (see [CONTRIBUTING.md](../CONTRIBUTING.md)):
+
 ```bash
-cd ~/.agents/skills/browserctrl && npm test
+npm test
 ```
 
-The suite drives a throwaway headless browser on port 9333 with its own
-user-data-dir, so it never touches a real profile. It also checks that every
-command documented here exists in the CLI: v1 shipped docs for `net`, `loadall`
-and `snap --compact`, none of which existed.
+The suite drives a throwaway headless browser with its own user-data-dir, so it never
+touches a real profile, and every test gets its own `BROWSERCTRL_HOME`. It also checks that
+every command documented here exists in the CLI.
 
 ## Gotchas
 
@@ -157,7 +159,7 @@ and `snap --compact`, none of which existed.
 
 ## Opt-in lifecycle diagnostics
 
-Set `CDP_DIAGNOSTIC_LOG=/absolute/local/path.jsonl` when starting a fresh daemon.
+Set `BROWSERCTRL_DIAGNOSTIC_LOG=/absolute/local/path.jsonl` when starting a fresh daemon.
 The diagnostic writer records command names, lifecycle IDs, replies and disconnects;
 it excludes URLs, page content, scripts, headers, cookies and error messages.
 The log stops growing at 10 MiB. Existing daemons retain their startup environment.
@@ -166,9 +168,7 @@ This is diagnostic evidence, not proof that a browser workflow is healthy.
 ### Repeated debugging approvals
 
 First verify the caller follows [Start here](#start-here-reuse-the-shared-connection).
-A skill update does not change a running agent's loaded instructions; have it
-reload this file before continuing. An old MCP server must also be reloaded to
-pick up code changes, or use a fresh CLI process.
+An old MCP server must be reloaded to pick up code changes, or use a fresh CLI process.
 
 `doctor` now reports existing TCP clients and executable ancestry using passive
 OS inspection. TCP observation alone cannot distinguish HTTP discovery from a
@@ -179,9 +179,9 @@ start a daemon, or install a recurring check. Very short connections can be
 missed; an empty capture does not prove there were no prompts. The normal doctor
 health check uses an existing daemon connection when available.
 
-Daemon lifecycle logs are enabled by default under
-`~/.local/share/chrome-cdp/telemetry/`; override with `CDP_TELEMETRY_DIR`, or disable
-lifecycle logging with `CDP_TELEMETRY=0`. Logs contain connection lifecycle,
+Daemon lifecycle logs are enabled by default in the `telemetry` folder of the data folder
+(`browserctrl where`); override with `BROWSERCTRL_TELEMETRY_DIR`, or disable
+lifecycle logging with `BROWSERCTRL_TELEMETRY=0`. Logs contain connection lifecycle,
 request timing and protocol method metadata, with hashed agent identities; no
 page content, URLs, JavaScript, parameters, cookies, or full process arguments.
 Logs rotate and incident captures retain the latest 20 files, at most 1 MiB each.

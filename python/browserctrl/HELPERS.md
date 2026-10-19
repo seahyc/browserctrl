@@ -71,7 +71,7 @@ def page_title(client, target):
     )
 ```
 
-The caller passes its Chrome CDP client and target explicitly. Helpers receive
+The caller passes its browserctrl client and target explicitly. Helpers receive
 no browser globals. `load_helper` rejects traversal, non-identifier names, and
 helper-file symlinks. Treat helper code as trusted local code because importing
 it executes the module.

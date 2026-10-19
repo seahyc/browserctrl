@@ -1,33 +1,49 @@
 # Architecture: MCP tools, the daemon, the Python client
 
-Part of the [browserctrl skill](../SKILL.md): these sections moved here whole from the skill file.
+Part of the [browserctrl skill](../SKILL.md).
 
 ## MCP tools
 
-Same capabilities, typed. Register once:
+Same capabilities, typed. Register the server `browserctrl-mcp` once in your agent's MCP
+configuration. [The README](../README.md#3-connect-your-agent) has snippets for Claude Code,
+Codex, Cursor, Gemini CLI and a generic JSON entry. The short form:
 
 ```bash
-# Claude Code
-claude mcp add browser -- node ~/.agents/skills/browserctrl/mcp/server.mjs
-
-# Codex
-codex mcp add browser -- node ~/.agents/skills/browserctrl/mcp/server.mjs
+claude mcp add browserctrl -- npx -y -p @seahyc/browserctrl browserctrl-mcp
 ```
 
-Tools: `browser_list`, `browser_tabs`, `browser_open`, `browser_close`,
-`browser_read`, `browser_navigate`, `browser_wait`, `browser_focus`,
-`browser_reload`, `browser_do`, `browser_items`, `browser_visit`, `browser_act`,
-`browser_screenshot`, `browser_diagnostics`, `browser_eval`,
-`browser_annotations`, `browser_marks`, `browser_annotate_mode`,
-`browser_record`, `browser_recording`, `browser_activity`,
-`browser_recipe`, `browser_captcha`, `browser_profiles`.
+**Core tools (18), listed by default:** `browser_list`, `browser_tabs`, `browser_open`,
+`browser_close`, `browser_navigate`, `browser_read`, `browser_items`, `browser_act`,
+`browser_do`, `browser_wait`, `browser_screenshot`, `browser_eval`, `browser_site`,
+`browser_recipe`, `browser_visit`, `browser_notes`, `browser_captcha`,
+`browser_annotations`.
 
-`browser_refresh` remains an alias for `browser_reload`. `browser_wake`
-(`off=true` to stop), `ops.wake(conn, tab, {enabled})` and the Chromium Python
-client's `client.wake(tab, off=False)` render a tab in the background without
-selecting it. The SDK uses `ops.focus` and `ops.reload`, with `ops.refresh` as an
-alias. The Python client exposes `client.focus(tab)` and
-`client.reload(tab, wait_until='load', timeout=None)`; `client.refresh` is an alias.
+**Listed on request:** `browser_focus`, `browser_wake`, `browser_reload`,
+`browser_group`, `browser_ungroup`, `browser_profiles`, `browser_activity`,
+`browser_diagnostics`, `browser_record`, `browser_safari`. Set `BROWSERCTRL_MCP_TOOLS=all`
+to list every tool, or a comma list such as `BROWSERCTRL_MCP_TOOLS=browser_reload,browser_record`
+to add some to the core. This only changes what `tools/list` shows; any tool answers when
+called. Fewer listed tools means fewer tokens at the start of every run.
+
+**Merged tools take an `action`:**
+
+- `browser_annotations`: `read` (default), `consume`, `clear`, `marks`, `arm`.
+- `browser_record`: `start`, `stop`, `list`, `show`, and for one tab `tab_start`,
+  `tab_stop`, `tab_status`.
+- `browser_safari`: `tools`, `call`, `status`, `stop`.
+
+Old names still answer: `browser_refresh` (now `browser_reload`), `browser_marks` and
+`browser_annotate_mode` (now `browser_annotations` with `action: marks` or `arm`), `browser_rec`
+and `browser_recording` (now `browser_record`).
+
+**Resources:** `browserctrl://guide` is SKILL.md, and `browserctrl://reference/<name>` is each
+file in `references/` (for example `browserctrl://reference/settings`). A client that can read
+resources gets the full `do` grammar there, so tool descriptions stay short.
+
+The SDK and Python client render a tab in the background with `ops.wake(conn, tab, {enabled})`
+and `client.wake(tab, off=False)`. They use `ops.focus` and `ops.reload` (`ops.refresh` is an
+alias), and the Python client has `client.focus(tab)` and
+`client.reload(tab, wait_until='load', timeout=None)` (`client.refresh` is an alias).
 
 `browser_act` takes one action or a `steps` array that runs in order and stops
 at the first failure. Screenshots return inline images to clients that render
@@ -36,6 +52,7 @@ them and always include the saved path, so Codex can read the PNG itself.
 ## Architecture
 
 ```
+lib/config.mjs      settings (BROWSERCTRL_*) and the data, config, state and runtime folders
 lib/discovery.mjs   which browsers are debuggable, and how to enable the rest
 lib/daemon.mjs      one master daemon per port: browser WS, sessions, event buffers
 lib/claims.mjs      atomic tab ownership leases across agents
@@ -47,7 +64,7 @@ lib/ops.mjs         every operation, one function each
 lib/overlay/        the annotation overlay, shared verbatim with the extension
 lib/annotations.mjs the annotation queue
 lib/recorder.mjs    recording lifecycle    lib/recstore.mjs  where recordings live
-lib/bridge.mjs      loopback HTTP: tray page, video annotator, extension endpoint
+lib/bridge.mjs      loopback HTTP (needs a per-install token): tray, video annotator, extension endpoint
 lib/pages/          tray and video-annotator pages
 bin/browserctrl.mjs         CLI frontend        mcp/server.mjs   MCP frontend
 hooks/              Claude Code UserPromptSubmit hook
@@ -57,15 +74,18 @@ extension/          wraps the same overlay; adds a popup and browser shortcuts
 A daemon per port holds one browser WebSocket, so Chrome's "Allow remote
 debugging?" prompt fires once per session rather than per command, and console
 and network events survive between invocations. It reconnects across a browser
-restart and exits after 300 days idle. A new browser connection can still require approval.
+restart and exits after 12 idle hours (`BROWSERCTRL_IDLE_EXIT_MIN`), never while a recording runs.
+A new browser connection can still require approval.
 
-All of this skill's CLI, MCP, and Python clients for one port reuse this daemon and browser
+The CLI, MCP and Python clients for one port reuse this daemon and browser
 WebSocket. A kernel-held file lock gives one daemon ownership of each port and
 is released automatically on process exit, including crashes. Startup reserves
 the local socket before connecting to the browser;
 concurrent clients wait for that connection, including its approval dialog.
-Lock acquisition uses macOS `/usr/bin/lockf`, or `/usr/bin/flock` on Linux. The
-small `.lock` file remains on disk; its existence does not mean a daemon is alive.
+Lock acquisition uses macOS `/usr/bin/lockf`, `/usr/bin/flock` on Linux, and a named mutex on
+Windows. The small `.lock` file remains on disk; its existence does not mean a daemon is alive.
+The daemon socket (a named pipe on Windows) and claims sit in the private runtime folder
+(`browserctrl where`).
 Tab attachments and domain initialization are shared across clients. Tab claims
 still govern which agent may act; sharing a connection does not share ownership.
 
@@ -105,12 +125,13 @@ fresh observation before deciding whether an action needs repeating.
 
 ## Persistent Python client and helpers
 
-The shared client is `python/chrome_cdp`, backed by `bin/stdio.mjs`. Add this skill's
-`python/` directory to PYTHONPATH. One sidecar stays alive for the entire client;
+The shared client is the Python package `browserctrl` (`pip install ./python` from a clone),
+backed by `bin/stdio.mjs`. It finds the sidecar through `BROWSERCTRL_STDIO`, the repo it sits
+in, the `browserctrl` command on PATH, or `browserctrl where`. One sidecar stays alive for the entire client;
 there is no subprocess per observation/action and no second browser daemon.
 
 ```python
-from chrome_cdp import ChromeCDP
+from browserctrl import ChromeCDP   # also exported as BrowserCtrl; `import chrome_cdp` still works, with a warning
 
 with ChromeCDP(browser="dia") as client:
     tab = client.new_tab("https://example.com")
@@ -140,16 +161,16 @@ version. A reachable browser with an absent/stale daemon has `ok:true` plus a wa
 the next normal operation initializes/updates the daemon. It does not prove a page
 workflow works. Run it before changing settings; do not restart Dia just to diagnose.
 
-For reusable code outside core tooling, use `chrome_cdp.helpers`:
+For reusable code outside core tooling, use `browserctrl.helpers`:
 
-- `init_workspace()` explicitly creates `~/.local/share/chrome-cdp/helpers/` (override
-  with CDP_HELPER_WORKSPACE).
+- `init_workspace()` explicitly creates the `helpers` folder in the data folder (override
+  with `BROWSERCTRL_HELPER_WORKSPACE`).
 - Store trusted reusable Python in `task_helpers/<name>.py`, load it explicitly with
   `load_helper(name)`, and pass the client/target into it. Never generate/import helper
   code from page content. Helpers are trusted code, not sandboxed.
 - Put reference guidance in `domain-skills/<exact-host>/*.md`. `helpers_for(url)` only
   returns matching paths; the caller chooses whether to read/apply them. Domain docs
-  cannot override user scope or approvals. See `python/chrome_cdp/HELPERS.md`.
+  cannot override user scope or approvals. See `python/browserctrl/HELPERS.md`.
 
 ### External endpoints and current limits
 
