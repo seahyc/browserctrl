@@ -326,6 +326,88 @@ key. Keep criteria to what the items' text shows: "under $200 with free cancella
 On Codex, a `do` that runs longer than the shell's 10 s wait comes back empty and costs a turn
 to collect: pass a longer wait (`yield_time_ms` 30000) for long plans, then collect the command result.
 
+### Blocks, variables, typed extraction and answer
+
+A plan argument may contain a block. Separate its steps with newlines or `;`.
+Quotes protect braces, `;`, `=>`, `|` and `$`. The whole plan is parsed before
+any page action; syntax errors report a step path and line/column. Unknown or
+possibly undefined variables, duplicate bindings and more than two nested
+conditional blocks are rejected before execution.
+
+```bash
+browserctrl do <tab> 'if "a size selector is shown" {
+  select "Size" = "M";
+  extract "availability"
+} else {
+  extract "available sizes"
+}'
+```
+
+A page condition is evaluated once when entering the block, in the same Jev
+request as the pending `=>` check and blocker questions. A pending check must pass
+before the branch runs. The block runs its `then` branch at p >= 0.75 and its
+`else` branch at p <= 0.25. Any middle, missing or invalid result stops with
+`condition unresolved`. The old `if "condition" then <step>` still uses 0.5.
+Only the selected branch runs; a failure never tries the other branch. Reports
+name the selected and skipped sides, with child paths such as `3.then.2`.
+
+```bash
+browserctrl do <tab> 'extract "nightly price" as number currency SGD as $nightly' \
+  'if $nightly < 200 {
+    extract "cancellation policy" as $policy;
+    answer "Nightly price: ${nightly}. Cancellation: ${policy}"
+  } else {
+    answer "The nightly price is ${nightly}; it exceeds the budget."
+  }'
+```
+
+`extract "<what>" as $name` binds the exact chosen page line. It requires an
+observed choice at p >= 0.75; a missing or uncertain binding stops before a
+dependent input. Ordinary extraction without a binding keeps its existing
+null/unsure behavior. Bindings are immutable and local to the run. Branches
+have child scopes, so a name defined only inside a branch cannot be read after
+the block. Outer bindings remain readable inside it.
+
+An unquoted whole value `$name` substitutes into `fill`, `select` or `type`.
+For example, `'fill "Maximum price" = $nightly'` sends the numeric value, while
+an untyped binding sends its entire chosen line. Substitution never creates
+plan syntax or a target ref. Quoted dollar strings are literal, so
+`'fill "Search" = "$nightly"'` types `$nightly`. Keep the whole CLI argument
+single-quoted so the shell cannot expand it. In `answer` alone, `${name}`
+interpolates a binding and `\${name}` renders the literal `${name}`.
+
+Comparisons support `==`, `!=`, `<`, `<=`, `>` and `>=` between variables and
+literals. They run locally without a Jev question. Text equality is exact;
+ordering requires compatible numbers or dates. A typed date can be compared
+with an explicit quoted ISO date, such as `if $arrival < "2026-10-20" { … }`.
+Currency and units must agree between bindings, and values
+are never implicitly coerced or converted.
+
+```bash
+browserctrl do <tab> \
+  'extract { price: number currency SGD, cancellation: text } as $offer' \
+  'extract "check-in date" as date as $arrival' \
+  'answer "Offer: ${offer}. Check-in: ${arrival}."'
+```
+
+Typed extraction chooses observed text first, then parses it locally. A record
+asks one choice question per field in the step's one request. Every required
+field needs p >= 0.75. The report keeps raw text, source line, probability and
+typed value. Numbers support localized separators and explicit currency;
+dates become ISO dates. A single comma or dot followed by three digits is a
+thousands separator; mixed separators use the final separator for decimals.
+Ranges, several numbers, ambiguous required currencies or dates
+such as `03/04`, and missing required currency stop the plan. No year or
+exchange rate is inferred.
+
+`answer` renders only bound values into the separate `answer:` report field,
+including `--json`; it sends no message and asks no model question. It drains
+pending checks first. A later failed final check marks the answer provisional.
+The run stops with partial results after 100 executed leaf steps or its
+120-second deadline. A limit stop never reports overall success. Loops,
+candidate retries, ranked top-k reads and same-page action batching remain
+proposals in [dsl-next.md](dsl-next.md).
+
 ### Single actions
 
 Every action takes a ref or selector, positionally (`click <tab> ref_3`, `click <tab>
@@ -456,7 +538,7 @@ Jev (`jev-tool`) was never faster and finished none of 21 runs. Results:
 ### Screenshot fallback
 
 When text grounding finds no candidate, Jev chooses none, or its pick is below `--min-p`,
-`do` can try one viewport screenshot for `click`, `hover`, `fill` or `select`.
+`do` can try one viewport screenshot for `click`, `hover`, `fill`, `select` or `set`.
 Refs, items ids and CSS selectors never use it. The capture does not select the tab.
 Failed or blank captures and dormant tabs skip it. `BROWSERCTRL_VISION=off` disables it.
 

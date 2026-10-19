@@ -1,6 +1,9 @@
 # Next additions to `do`
 
-Proposal, not supported syntax yet. Keep existing plans working.
+Phase A is implemented: plan blocks, `if` / `else`, variables and local
+comparisons, typed extraction, and `answer`. Existing one-step and inline `if`
+plans remain supported. Loops, candidate retries, ranked top-k reads and
+same-page batching below are proposals, not supported syntax.
 
 ## Aim
 
@@ -31,24 +34,25 @@ interacting inside each page would otherwise return control to the agent.
 
 ## Execution contract
 
-Today `parseStep` parses one step per argument. `runSteps` runs those steps through
-`runOne`. `perform` uses `askJev` to bundle the target, `prev_expect`, blocker,
+The plan parser sits above `parseStep`, which parses individual steps.
+`runSteps` traverses blocks and runs leaf steps through `runOne`. `perform` uses `askJev` to bundle the target, `prev_expect`, blocker,
 notes and judgment questions. `judgments.mjs` builds `extract`, `pick` and `if`;
 `judge.mjs` maps choices back to observed lines and items. `systemOne` accepts a
 map of questions. Keep this boundary: Jev chooses evidence; the runner controls
 execution. It never asks Jev to write a program or invent a value.
 
-Add a plan parser above `parseStep`. One argument may contain a complete block.
-Allow newlines or semicolons between steps inside braces. Quotes protect braces,
-semicolons, `=>` and `|`. Keep old one-step arguments and inline `if` syntax.
+One argument may contain a complete block. Newlines or semicolons separate
+steps inside braces. Quotes protect braces,
+semicolons, `=>`, `|` and `$`. Keep old one-step arguments and inline `if` syntax.
 Parse the entire plan before touching the page. Report syntax errors with a step
 path and line/column. Reject unknown variables, invalid bounds and unsupported
 nesting before execution where possible.
 
-Start with one loop level and at most two nested conditional blocks. Require
-literal bounds, at most 10 items or 3 candidate attempts. Cap executed leaf steps
-at 100 and give the run a deadline. Reaching a cap returns partial results and a
-stop, never success. Existing per-step recovery limits still apply within it.
+Phase A allows at most two nested conditional blocks. It caps executed leaf
+steps at 100 and gives the run a 120-second deadline. Reaching a cap returns
+partial results and a stop, never success. Existing per-step recovery limits
+still apply. Proposed loops allow one level and at most 10 items; proposed
+candidate retries allow at most 3 attempts. Their bounds must be literal.
 
 Questions about the current snapshot go in the existing `askJev` request under
 distinct keys, beside `target`, `prev_expect` and `blocker`. A request cannot check
@@ -66,7 +70,7 @@ action after a timeout or uncertain delivery. Challenges, login walls, errors,
 unhandled dialogs and failed checks stop the plan. Never guess a missing value,
 target, unit, branch or recovery path.
 
-## 1. Loop over items with extraction
+## 1. Loop over items with extraction (proposed)
 
 ```text
 for top 3 {
@@ -111,7 +115,7 @@ zero/fewer items, truncation, SPA redraws, source-tab preservation, tab cleanup,
 missing fields, uncertain membership and failure on item two. Assert one request
 contains both extractions and the pending check; no result leaks between items.
 
-## 2. Variables and comparisons
+## 2. Variables and comparisons (implemented)
 
 ```text
 extract "price" as $p
@@ -132,7 +136,9 @@ their bindings appear in item records but do not escape into the next iteration.
 An `if` branch also has a child scope. A later read of a possibly undefined
 binding is a parse error. No environment variables, shell expansion, JavaScript,
 implicit interpolation or cross-run storage. Quote the CLI plan so the shell
-does not expand `$p`.
+does not expand `$p`. Only an unquoted whole `$name` substitutes as a
+`fill`, `select` or `type` value. Quoted dollar strings remain literal.
+In `answer` templates, `${name}` interpolates and `\${name}` is literal.
 
 Binding adds no question: attach its name to the existing extraction answer.
 Require a valid observed choice with p >= 0.75 before binding; null, malformed or
@@ -150,7 +156,7 @@ values, injection text, null and low-confidence extraction, exact fill payloads,
 numeric order, incompatible currencies and date order. Verify no dependent input
 occurs after a failed binding.
 
-## 3. `if` / `else` blocks
+## 3. `if` / `else` blocks (implemented)
 
 ```text
 if "a size selector is shown" {
@@ -178,7 +184,7 @@ children by path, such as `3.then.2`. Test true, false, middle probabilities,
 missing answers, nested blocks, quoted braces, inline compatibility and failed
 pending expectations. Assert no branch action runs before the previous check.
 
-## 4. Try the next safe candidate
+## 4. Try the next safe candidate (proposed)
 
 ```text
 try pick "a hotel under SGD 200 with free cancellation" up to 3
@@ -223,7 +229,7 @@ lost response never sends the action twice.
 
 ## Smaller additions
 
-### Typed extraction
+### Typed extraction (implemented)
 
 ```text
 extract "price" as number currency SGD as $p
@@ -240,7 +246,7 @@ prices, ambiguous `03/04`, missing currency or unsupported units. Do not infer
 a year or exchange rate. Test localized separators, negative numbers, ranges,
 currency symbols, leap days, ambiguous dates and partly missing records.
 
-### Return ranked top-k from `pick`
+### Return ranked top-k from `pick` (proposed)
 
 ```text
 pick "lowest listed price with free cancellation" top 3 as $choices
@@ -256,7 +262,7 @@ report that order. Include evidence, key, eligibility probability and shortlist
 coverage. Test ties, fewer than k matches, ads, missing prices and a distribution
 whose runner-up is not the second-cheapest item.
 
-### `answer` template
+### `answer` template (implemented)
 
 ```text
 answer "The nightly price is ${p}; cancellation: ${policy}."
@@ -269,7 +275,7 @@ sources. A later final-check failure marks the answer provisional, not complete.
 Test unresolved bindings, template escapes, hostile page text and a failed final
 check. The agent still delivers the user's answer.
 
-### Ground several same-page steps in one request
+### Ground several same-page steps in one request (proposed)
 
 ```text
 same page {
@@ -306,8 +312,8 @@ retry or an unresolved required value is. No green overall result while a requir
 check remains pending. Preserve partial evidence without presenting it as a
 complete comparison.
 
-Implement the parser and block runner first, then each feature behind an opt-in
-flag. Extend `runSteps` recursively rather than flattening loops before the page
+Phase A uses the plan parser and recursive block runner without an opt-in
+flag. Future additions below remain proposals. Extend `runSteps` recursively rather than flattening loops before the page
 exists. Traverse blocks for cooldown checks and ref validation. Keep `runOne`
 responsible for leaf actions. Put question builders/readers in `judge.mjs`,
 judgment dispatch in `judgments.mjs`, and bindings/frames in run context.

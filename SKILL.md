@@ -57,6 +57,11 @@ browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 
   `if "<page shows…>" then <step>`; `click "Filters" | "All filters"` takes the first name
   the page has. Plan to the answer: `… 'pick "cheapest with free cancellation"' 'extract
   "the total price"'`, then answer from `extracted:` without reading the page.
+- Blocks use `if "<condition>" { … } else { … }`; bind evidence with `extract "price" as
+  number currency SGD as $p`, compare with `if $p < 200 { … }`, and render
+  `answer "Price: ${p}"`. Quote the CLI plan against shell expansion. See the
+  [blocks and variables reference](references/reading-and-acting.md#blocks-variables-typed-extraction-and-answer)
+  for scope, literal dollars and confidence rules.
 - **Naming:** elements in words as they appear. Exact names need no model; Jev picks the rest
   and needs `TYPESAFE_API_KEY` (see [settings](references/settings.md)). A step can name
   `ref_25`, an items id `i140` or a CSS selector; those never go to Jev.
