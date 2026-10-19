@@ -86,12 +86,12 @@ buy nothing and cost a great deal of trust.
 
 ## Tabs and claims
 
-Up to ten agents have been tested concurrently, both as separate client processes
-and through one MCP server. Give each agent a unique, stable identity: set
-`BROWSERCTRL_AGENT_ID` (`CDP_AGENT_ID` still works) for CLI/Python, or pass `agentId` on MCP
-browser calls. Keep that identity across the agent's calls. Sibling agents must not inherit the
-same ID. Without an override, the client uses the harness session ID (Codex, Claude Code),
-then the parent process ID. A claim whose owner process has exited counts as released.
+Up to ten agents have been tested concurrently as separate client processes.
+Give each agent a unique, stable identity: set
+`BROWSERCTRL_AGENT_ID` (`CDP_AGENT_ID` still works) for CLI/Python.
+Keep that identity across the agent's calls. Sibling agents must not inherit the
+same ID. Without an override, the client uses the parent process ID.
+A claim whose owner process has exited counts as released.
 
 Open a separate tab for each agent and keep using its returned tab ID. New tabs
 open in the background. Target commands, including reads that create snapshot
@@ -144,8 +144,7 @@ replacement tab. Listing/resolving tabs therefore never performs context cleanup
 If the native window cannot be uniquely matched (including internal new-tab URLs,
 duplicate URLs, or multiple tabs), cleanup fails safely and retains ownership;
 close that private window normally. Local native-window cleanup does not apply
-to forwarded/custom endpoints. After updating this code, existing MCP server
-processes must be reloaded to pick up operation changes, or use a fresh CLI process.
+to forwarded/custom endpoints. Use a fresh CLI process after updating this code.
 
 ### Browser profiles
 
@@ -163,8 +162,7 @@ browserctrl open https://example.com --profile Personal --browser chrome
 ```
 
 `--profile` takes the directory, the account email, the display name, or a unique name prefix; an
-ambiguous or unknown one fails with the list. MCP: `browser_profiles`, and a
-`profile` argument on `browser_tabs` and `browser_open`.
+ambiguous or unknown one fails with the list.
 
 CDP names no profile, so each one is identified once per browser launch by
 loading `chrome://version` in a brief background tab inside it and reading its

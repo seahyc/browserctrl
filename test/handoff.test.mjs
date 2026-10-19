@@ -383,12 +383,6 @@ test('a client that sends no name in the handshake is not left as unknown', asyn
   assert.equal(typeof inferClient(undefined), 'string');
 });
 
-test('the MCP server does not relabel a Codex task as Claude Code', () => {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const server = fs.readFileSync(path.join(here, '..', 'mcp', 'server.mjs'), 'utf8');
-  assert.match(server, /process\.env\.CODEX_SESSION_ID \? 'codex' : sessions\.inferClient/);
-});
-
 test('video time is read off ffmpeg progress, not assumed from spawn', async () => {
   const rec = await import('../lib/recorder.mjs');
   const now = 1_000_000;

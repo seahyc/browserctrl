@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as ops from '../lib/ops.mjs';
 import {safariReload} from '../lib/safari-reload.mjs';
-import {safariCLI,safariMCP} from '../lib/safari-frontend.mjs';
+import {safariCLI} from '../lib/safari-frontend.mjs';
 
 test('focus selects; wake renders without selecting; refresh is the same reload function', async () => {
   const calls=[];
@@ -11,7 +11,6 @@ test('focus selects; wake renders without selecting; refresh is the same reload 
   assert.deepEqual(calls,[['Target.activateTarget',{targetId:'tab'}],['render','tab',{enabled:true}],['render','tab',{enabled:false}]]);
   assert.equal(ops.refresh,ops.reload);
   assert.deepEqual(safariCLI('focus',['focus','native'],{}),safariCLI('wake',['wake','native'],{}));
-  assert.deepEqual(safariMCP('browser_focus',{tab:'native'}),safariMCP('browser_wake',{tab:'native'}));
 });
 
 test('reload waits past the old complete document without navigating or focusing', async () => {

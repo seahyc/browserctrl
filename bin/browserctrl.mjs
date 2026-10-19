@@ -218,7 +218,7 @@ function usage() {
     browserctrl recipe endpoints [host]                   fetch/XHR endpoints captured from attached tabs (after capture on)
     browserctrl recipe inspect <host> [match]             full captured exemplars (headers, tokens, bodies)
 
-  Safari 27 on macOS, through Apple's MCP interface:
+  Safari 27 on macOS, through Apple's automation interface:
     browserctrl safari tools --browser safari
     browserctrl safari call <tool> --args '{"key":"value"}' --tab <handle> --browser safari
     browserctrl tabs --browser safari
@@ -414,7 +414,7 @@ const main = async () => {
     if (near !== null) throw new Error(`Unknown command "${cmd}".${near ? ` Did you mean "${near}"?` : ''} Run browserctrl help for the list.`);
   }
   if (flags.browser === 'safari' || cmd === 'safari') {
-    if (flags.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
+    if (flags.port) throw new Error('Safari uses native automation without a CDP port.');
     const safari = await import('../lib/safari.mjs');
     if (cmd === 'safari') {
       if (positional[1] === 'tools') return out(await safari.safariTools());
@@ -468,7 +468,7 @@ const main = async () => {
     return out(
       rows
         .map(b => {
-          if (b.provider === 'safari-mcp') return `  Safari    --browser safari  Apple MCP adapter; ${b.enable}`;
+          if (b.provider === 'safari') return `  Safari    --browser safari  Apple automation adapter; ${b.enable}`;
           if (b.debuggable) {
             const bits = [`:${b.port}`, b.tabs === null ? 'tabs ?' : `${b.tabs} tabs`, b.daemon ? 'daemon up' : 'no daemon'];
             const prof = b.profiles.length ? `  profiles: ${b.profiles.join(', ')}` : '';

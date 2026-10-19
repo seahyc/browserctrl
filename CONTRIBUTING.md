@@ -9,12 +9,12 @@ Use Node.js 22 or newer (browserctrl checks this at start). Python 3.9 or newer 
 ```sh
 npm ci
 node bin/browserctrl.mjs help
-npm link        # optional: puts browserctrl and browserctrl-mcp on your PATH
+npm link        # optional: puts browserctrl on your PATH
 ```
 
-The package is `@seahyc/browserctrl`; its commands are `browserctrl` and `browserctrl-mcp`.
+The package is `@seahyc/browserctrl`; its command is `browserctrl`.
 
-The CLI, daemon, and MCP server share the implementation in `lib/`. Keep user-facing behavior consistent across those entry points where they expose the same operation. Do not describe an OS or browser as supported based only on code that appears portable; add an observed compatibility result to `docs/compatibility.md` when available.
+The CLI, daemon, and Python client share the implementation in `lib/`. Keep user-facing behavior consistent across those entry points where they expose the same operation. Do not describe an OS or browser as supported based only on code that appears portable; add an observed compatibility result to `docs/compatibility.md` when available.
 
 ## Verification
 

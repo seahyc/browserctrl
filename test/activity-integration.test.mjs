@@ -7,8 +7,6 @@ import net from 'node:net';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
-import {Client} from '@modelcontextprotocol/sdk/client/index.js';
-import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 import {connect} from '../lib/daemon.mjs';
 import {waitForBackgroundReady} from '../lib/readiness.mjs';
 import * as claims from '../lib/claims.mjs';
@@ -16,7 +14,7 @@ import {startHeadlessBrowser,startFixtureServer,chromeBinary} from './helpers.mj
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../',import.meta.url));
 
-test('shared daemon exposes activity and pause across SDK, CLI and MCP without taking focus', {skip: !chromeBinary(),timeout:90000}, async t => {
+test('shared daemon exposes activity and pause across SDK, CLI and Python without taking focus', {skip: !chromeBinary(),timeout:90000}, async t => {
   const reserve = net.createServer();
   await new Promise(resolve => reserve.listen(0,'127.0.0.1',resolve));
   const port = reserve.address().port;
@@ -26,7 +24,7 @@ test('shared daemon exposes activity and pause across SDK, CLI and MCP without t
   const previousTrace = process.env.CDP_DIAGNOSTIC_LOG;
   process.env.CDP_ACTIVITY_FILE = path.join(directory,'activity.json');
   process.env.CDP_DIAGNOSTIC_LOG = path.join(directory,'protocol.jsonl');
-  let browser,fixture,a,b,controller,client;
+  let browser,fixture,a,b,controller;
   const tabs = [];
   t.after(async () => {
     if(controller) {
@@ -35,7 +33,6 @@ test('shared daemon exposes activity and pause across SDK, CLI and MCP without t
       controller.close();
     }
     a?.close();b?.close();
-    await client?.close();
     await browser?.close();
     await fixture?.close();
     for(const [targetId,owner] of tabs) if(claims.get(port,targetId)?.owner === owner) claims.release(port,targetId,{owner});
@@ -81,11 +78,8 @@ with ChromeCDP(port=${port}) as c:
   assert.ok(JSON.parse(py.stdout).agents.some(x=>x.owner==='activity-integration-a'));
   const cli=await exec(process.execPath,[path.join(root,'bin/browserctrl.mjs'),'activity','--port',String(port),'--json'],{env});
   assert.ok(JSON.parse(cli.stdout).agents.some(x=>x.owner==='activity-integration-a'));
-  client=new Client({name:'activity-integration',version:'1'});
-  await client.connect(new StdioClientTransport({command:process.execPath,args:[path.join(root,'mcp/server.mjs')],env,stderr:'pipe'}));
   await a.send(first.targetId, 'Emulation.setFocusEmulationEnabled', {enabled:true});
-  const result=await client.callTool({name:'browser_activity',arguments:{port,agentId:'activity-integration-controller',action:'pause',owner:'activity-integration-a'}});
-  assert.ok(!result.isError,JSON.stringify(result));
+  await controller.activity('pause',{owner:'activity-integration-a'});
   await a.send(first.targetId, 'Emulation.setFocusEmulationEnabled', {enabled:false});
   await assert.rejects(a.send(first.targetId, 'Emulation.setFocusEmulationEnabled', {enabled:true}), /paused/);
   await assert.rejects(a.send(first.targetId,'Runtime.evaluate',{expression:'document.title',returnByValue:true}),/paused/);
@@ -93,17 +87,9 @@ with ChromeCDP(port=${port}) as c:
   assert.ok((await b.send(second.targetId,'Runtime.evaluate',{expression:'document.title',returnByValue:true})).result.value);
   assert.equal(claims.get(port,first.targetId).owner,'activity-integration-a');
   await controller.activity('resume',{owner:'activity-integration-a'});
-  const waited=await client.callTool({name:'browser_wait',arguments:{port,agentId:'activity-integration-a',tab:first.targetId,readyState:'load'}});
-  assert.ok(!waited.isError,JSON.stringify(waited));
-  const observation=JSON.parse(waited.content[0].text);
+  const observation=await waitForBackgroundReady(a,first.targetId);
   assert.equal(observation.ready,true);
   assert.equal(observation.focused,false);
-  t.diagnostic('Checking MCP reload and refresh');
-  for (const name of ['browser_reload','browser_refresh']) {
-    const reloaded=await client.callTool({name,arguments:{port,agentId:'activity-integration-a',tab:first.targetId}});
-    assert.ok(!reloaded.isError,JSON.stringify(reloaded));
-    assert.equal(JSON.parse(reloaded.content[0].text).focused,false);
-  }
   t.diagnostic('Checking Python focus/reload aliases');
   await exec(process.platform === 'win32' ? 'python' : 'python3', ['-c', `from chrome_cdp import ChromeCDP
 with ChromeCDP(port=${port}) as c:
@@ -112,15 +98,9 @@ with ChromeCDP(port=${port}) as c:
  assert c.refresh(t)['reloaded']
  assert c.focus(t)['activated']
  assert c.wake(t)['rendering']`], {env: {...process.env,CDP_AGENT_ID:'activity-integration-a',PYTHONPATH:path.join(root,'python')}});
-  const focused=await client.callTool({name:'browser_focus',arguments:{port,agentId:'activity-integration-a',tab:first.targetId}});
-  assert.ok(!focused.isError,JSON.stringify(focused));
-  assert.equal(JSON.parse(focused.content[0].text).activated,first.targetId.slice(0,8));
-  const woken=await client.callTool({name:'browser_wake',arguments:{port,agentId:'activity-integration-a',tab:first.targetId}});
-  assert.ok(!woken.isError,JSON.stringify(woken));
-  assert.equal(JSON.parse(woken.content[0].text).rendering,true);
   const selected=await exec(process.execPath,[path.join(root,'bin/browserctrl.mjs'),'focus',first.targetId,'--port',String(port)],{env:{...process.env,CDP_AGENT_ID:'activity-integration-a'}});
   assert.equal(JSON.parse(selected.stdout).activated,first.targetId.slice(0,8));
   const awake=await exec(process.execPath,[path.join(root,'bin/browserctrl.mjs'),'wake',first.targetId,'--port',String(port)],{env:{...process.env,CDP_AGENT_ID:'activity-integration-a'}});
   assert.equal(JSON.parse(awake.stdout).visibilityState,'visible');
-  console.log(JSON.stringify({backgroundReady:true,rapidNavigationWarning:true,cliActivity:true,pythonActivity:true,mcpPause:true,otherOwnerContinues:true,claimsPreserved:true,resumeWithoutReplay:true,focusCleanupWhilePaused:true}));
+  console.log(JSON.stringify({backgroundReady:true,rapidNavigationWarning:true,cliActivity:true,pythonActivity:true,sdkPause:true,otherOwnerContinues:true,claimsPreserved:true,resumeWithoutReplay:true,focusCleanupWhilePaused:true}));
 });

@@ -5,8 +5,7 @@ driving a browser, or when repeated navigation interrupts their browsing.
 
 ## Describe the work
 
-Keep one stable `BROWSERCTRL_AGENT_ID` across CLI and Python calls, or supply the same
-`agentId` on MCP calls. Before a link audit or another bulk task, register a
+Keep one stable `BROWSERCTRL_AGENT_ID` across CLI and Python calls. Before a link audit or another bulk task, register a
 short description and the expected number of items:
 
 ```sh
@@ -58,10 +57,7 @@ milliseconds. Choose `none` only when a later observation will verify the result
 the background without selecting it; `reload` reloads it (`refresh` is the old name and
 still works). Focus requires no additional approval flag.
 
-The MCP tools are `browser_focus`, `browser_wake` and `browser_reload`. They are not in the
-default core list: add them with `BROWSERCTRL_MCP_TOOLS=browser_focus,browser_wake,browser_reload`
-(or `all`). The old name `browser_refresh` still answers and runs `browser_reload`. The SDK
-provides `ops.focus`, `ops.wake` and `ops.reload` (`ops.refresh` is an alias). The persistent
+The SDK provides `ops.focus`, `ops.wake` and `ops.reload` (`ops.refresh` is an alias). The persistent
 Chromium Python client provides `client.focus(tab)`, `client.wake(tab, off=False)` and
 `client.reload(tab, wait_until='load', timeout=None)` (`client.refresh` is an alias).
 
@@ -82,7 +78,7 @@ browserctrl activity pause --owner workbench-guide-review --browser dia
 browserctrl activity resume --owner workbench-guide-review --browser dia
 ```
 
-These activity controls also support `--browser safari` and MCP `browser: "safari"`.
+These activity controls also support `--browser safari`.
 
 Pause rejects subsequent browserctrl actions from that owner, including queued
 inputs that have not been sent. It does not cancel an action already sent to
@@ -96,20 +92,6 @@ and continue from the observed state.
 The persistent Python client supports `client.activity("describe", intent="Review links",
 completed=0, total=91)` and the same `list`, `pause`, `resume` actions. Navigation
 warnings appear as Python runtime warnings and in `client.last_warnings`.
-
-## MCP calls
-
-Use `browser_activity` with an explicit browser and caller identity:
-
-```json
-{"browser":"dia","agentId":"guide-review","action":"describe","intent":"Reviewing guide links","completed":0,"total":91}
-```
-
-`action` accepts `list`, `describe`, `pause` or `resume`. For `pause` and
-`resume`, `owner` identifies the agent to control. It is distinct from
-`agentId`, which identifies the caller. For background Chromium readiness, use
-`browser_wait` with `readyState: "load"` or `"domcontentloaded"` and the explicit
-tab target. Preserve the caller identity across all of these operations.
 
 Finish by reporting the observed page results and progress. Release claims at
 handoff as described in the main skill; a progress description does not replace

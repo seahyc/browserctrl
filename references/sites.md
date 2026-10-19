@@ -60,13 +60,12 @@ When browserctrl sees a challenge (captcha detection after `open`/`nav`, a step 
 **cool-down** for that site: 20 min, doubling for each further challenge that
 day, up to 2 h. During it, `open`, `nav`, `do` with a `nav` step and `recipe run`
 refuse the site with when it ends and why; reading tabs already open still
-works. A challenge seen cleared ends the cool-down early. `--force` (MCP:
-`force: true`) overrides; use it only when the user wants the site now.
+works. A challenge seen cleared ends the cool-down early. `--force` overrides; use it only when the user wants the site now.
 `browserctrl cooldown` lists them (also shown by `tabs` and `doctor`);
 `browserctrl cooldown clear <site>` ends one by hand.
 
-To clear a challenge on a tab, run `browserctrl captcha <tab> --browser dia`
-(MCP: `browser_captcha`). It drags an Alibaba drag-to-end slider once (and lets an
+To clear a challenge on a tab, run `browserctrl captcha <tab> --browser dia`.
+It drags an Alibaba drag-to-end slider once (and lets an
 installed solver plugin try its kinds, if there is one). Otherwise
 it hands the tab to the human: brings it to the front, plays a sound, shows a
 notification naming the site, and returns `solvedBy: human` with `waitedMs` as

@@ -101,9 +101,9 @@ mechanics measurement, not an end-to-end website SLA.
 ## Coverage and rollout
 
 Use the harness first on local fixtures and low-impact observed forms, retaining
-ordinary browserctrl and Jev workflows. It does not replace existing CLI/MCP commands
-or register another MCP server. The multi-step-flows reference routes work; the
-executor lives in browserctrl so transport and tab claims stay shared.
+ordinary browserctrl and Jev workflows. It does not replace existing CLI commands.
+The multi-step-flows reference routes work; the executor lives in browserctrl
+so transport and tab claims stay shared.
 
 No replay of live production/admin workflows is part of this benchmark. The studied
 tasks provide requirements; synthetic fixtures verify the executor mechanics.

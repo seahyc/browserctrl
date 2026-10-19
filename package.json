@@ -8,20 +8,16 @@
     "automation",
     "cdp",
     "chrome-devtools-protocol",
-    "mcp",
-    "model-context-protocol",
     "agent",
     "chromium",
     "safari",
     "cli"
   ],
   "bin": {
-    "browserctrl": "bin/browserctrl.mjs",
-    "browserctrl-mcp": "mcp/server.mjs"
+    "browserctrl": "bin/browserctrl.mjs"
   },
   "scripts": {
     "test": "node --import ./test/helpers.mjs --test --test-concurrency=1 test/*.test.mjs",
-    "mcp": "node mcp/server.mjs",
     "sync-extension": "node scripts/sync-extension.mjs",
     "prepack": "node scripts/sync-extension.mjs",
     "check-extension": "node scripts/sync-extension.mjs --check",
@@ -45,7 +41,6 @@
   "files": [
     "bin",
     "lib",
-    "mcp",
     "extension",
     "vendor",
     "references",

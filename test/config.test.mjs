@@ -104,7 +104,7 @@ test('folders an earlier version made are used in place, never moved by themselv
   assert.deepEqual(d.legacy, ['data', 'state']);
   const fresh = directories({ platform: 'darwin', env: {}, home, uid: 1, exists: () => false });
   assert.deepEqual(fresh.legacy, []);
-  for (const f of ['bin/browserctrl.mjs', 'mcp/server.mjs', 'lib/daemon.mjs', 'lib/env.mjs']) {
+  for (const f of ['bin/browserctrl.mjs', 'lib/daemon.mjs', 'lib/env.mjs']) {
     assert.doesNotMatch(fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8').replace(/if \(cmd === 'migrate'\)[\s\S]*?\n {2}\}\n/, ''), /^\s+(const \w+ = )?(migrateLegacy|retireLegacyDaemon)\(/m, `${f} must not migrate on its own`);
   }
 });

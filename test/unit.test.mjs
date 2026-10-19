@@ -77,6 +77,10 @@ test('agentId falls back to the parent pid, and BROWSERCTRL_AGENT_ID wins over C
   for (const k of Object.keys(keep)) delete process.env[k];
   try {
     assert.equal(agentId(), `pid:${process.ppid}`);
+    process.env.CODEX_THREAD_ID = 'inherited-thread';
+    process.env.CODEX_SESSION_ID = 'inherited-codex-session';
+    process.env.CLAUDE_CODE_SESSION_ID = 'inherited-claude-session';
+    assert.equal(agentId(), `pid:${process.ppid}`, 'inherited harness IDs do not identify a CLI agent');
     process.env.CDP_AGENT_ID = 'old';
     assert.equal(agentId(), 'old');
     process.env.BROWSERCTRL_AGENT_ID = 'new';
@@ -108,45 +112,6 @@ test('every command documented in SKILL.md and its references exists in the CLI'
   assert.ok(documented.size > 5, 'SKILL.md should document commands');
   const missing = [...documented].filter(c => !cli.includes(`'${c}'`) && !cli.includes(`case '${c}'`));
   assert.deepEqual(missing, [], `SKILL.md documents commands the CLI does not implement: ${missing.join(', ')}`);
-});
-
-test('MCP tool schemas are well formed and every tool has a handler', async () => {
-  const src = fs.readFileSync(path.join(ROOT, 'mcp', 'server.mjs'), 'utf8');
-  const toolNames = [...src.matchAll(/name: '(browser_[a-z_]+)'/g)].map(m => m[1]);
-  assert.ok(toolNames.length >= 10, `expected the full tool surface, got ${toolNames.length}`);
-  for (const name of toolNames) {
-    assert.ok(new RegExp(`${name}:\\s`).test(src), `${name} is declared but has no handler`);
-  }
-});
-
-test('the MCP server starts and lists its tools over stdio', () => {
-  const req = [
-    JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } }),
-    JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
-    JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
-  ].join('\n') + '\n';
-  const outText = execFileSync(process.execPath, [path.join(ROOT, 'mcp', 'server.mjs')], {
-    input: req,
-    encoding: 'utf8',
-    timeout: 20000,
-  });
-  const listed = outText
-    .split('\n')
-    .filter(Boolean)
-    .map(l => {
-      try {
-        return JSON.parse(l);
-      } catch {
-        return null;
-      }
-    })
-    .find(m => m?.id === 2);
-  assert.ok(listed, 'server should answer tools/list');
-  const names = listed.result.tools.map(t => t.name);
-  assert.ok(names.includes('browser_read'), `browser_read missing from ${names.join(', ')}`);
-  assert.ok(names.includes('browser_act'));
-  const open = listed.result.tools.find(t => t.name === 'browser_open');
-  assert.equal(open.inputSchema.properties.anonymous?.type, 'boolean');
 });
 
 test('CLI help documents isolated anonymous tabs', () => {

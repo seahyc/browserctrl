@@ -186,7 +186,7 @@ Most of the time goes to the agent thinking. Across the final set, browserctrl's
 
 Copy and paste this into your coding agent:
 
-> Please install browserctrl (`@seahyc/browserctrl` on npm, source at https://github.com/seahyc/browserctrl). Read its instructions, check my operating system and Node.js version, and set up whichever interface my agent supports: CLI, MCP or an agent skill. Tell me what you configured. Ask which browser I want to use, and get my permission before enabling browser access or restarting any browser. Tell me what data browserctrl sends out and stores before you turn anything on. Verify setup on a disposable test page, then show me how to use and uninstall it.
+> Please install browserctrl (`@seahyc/browserctrl` on npm, source at https://github.com/seahyc/browserctrl). Read its instructions, check my operating system and Node.js version, and set up the CLI and an optional agent skill. Tell me what you configured. Ask which browser I want to use, and get my permission before enabling browser access or restarting any browser. Tell me what data browserctrl sends out and stores before you turn anything on. Verify setup on a disposable test page, then show me how to use and uninstall it.
 
 To set it up yourself, the steps are: install it, turn on remote debugging in one browser, then connect your agent.
 
@@ -196,7 +196,7 @@ browserctrl needs [Node.js 22 or newer](https://nodejs.org/) on macOS, Linux or 
 
 ```sh
 npx -y @seahyc/browserctrl browsers     # try it without installing
-npm i -g @seahyc/browserctrl            # or install the browserctrl and browserctrl-mcp commands
+npm i -g @seahyc/browserctrl            # or install the browserctrl command
 ```
 
 The package is not on npm yet. Until it is, install from a clone:
@@ -205,7 +205,7 @@ The package is not on npm yet. Until it is, install from a clone:
 git clone https://github.com/seahyc/browserctrl.git
 cd browserctrl
 npm ci
-npm link                                # puts browserctrl and browserctrl-mcp on your PATH
+npm link                                # puts browserctrl on your PATH
 browserctrl help
 ```
 
@@ -222,38 +222,7 @@ browserctrl talks to Chromium browsers (Chrome, Dia, Brave, Edge, Chromium, Arc)
 
 ### 3. Connect your agent
 
-The CLI works with any agent that can run terminal commands. For agents that speak MCP, add the server. All of these start `browserctrl-mcp` through npx, so they work without a global install. If you installed from a clone with `npm link`, use `browserctrl-mcp` as the command, or `node /absolute/path/to/browserctrl/mcp/server.mjs`.
-
-**Claude Code**
-
-```sh
-claude mcp add browserctrl -- npx -y -p @seahyc/browserctrl browserctrl-mcp
-```
-
-**Codex**, in `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.browserctrl]
-command = "npx"
-args = ["-y", "-p", "@seahyc/browserctrl", "browserctrl-mcp"]
-```
-
-**Cursor**, in `.cursor/mcp.json` (or `~/.cursor/mcp.json`), and **Gemini CLI**, in `~/.gemini/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "browserctrl": {
-      "command": "npx",
-      "args": ["-y", "-p", "@seahyc/browserctrl", "browserctrl-mcp"]
-    }
-  }
-}
-```
-
-**Any other MCP client** takes the same command, `npx -y -p @seahyc/browserctrl browserctrl-mcp`, over stdio. Settings go in the entry's `env` block, for example `"env": { "BROWSERCTRL_BROWSER": "chrome" }`.
-
-The server lists 18 core tools by default, to keep the start of every run short. `BROWSERCTRL_MCP_TOOLS=all` lists every tool, or name the extra ones in a comma list. It also offers `browserctrl://guide` and `browserctrl://reference/<name>` as MCP resources.
+Put `browserctrl` on PATH using the install steps above. Any agent that can run terminal commands can use it. Check that the agent can run `browserctrl help`.
 
 **Agent skill.** Harnesses that load a `SKILL.md` need the package folder in their skills folder under the name `browserctrl`. A link or a copy both work. For example, Claude Code reads `~/.claude/skills`, and Codex and some other harnesses read `~/.agents/skills`:
 
@@ -286,7 +255,7 @@ If you loaded the optional extension before this version, remove it and load it 
 
 1. Run `browserctrl where` and note the folders. Stop the background processes: `browserctrl stop --browser <name>` for each browser you used.
 2. Remove the package: `npm rm -g @seahyc/browserctrl` (from a clone: `npm unlink -g @seahyc/browserctrl`). `pip uninstall browserctrl` if you installed the Python client.
-3. Remove the MCP entry: `claude mcp remove browserctrl`, or delete the `browserctrl` block from `~/.codex/config.toml`, `.cursor/mcp.json` or `~/.gemini/settings.json`. Remove the skill link or copy from the skills folder.
+3. Remove the skill link or copy from the skills folder.
 4. Delete the data, config, state and runtime folders from step 1. This removes your notes, recordings, traces, recipes, Jev key file and any separate browser profile that `launch` made.
 5. Remove the extension from `chrome://extensions`, and switch off the `chrome://inspect/#remote-debugging` toggle if you turned it on.
 
@@ -304,7 +273,7 @@ browserctrl click <tab> ref_2 --browser chrome
 browserctrl fill <tab> ref_3 "Example" --browser chrome
 ```
 
-`read` waits for a loading page and says how long it waited. A ref keeps meaning what your last `read` showed; if the page changed, browserctrl says the ref is stale instead of clicking something else. It never replays an action whose result is uncertain, and a stuck page can be recovered with `reload`. Give each agent its own identity with `BROWSERCTRL_AGENT_ID` so two agents never share a tab claim. Without it, the harness session id or the parent process stands in, and a claim whose owner has gone counts as released.
+`read` waits for a loading page and says how long it waited. A ref keeps meaning what your last `read` showed; if the page changed, browserctrl says the ref is stale instead of clicking something else. It never replays an action whose result is uncertain, and a stuck page can be recovered with `reload`. Give each agent its own identity with `BROWSERCTRL_AGENT_ID` so two agents never share a tab claim. Without it, the parent process ID stands in, and a claim whose owner has gone counts as released.
 
 ### Plans with `do`, and finding things
 
@@ -351,7 +320,7 @@ Recordings in the default folder are capped at 1 GB in total (oldest deleted fir
 
 ### Sharing a browser safely
 
-The CLI, MCP server and Python client share one long-lived connection per browser debugging port, so console messages and network errors stay available across commands. Agents claim a tab while they work on it; claims expire after 15 minutes unless renewed. Claims coordinate agents that use browserctrl, but they don't hide your browser data or control other tools. `browserctrl activity --browser chrome` shows who owns which tab and what they're doing, and `activity pause --owner <id>` pauses an agent.
+The CLI and Python client share one long-lived connection per browser debugging port, so console messages and network errors stay available across commands. Agents claim a tab while they work on it; claims expire after 15 minutes unless renewed. Claims coordinate agents that use browserctrl, but they don't hide your browser data or control other tools. `browserctrl activity --browser chrome` shows who owns which tab and what they're doing, and `activity pause --owner <id>` pauses an agent.
 
 browserctrl supports Chromium browsers (Chrome, Dia, Brave, Edge, Chromium, Arc) on macOS, Linux and Windows. Firefox is not supported. An optional extension adds tab groups and other browser-level features; Dia also has native controls for dormant tabs. Details and test evidence are in [compatibility](docs/compatibility.md).
 
@@ -360,11 +329,9 @@ browserctrl supports Chromium browsers (Chrome, Dia, Brave, Edge, Chromium, Arc)
 ```mermaid
 flowchart LR
     CLI[Terminal commands] --> Shared[Shared browser connection]
-    MCP[MCP-enabled agent] --> Shared
     Py[Python client] --> Shared
     Shared --> Chromium[Chosen Chromium browser]
     CLI --> SafariPool[Shared Safari adapter]
-    MCP --> SafariPool
     SafariPool --> Apple[Apple Safari MCP]
     Shared -. optional .-> Ext[Extension for browser-level features]
 ```
@@ -373,7 +340,7 @@ Full command usage: `browserctrl help`. See also [contributing](CONTRIBUTING.md)
 
 ## Thanks
 
-browserctrl grew from [Petr Baudis's `chrome-cdp-skill`](https://github.com/pasky/chrome-cdp-skill), a small, dependency-light way to control Chromium. Thank you, Petr, for creating and sharing it. If its focused CLI does what you need, choose it: browserctrl adds a shared connection, an MCP server, a Python client, `do` plans with Jev, recipes, recordings and Safari support, and with them more code and dependencies.
+browserctrl grew from [Petr Baudis's `chrome-cdp-skill`](https://github.com/pasky/chrome-cdp-skill), a small, dependency-light way to control Chromium. Thank you, Petr, for creating and sharing it. If its focused CLI does what you need, choose it: browserctrl adds a shared connection, a Python client, `do` plans with Jev, recipes, recordings and Safari support, and with them more code and dependencies.
 
 ## License
 

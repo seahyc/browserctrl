@@ -15,9 +15,8 @@ field. Each annotation carries the note, the element's role, accessible name,
 test id and several selectors, a cropped screenshot, and which tab it was.
 Annotating a tab marks it too.
 
-Delivery to the agent, in order of portability: the `browser_annotations` MCP
-tool (`action: read`, `consume`, `clear`, `marks`, `arm`) works everywhere; every `browser_*` result appends a line when the queue
-is non-empty, which needs nothing from the harness.
+Use `browserctrl annotations` to read the queue, and `--consume` after acting
+on it.
 
 When Dia's ordinary tab list omits a dormant tab, or a task needs exact
 native-tab selection and grouping, read the [Dia native tab reference](dia-native.md).
@@ -84,9 +83,7 @@ replay to each frame's time, so they keep the run's real timing however busy the
 is; frames that did not change cost nothing. Pages load their images from the live site
 during rendering: if the run went through a proxy (a geo-blocked site), pass the same one
 with `--proxy socks5://…` (or `BROWSERCTRL_VIDEO_PROXY`). The GIF is sped up 4× by
-default (`--gif-speed`) and kept under 8 MB; the MP4 stays real-time. Needs ffmpeg. The MCP tool is `browser_record` with `action` `tab_start`, `tab_stop` or
-`tab_status` (the old name `browser_rec` still answers); the human's plays use `start`, `stop`, `list`
-and `show` (old name `browser_recording`). The Online-Mind2Web judge input is made by
+default (`--gif-speed`) and kept under 8 MB; the MP4 stays real-time. Needs ffmpeg. The Online-Mind2Web judge input is made by
 `node bench/om2w/export.mjs <recording dir> <out dir> --task-id ID --task "…" [--answer "…"]`,
 which lives with the benchmark and is not part of the CLI. Recordings go to the data folder
 (`browserctrl where`), capped at 1 GB in total. The bench harness records every run into `bench/runs/<run>/rec/`.

@@ -1,11 +1,11 @@
 ---
 name: browserctrl
-description: Control explicitly selected Chromium browsers or Safari 27+ from the terminal or MCP. Use for page automation, browser QA, multi-step research, long forms and multi-screen flows, or tab organization; macOS Dia supports dormant tabs. Safari uses Apple's separate automation session.
+description: Control explicitly selected Chromium browsers or Safari 27+ from the terminal. Use for page automation, browser QA, multi-step research, long forms and multi-screen flows, or tab organization; macOS Dia supports dormant tabs. Safari uses Apple's separate automation session.
 ---
 
 # browserctrl
 
-CLI `browserctrl`; the MCP server (`browserctrl-mcp`) offers the same as `browser_*` tools.
+Use the `browserctrl` CLI on PATH.
 `browserctrl help` lists every command.
 
 ## Connect
@@ -13,7 +13,7 @@ CLI `browserctrl`; the MCP server (`browserctrl-mcp`) offers the same as `browse
 - **Pick the browser once:** set `BROWSERCTRL_BROWSER` (dia, chrome, brave, edge, chromium, arc)
   or `BROWSERCTRL_PORT`, or pass `--browser` / `--port` per call. No default.
   `browserctrl browsers` lists what is debuggable.
-- **One identity per agent:** set `BROWSERCTRL_AGENT_ID` (MCP: `agentId`) and keep it for the task.
+- **One identity per agent:** set `BROWSERCTRL_AGENT_ID` and keep it for the task.
 - Use the shared connection: no own WebSocket or Playwright session, and never stop the daemon
   or restart the browser to recover.
 - Open your own background tab (`open <url>`), release claims when done, respect others' claims.
@@ -92,5 +92,5 @@ All options: [`do` reference](references/reading-and-acting.md#plan-several-step
 | [tabs-and-browser.md](references/tabs-and-browser.md) | tabs, claims, profiles, the human, extension |
 | [connecting.md](references/connecting.md) | browsers, launching, Safari, diagnostics |
 | [activity.md](references/activity.md), [dia-native.md](references/dia-native.md) | agent activity, Dia dormant tabs |
-| [architecture.md](references/architecture.md) | MCP tools, daemon, Python |
+| [architecture.md](references/architecture.md) | CLI, daemon, Python |
 | [settings.md](references/settings.md) | every `BROWSERCTRL_*` setting, folders, Jev key |

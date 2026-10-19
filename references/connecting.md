@@ -29,10 +29,10 @@ browserctrl safari call page_interactions --tab <full-tab-handle> --args '{"inte
 Safari calls use full native tab handles and node UIDs from Safari's own content
 read, never Chromium `ref_N` values. Every page call needs an explicit handle;
 the daemon checks the claim and serializes tab selection plus the call. Supply a
-stable `BROWSERCTRL_AGENT_ID` for CLI workflows or `agentId` on every shared MCP call.
-Release your claims at handoff. The MCP `browser_safari` tool supports `tools`,
-`call`, `status` and `stop`; common browser tools also route supported operations
-when `browser="safari"`. Unsupported operations fail explicitly. Python's
+stable `BROWSERCTRL_AGENT_ID` for CLI workflows.
+Release your claims at handoff. The `safari` command supports `tools`,
+`call`, `status` and `stop`; common CLI commands also route supported operations
+with `--browser safari`. Unsupported operations fail explicitly. Python's
 `ChromeCDP` client, tab grouping, dormant Dia tabs, recording, uploads and raw CDP
 remain Chromium-only. Safari reload schedules `location.reload()` once through native JavaScript
 evaluation and observes the new document. It is an adapter helper, not a direct
@@ -44,18 +44,18 @@ against a disposable page before offering an unattended workflow.
 
 ## Start here: reuse the shared connection
 
-For every browser action, use the `browserctrl` CLI, the MCP server, or the SDK. They share
+For every browser action, use the `browserctrl` CLI or the SDK. They share
 one daemon connection per browser. Do not create direct WebSocket clients or use
 Playwright `connect_over_cdp` against the signed-in browser: those bypass the pool
 and can trigger a fresh debugging approval for each connection.
 
-1. Select Dia explicitly with `--browser dia` or MCP `browser: "dia"` when using
+1. Select Dia explicitly with `--browser dia` when using
    the user's Dia session.
 2. Choose one unique identity for this agent and keep it across all calls:
-   `BROWSERCTRL_AGENT_ID` for CLI/Python, or `agentId` for MCP. With none set, the
-   harness session id (Codex, Claude Code) or the parent process stands in, and a claim
+   `BROWSERCTRL_AGENT_ID` for CLI/Python. With none set, the
+   parent process ID stands in, and a claim
    whose owner process has gone counts as released. Give sibling agents
-   different identities, even when they share one MCP server.
+   different identities.
 3. Before bulk browsing, describe the work and its progress with `activity describe`.
    Read [activity and background readiness](activity.md) for status,
    pause/resume controls, and readiness checks. Open a background tab per agent
@@ -83,14 +83,8 @@ required. The pool cannot suppress approvals from clients that bypass it.
 For a task on a page (search, filter, open, read a list), send the whole plan in one
 `browserctrl do` call: see [Fastest way through a task](reading-and-acting.md#fastest-way-through-a-task).
 
-Two frontends over one core:
-
-- **CLI**: `browserctrl <command>` (`bin/browserctrl.mjs`)
-- **MCP server**: `browserctrl-mcp` (`mcp/server.mjs`), exposing `browser_*` tools to any MCP client
-
-Prefer the MCP tools when they are available in your session: screenshots come back
-inline, and `browser_do` / `browser_items` are the same `do` and `items` as the CLI.
-The CLI is the fallback and the debugging surface.
+Run `browserctrl <command>` through the CLI entry point, `bin/browserctrl.mjs`.
+Screenshots include a saved path for the agent to open.
 
 ## Pick a browser explicitly
 
@@ -168,7 +162,7 @@ This is diagnostic evidence, not proof that a browser workflow is healthy.
 ### Repeated debugging approvals
 
 First verify the caller follows [Start here](#start-here-reuse-the-shared-connection).
-An old MCP server must be reloaded to pick up code changes, or use a fresh CLI process.
+Use a fresh CLI process after code changes.
 
 `doctor` now reports existing TCP clients and executable ancestry using passive
 OS inspection. TCP observation alone cannot distinguish HTTP discovery from a

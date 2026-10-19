@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -73,37 +72,6 @@ test('another agent cannot evaluate, navigate, close, or detach an owned tab', o
     await a.browser('Target.closeTarget', { targetId });
   } finally { a.close(); b.close(); }
 });
-
-test('agents sharing one MCP server keep distinct identities across concurrent requests', options, async () => {
-  const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
-  const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [fileURLToPath(new URL('../mcp/server.mjs', import.meta.url))],
-    env: { ...process.env },
-  });
-  const client = new Client({ name: 'ten-agent-test', version: '1' });
-  await client.connect(transport);
-  const callTool = args => client.callTool(args, undefined, { timeout: 120000 });
-  try {
-    const rows = await Promise.all(Array.from({ length: 10 }, async (_, n) => {
-      const result = await callTool({ name: 'browser_open', arguments: { port, agentId: `mcp-${n}`, url: 'about:blank', until: 'none' } });
-      assert.ok(!result.isError, JSON.stringify(result));
-      return JSON.parse(result.content[0].text);
-    }));
-    const writes = await Promise.all(rows.map((row, n) => callTool({ name: 'browser_eval', arguments: {
-      port, agentId: `mcp-${n}`, tab: row.targetId, js: `globalThis.worker = ${n}`,
-    } })));
-    assert.ok(writes.every(result => !result.isError), JSON.stringify(writes));
-    const refused = await callTool({ name: 'browser_eval', arguments: {
-      port, agentId: 'mcp-1', tab: rows[0].targetId, js: 'globalThis.worker = 99',
-    } });
-    assert.equal(refused.isError, true);
-    assert.match(refused.content[0].text, /claimed by/);
-    await Promise.all(rows.map((row, n) => callTool({ name: 'browser_close', arguments: { port, agentId: `mcp-${n}`, tab: row.targetId } })));
-  } finally { await client.close(); }
-});
-
 
 test('browser-wide worker actions reserve the browser until they finish', options, async () => {
   const server = http.createServer((req, res) => {

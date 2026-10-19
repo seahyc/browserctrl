@@ -4,8 +4,8 @@ Part of the [browserctrl skill](../SKILL.md).
 
 ## Fastest way through a task
 
-**Before planning on a site, look it up once:** `browserctrl site <site or page URL>`
-(MCP `browser_site`). It lists the site's recipes first, with the exact `recipe run`
+**Before planning on a site, look it up once:** `browserctrl site <site or page URL>`.
+It lists the site's recipes first, with the exact `recipe run`
 command, then its flow notes: facts earlier agents wrote about how the site works,
 with ids, the page's own notes first. Pick your plan from them: a recipe that covers
 the data beats any UI route, and a note such as "the filter is in the URL" turns a
@@ -290,7 +290,7 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   `--recipe <name>` (shown as `→ recipe run <name>`).
   `browserctrl notes [site] [--clear]` lists or clears them; `--no-notes` skips hints
   once. Notes are off by default: `BROWSERCTRL_NOTES=on` turns them on, `=quiet` records
-  without hinting (`BROWSERCTRL_NOTES_DIR` moves the store). MCP: `browser_notes`.
+  without hinting (`BROWSERCTRL_NOTES_DIR` moves the store).
 - Intent targets, expectations, `--until` and `--dismiss` need `TYPESAFE_API_KEY` (see
   [Jev](#jev)). Exact names work without it; overlay checks are then skipped.
 
@@ -324,7 +324,7 @@ key. Keep criteria to what the items' text shows: "under $200 with free cancella
 "the best value" asks Jev to weigh things it cannot see.
 
 On Codex, a `do` that runs longer than the shell's 10 s wait comes back empty and costs a turn
-to collect: pass a longer wait (`yield_time_ms` 30000) for long plans, or use the MCP server.
+to collect: pass a longer wait (`yield_time_ms` 30000) for long plans, then collect the command result.
 
 ### Single actions
 
@@ -359,9 +359,7 @@ browserctrl drag <tab> --from ref_1 --to ref_2
 browserctrl act <tab> --steps '[{"action":"scroll","dy":800},{"action":"key","key":"Enter"}]'
 ```
 
-`browserctrl act` is the token-efficient batch equivalent of repeated `browser_act`
-calls. It stops at the first failure and accepts the same action shapes as the
-MCP tool. Add `--json` for machine-readable results.
+`browserctrl act` batches actions and stops at the first failure. Add `--json` for machine-readable results.
 
 ## Wait for conditions, never sleep
 
@@ -375,8 +373,7 @@ browserctrl ready <tab> --browser dia --until domcontentloaded --timeout 15000
 browserctrl ready <tab> --browser dia --selector ".results" --text "Results"
 ```
 
-MCP `browser_wait` accepts `readyState: "load"` or `"domcontentloaded"`. Existing
-condition waits remain available:
+Condition waits remain available:
 
 ```bash
 browserctrl nav <tab> https://example.com --until networkidle   # load | domcontentloaded | networkidle | none
@@ -437,7 +434,7 @@ a tab, so reload after attaching if you need the events from page load.
 
 Chromium can stop generating frames for background tabs on Windows. If a
 background screenshot stalls, use `browserctrl shot <tab> output.png
---emulate-focus` or MCP `browser_screenshot emulateFocus=true`. This temporarily
+--emulate-focus`. This temporarily
 emulates page focus through CDP, then disables it after capture. It does not
 activate a browser tab or an OS window, but the page can observe focus events.
 Use it only when overriding that tab's focus emulation is acceptable. On a

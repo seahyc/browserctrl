@@ -2,7 +2,7 @@
 
 A recipe is one JSON file at `<site>/<name>.json`, either in your own
 `recipes` folder (in the config folder that `browserctrl where` prints; override with `BROWSERCTRL_RECIPES`) or in a tap.
-`browserctrl recipe run <site>/<name>` and the MCP `browser_recipe` tool run it. Every request runs inside
+`browserctrl recipe run <site>/<name>` runs it. Every request runs inside
 a tab on the recipe's origin, so the site's cookies, request signing and
 anti-fraud wrappers apply as they do for the page itself.
 

@@ -1,7 +1,7 @@
 # Guarded batch contract
 
 The batch harness adds a bounded, zero-model-call execution path to browserctrl.
-It does not replace its existing CLI, MCP tools or transport. The parent agent owns
+It does not replace its existing CLI or transport. The parent agent owns
 permission, text generation, branch selection and business-outcome verification.
 
 ## Start one persistent process

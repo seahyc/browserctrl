@@ -1,53 +1,17 @@
-# Architecture: MCP tools, the daemon, the Python client
+# Architecture: CLI, daemon and Python client
 
 Part of the [browserctrl skill](../SKILL.md).
 
-## MCP tools
+## CLI and clients
 
-Same capabilities, typed. Register the server `browserctrl-mcp` once in your agent's MCP
-configuration. [The README](../README.md#3-connect-your-agent) has snippets for Claude Code,
-Codex, Cursor, Gemini CLI and a generic JSON entry. The short form:
+The CLI entry point is `bin/browserctrl.mjs`. Install it on PATH with `npm link`
+from a clone or `npm i -g @seahyc/browserctrl`. Run `browserctrl help` for commands.
+Agents can load [SKILL.md](../SKILL.md) and follow its reference links.
 
-```bash
-claude mcp add browserctrl -- npx -y -p @seahyc/browserctrl browserctrl-mcp
-```
-
-**Core tools (18), listed by default:** `browser_list`, `browser_tabs`, `browser_open`,
-`browser_close`, `browser_navigate`, `browser_read`, `browser_items`, `browser_act`,
-`browser_do`, `browser_wait`, `browser_screenshot`, `browser_eval`, `browser_site`,
-`browser_recipe`, `browser_visit`, `browser_notes`, `browser_captcha`,
-`browser_annotations`.
-
-**Listed on request:** `browser_focus`, `browser_wake`, `browser_reload`,
-`browser_group`, `browser_ungroup`, `browser_profiles`, `browser_activity`,
-`browser_diagnostics`, `browser_record`, `browser_safari`. Set `BROWSERCTRL_MCP_TOOLS=all`
-to list every tool, or a comma list such as `BROWSERCTRL_MCP_TOOLS=browser_reload,browser_record`
-to add some to the core. This only changes what `tools/list` shows; any tool answers when
-called. Fewer listed tools means fewer tokens at the start of every run.
-
-**Merged tools take an `action`:**
-
-- `browser_annotations`: `read` (default), `consume`, `clear`, `marks`, `arm`.
-- `browser_record`: `start`, `stop`, `list`, `show`, and for one tab `tab_start`,
-  `tab_stop`, `tab_status`.
-- `browser_safari`: `tools`, `call`, `status`, `stop`.
-
-Old names still answer: `browser_refresh` (now `browser_reload`), `browser_marks` and
-`browser_annotate_mode` (now `browser_annotations` with `action: marks` or `arm`), `browser_rec`
-and `browser_recording` (now `browser_record`).
-
-**Resources:** `browserctrl://guide` is SKILL.md, and `browserctrl://reference/<name>` is each
-file in `references/` (for example `browserctrl://reference/settings`). A client that can read
-resources gets the full `do` grammar there, so tool descriptions stay short.
-
-The SDK and Python client render a tab in the background with `ops.wake(conn, tab, {enabled})`
-and `client.wake(tab, off=False)`. They use `ops.focus` and `ops.reload` (`ops.refresh` is an
-alias), and the Python client has `client.focus(tab)` and
-`client.reload(tab, wait_until='load', timeout=None)` (`client.refresh` is an alias).
-
-`browser_act` takes one action or a `steps` array that runs in order and stops
-at the first failure. Screenshots return inline images to clients that render
-them and always include the saved path, so Codex can read the PNG itself.
+The SDK provides `ops.focus`, `ops.wake` and `ops.reload`. The Python client has
+`client.focus(tab)`, `client.wake(tab, off=False)` and
+`client.reload(tab, wait_until='load', timeout=None)`. `refresh` is an alias for
+`reload`. Screenshots include the saved path for the caller to open.
 
 ## Architecture
 
@@ -66,7 +30,7 @@ lib/annotations.mjs the annotation queue
 lib/recorder.mjs    recording lifecycle    lib/recstore.mjs  where recordings live
 lib/bridge.mjs      loopback HTTP (needs a per-install token): tray, video annotator, extension endpoint
 lib/pages/          tray and video-annotator pages
-bin/browserctrl.mjs         CLI frontend        mcp/server.mjs   MCP frontend
+bin/browserctrl.mjs CLI frontend
 extension/          wraps the same overlay; adds a popup and browser shortcuts
 ```
 
@@ -76,7 +40,7 @@ and network events survive between invocations. It reconnects across a browser
 restart and exits after 12 idle hours (`BROWSERCTRL_IDLE_EXIT_MIN`), never while a recording runs.
 A new browser connection can still require approval.
 
-The CLI, MCP and Python clients for one port reuse this daemon and browser
+The CLI and Python clients for one port reuse this daemon and browser
 WebSocket. A kernel-held file lock gives one daemon ownership of each port and
 is released automatically on process exit, including crashes. Startup reserves
 the local socket before connecting to the browser;
@@ -102,7 +66,7 @@ Commands default to a 30-second protocol timeout; explicit action timeouts still
 apply. Target IPC deadlines include a separate 60-second initialization allowance for
 attachment and domain setup. The requested action keeps its own protocol timeout;
 initialization does not consume that action's timeout or trigger a replay.
-For MCP integrations, allow at least 120 seconds for the enclosing tool call
+Allow at least 120 seconds for the enclosing command runner
 when a tab needs initialization; a 60-second client deadline can expire first.
 Keep action timeouts separate, and observe state after any uncertain timeout.
 The Python sidecar's outer deadline includes the same initialization allowance
@@ -180,4 +144,4 @@ silently select another local browser at the remote server's advertised port.
 The library does not start tunnels, provision browsers, or buy cloud services.
 Direct provider ws/wss URLs, authentication headers and cloud profile/cookie sync are
 not implemented. This is useful local/forwarded-CDP coverage, not full Browser Harness
-cloud parity. Existing CLI/MCP APIs, recording and diagnostics remain available.
+cloud parity. Existing CLI APIs, recording and diagnostics remain available.

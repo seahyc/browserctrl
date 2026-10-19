@@ -4,10 +4,10 @@ Every setting is an environment variable named `BROWSERCTRL_<NAME>`. The older
 `CDP_<NAME>` spelling is still read when the new one is not set. An empty value counts
 as unset. A flag is off when its value is `0`, `false`, `off` or `no`, and on for any
 other value. Settings are read from the environment of the process that runs the
-command, so for the MCP server put them in the server's `env` block.
+command.
 
 Most people set none of these. The ones worth knowing are `BROWSERCTRL_BROWSER` or
-`BROWSERCTRL_PORT`, `BROWSERCTRL_AGENT_ID`, `TYPESAFE_API_KEY` and `BROWSERCTRL_MCP_TOOLS`.
+`BROWSERCTRL_PORT`, `BROWSERCTRL_AGENT_ID` and `TYPESAFE_API_KEY`.
 
 ## Which browser and which agent
 
@@ -15,7 +15,7 @@ Most people set none of these. The ones worth knowing are `BROWSERCTRL_BROWSER` 
 | --- | --- | --- |
 | `BROWSERCTRL_BROWSER` | none | Browser every command uses when it has no `--browser` (`dia`, `chrome`, `brave`, `edge`, `chromium`, `arc`, `safari`). |
 | `BROWSERCTRL_PORT` | none | Debug port every command uses when it has no `--port`. Wins over `BROWSERCTRL_BROWSER`. |
-| `BROWSERCTRL_AGENT_ID` | the harness session id, else `pid:<parent pid>` | Identity that owns tab claims. Keep one per agent task. The harness session ids read are `CODEX_THREAD_ID`, `CODEX_SESSION_ID` and `CLAUDE_CODE_SESSION_ID`. A claim whose owner process is gone counts as released. |
+| `BROWSERCTRL_AGENT_ID` | `pid:<parent pid>` | Identity that owns tab claims. Keep one per agent task. A claim whose owner process is gone counts as released. |
 | `BROWSERCTRL_AGENT_LABEL` | `codex`, `claude-code` or `shell` | Name shown for the agent in `browserctrl activity`. |
 | `BROWSERCTRL_<BROWSER>_BIN` | found in the usual install places, then PATH | Path to a browser program for `browserctrl launch`, for example `BROWSERCTRL_CHROME_BIN` or `BROWSERCTRL_BRAVE_BIN`. |
 
@@ -103,14 +103,6 @@ Jev answers "which control does this step mean?" for names that are not exact. S
 | `BROWSERCTRL_NOTIFY` | on | `0` silences captcha alerts. |
 | `BROWSERCTRL_NOTIFY_SOUND` | system sound on macOS | Sound file to play, or `0` for none. |
 | `BROWSERCTRL_NOTIFY_CMD` | none | A command run as `<cmd> "<message>"` when a challenge needs you. |
-
-## MCP server
-
-| Name | Default | What it does |
-| --- | --- | --- |
-| `BROWSERCTRL_MCP_TOOLS` | core | `all`, or a comma list of tool names added to the 18 core tools. Every tool still answers when called. |
-| `BROWSERCTRL_MCP_IMAGES` | by client | Whether screenshots come back as images. Claude, Cursor, VS Code and Zed clients get images by default. |
-| `BROWSERCTRL_SESSION_CWD` | the working folder | Folder shown for this session in the annotation picker. |
 
 ## Bridge (annotation, tray, recordings)
 
