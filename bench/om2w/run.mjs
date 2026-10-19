@@ -51,6 +51,16 @@ if (BC_DIR) {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'om2w-bc-'));
   fs.writeFileSync(path.join(bin, 'browserctrl'), `#!/bin/sh\nexec "${process.execPath}" "${path.join(BC_DIR, 'bin', 'browserctrl.mjs')}" "$@"\n`, { mode: 0o755 });
   process.env.PATH = `${bin}${path.delimiter}${process.env.PATH}`;
+  // Codex runs each command in a login shell (zsh -lc), which rebuilds PATH from the user's
+  // startup files. A ZDOTDIR of our own runs those files as usual, then puts this arm's
+  // browserctrl first again, so the agent runs the version being measured.
+  const zdot = fs.mkdtempSync(path.join(os.tmpdir(), 'om2w-zdot-'));
+  const home = os.homedir();
+  for (const f of ['.zshenv', '.zprofile', '.zshrc', '.zlogin']) {
+    const prepend = f === '.zshenv' ? '' : `export PATH="${bin}:$PATH"\n`;
+    fs.writeFileSync(path.join(zdot, f), `[ -f "${home}/${f}" ] && ZDOTDIR="${home}" source "${home}/${f}"\n${prepend}`);
+  }
+  process.env.ZDOTDIR = zdot;
 }
 if (process.env.OM2W_BC_HOME) process.env.BROWSERCTRL_HOME = path.resolve(process.env.OM2W_BC_HOME);
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
