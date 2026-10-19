@@ -74,4 +74,6 @@ export interface Dirs {
   config: string;
   state: string;
   runtime: string;
+  /** Kinds still read from an earlier version's folder (see `browserctrl migrate`). */
+  legacy?: string[];
 }

@@ -26,16 +26,16 @@ test('flag and number parse settings with a fallback', () => {
 });
 
 test('folders follow each OS convention', () => {
-  const mac = directories({ platform: 'darwin', env: {}, home: '/Users/a', uid: 501 });
-  assert.deepEqual(mac, { data: '/Users/a/Library/Application Support/browserctrl', config: '/Users/a/Library/Application Support/browserctrl', state: '/Users/a/Library/Application Support/browserctrl/state', runtime: '/tmp/browserctrl-501' });
+  const mac = directories({ platform: 'darwin', env: {}, home: '/Users/a', uid: 501, exists: () => false });
+  assert.deepEqual(mac, { data: '/Users/a/Library/Application Support/browserctrl', config: '/Users/a/Library/Application Support/browserctrl', state: '/Users/a/Library/Application Support/browserctrl/state', runtime: '/tmp/browserctrl-501', legacy: [] });
 
-  const linux = directories({ platform: 'linux', env: {}, home: '/home/a', uid: 1000 });
-  assert.deepEqual(linux, { data: '/home/a/.local/share/browserctrl', config: '/home/a/.config/browserctrl', state: '/home/a/.local/state/browserctrl', runtime: '/tmp/browserctrl-1000' });
+  const linux = directories({ platform: 'linux', env: {}, home: '/home/a', uid: 1000, exists: () => false });
+  assert.deepEqual(linux, { data: '/home/a/.local/share/browserctrl', config: '/home/a/.config/browserctrl', state: '/home/a/.local/state/browserctrl', runtime: '/tmp/browserctrl-1000', legacy: [] });
 
-  const xdg = directories({ platform: 'linux', env: { XDG_DATA_HOME: '/d', XDG_CONFIG_HOME: '/c', XDG_STATE_HOME: '/s', XDG_RUNTIME_DIR: '/run/user/1000' }, home: '/home/a', uid: 1000 });
-  assert.deepEqual(xdg, { data: '/d/browserctrl', config: '/c/browserctrl', state: '/s/browserctrl', runtime: '/run/user/1000/browserctrl' });
+  const xdg = directories({ platform: 'linux', env: { XDG_DATA_HOME: '/d', XDG_CONFIG_HOME: '/c', XDG_STATE_HOME: '/s', XDG_RUNTIME_DIR: '/run/user/1000' }, home: '/home/a', uid: 1000, exists: () => false });
+  assert.deepEqual(xdg, { data: '/d/browserctrl', config: '/c/browserctrl', state: '/s/browserctrl', runtime: '/run/user/1000/browserctrl', legacy: [] });
 
-  const win = directories({ platform: 'win32', env: { LOCALAPPDATA: 'C:\\L', APPDATA: 'C:\\R' }, home: 'C:\\Users\\a' });
+  const win = directories({ platform: 'win32', env: { LOCALAPPDATA: 'C:\\L', APPDATA: 'C:\\R' }, home: 'C:\\Users\\a', exists: () => false });
   assert.equal(win.data, 'C:\\L\\browserctrl');
   assert.equal(win.config, 'C:\\R\\browserctrl');
   assert.equal(win.state, 'C:\\L\\browserctrl\\state');
@@ -45,7 +45,7 @@ test('folders follow each OS convention', () => {
 test('BROWSERCTRL_HOME (or CDP_HOME) puts everything under one folder', () => {
   for (const platform of ['darwin', 'linux']) {
     const d = directories({ platform, env: { BROWSERCTRL_HOME: '/h' }, home: '/Users/a', uid: 1 });
-    assert.deepEqual(d, { data: '/h', config: '/h', state: '/h', runtime: '/h/run' });
+    assert.deepEqual(d, { data: '/h', config: '/h', state: '/h', runtime: '/h/run', legacy: [] });
   }
   assert.equal(directories({ platform: 'linux', env: { CDP_HOME: '/legacy' }, home: '/x', uid: 1 }).data, '/legacy');
 });
@@ -67,7 +67,6 @@ test('runtime folder is private to its owner', { skip: process.platform === 'win
 });
 
 test('migrateLegacy moves into empty targets and skips what already exists', () => {
-  // migrateLegacy is a no-op while BROWSERCTRL_HOME is set (the test suite sets it), so unset it here.
   const keep = { BROWSERCTRL_HOME: process.env.BROWSERCTRL_HOME, CDP_HOME: process.env.CDP_HOME };
   delete process.env.BROWSERCTRL_HOME; delete process.env.CDP_HOME;
   const root = tmp();
@@ -78,21 +77,34 @@ test('migrateLegacy moves into empty targets and skips what already exists', () 
     fs.mkdirSync(from1); fs.writeFileSync(path.join(from1, 'a.json'), 'old-a'); fs.writeFileSync(path.join(from1, 'b.json'), 'old-b');
     fs.mkdirSync(from2); fs.writeFileSync(path.join(from2, 'c.json'), 'old-c');
     fs.mkdirSync(to1); fs.writeFileSync(path.join(to1, 'a.json'), 'new-a');
-    const logged = [];
-    migrateLegacy({ moves: [[from1, to1], [from2, to2], [missing, path.join(root, 'new3')], [to1, to1]], log: m => logged.push(m) });
+    const logged = migrateLegacy({ moves: [[from1, to1], [from2, to2], [missing, path.join(root, 'new3')], [to1, to1]] });
     assert.equal(fs.readFileSync(path.join(to1, 'a.json'), 'utf8'), 'new-a', 'an existing file is never overwritten');
     assert.equal(fs.readFileSync(path.join(from1, 'a.json'), 'utf8'), 'old-a', 'and the old one stays where it was');
     assert.equal(fs.readFileSync(path.join(to1, 'b.json'), 'utf8'), 'old-b');
     assert.equal(fs.existsSync(path.join(from1, 'b.json')), false);
     assert.equal(fs.readFileSync(path.join(to2, 'c.json'), 'utf8'), 'old-c');
     assert.equal(fs.existsSync(path.join(root, 'new3')), false, 'no old folder, nothing made');
-    assert.equal(logged.length, 2);
-    // It runs once per process: a second call changes nothing.
+    assert.equal(logged.filter(m => !m.skipped).length, 2);
+    // A dry run only says what it would do.
     fs.writeFileSync(path.join(from2, 'd.json'), 'late');
-    migrateLegacy({ moves: [[from2, to2]] });
+    assert.deepEqual(migrateLegacy({ moves: [[from2, to2]], dry: true }).map(m => path.basename(m.to)), ['d.json']);
     assert.equal(fs.existsSync(path.join(to2, 'd.json')), false);
   } finally {
     for (const [k, v] of Object.entries(keep)) if (v !== undefined) process.env[k] = v;
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('folders an earlier version made are used in place, never moved by themselves', () => {
+  const home = '/h', made = new Set(['/h/.local/share/browserctrl', '/h/.cdp']);
+  const d = directories({ platform: 'darwin', env: {}, home, uid: 1, exists: p => made.has(p) });
+  assert.equal(d.data, '/h/.local/share/browserctrl');
+  assert.equal(d.state, '/h/.cdp');
+  assert.equal(d.config, '/h/Library/Application Support/browserctrl');
+  assert.deepEqual(d.legacy, ['data', 'state']);
+  const fresh = directories({ platform: 'darwin', env: {}, home, uid: 1, exists: () => false });
+  assert.deepEqual(fresh.legacy, []);
+  for (const f of ['bin/browserctrl.mjs', 'mcp/server.mjs', 'lib/daemon.mjs', 'lib/env.mjs']) {
+    assert.doesNotMatch(fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8').replace(/if \(cmd === 'migrate'\)[\s\S]*?\n {2}\}\n/, ''), /^\s+(const \w+ = )?(migrateLegacy|retireLegacyDaemon)\(/m, `${f} must not migrate on its own`);
   }
 });

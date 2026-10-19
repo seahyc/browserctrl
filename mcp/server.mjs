@@ -32,10 +32,9 @@ import * as profiles from '../lib/profiles.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { visit, formatVisits } from '../lib/visit.mjs';
-import { setting, flag, migrateLegacy, requireNode } from '../lib/config.mjs';
+import { setting, flag, requireNode } from '../lib/config.mjs';
 
 requireNode();
-migrateLegacy();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const SERVER_NAME = 'browser';

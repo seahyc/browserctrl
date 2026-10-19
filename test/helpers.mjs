@@ -19,6 +19,15 @@ if (!process.env.BROWSERCTRL_HOME) {
   process.env.BROWSERCTRL_HOME = fs.mkdtempSync(path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', 'bc-test-'));
   process.on('exit', () => { try { fs.rmSync(process.env.BROWSERCTRL_HOME, { recursive: true, force: true }); } catch {} });
 }
+// A test file that loaded lib/config.mjs before this file worked out its folders from the
+// real home: stop before any test writes to, or deletes in, the user's folders.
+{
+  const { dirs } = await import('../lib/config.mjs');
+  const home = path.resolve(process.env.BROWSERCTRL_HOME);
+  if (!['data', 'config', 'state', 'runtime'].every(k => path.resolve(dirs[k]).startsWith(home))) {
+    throw new Error(`browserctrl's folders were set before the test home (${dirs.data}). Run tests with: node --import ./test/helpers.mjs --test <file>, or npm test.`);
+  }
+}
 // Tests read these two back from the environment, so name them (they are the defaults under the home).
 process.env.BROWSERCTRL_EXEMPLARS ||= path.join(process.env.BROWSERCTRL_HOME, 'exemplars');
 process.env.BROWSERCTRL_RECIPES ||= path.join(process.env.BROWSERCTRL_HOME, 'recipes');
