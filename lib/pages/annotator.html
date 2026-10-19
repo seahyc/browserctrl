@@ -43,7 +43,7 @@
     <script>
       const id = new URLSearchParams(location.search).get('id');
       const v = document.getElementById('v');
-      v.src = '/api/recordings/' + id + '/video';
+      v.src = '/api/recordings/' + id + '/video?t=' + BRIDGE_TOKEN; // a <video> cannot send a header
       document.getElementById('title').textContent = id;
 
       async function load() {

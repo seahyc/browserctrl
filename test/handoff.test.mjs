@@ -96,7 +96,7 @@ test('marks expire so a forgotten one cannot steer a later session', () => {
 // ---------------------------------------------------------- annotations -----
 
 t('the overlay captures an element the way an agent can act on it', async () => {
-  await ops.installOverlay(conn, tabId, { bridgePort: 1 });
+  await ops.installOverlay(conn, tabId, {});
   const identity = await ops.evaluate(conn, tabId, "JSON.stringify(window.__cdpOverlay.identity('#go'))");
   const parsed = JSON.parse(identity);
   assert.equal(parsed.role, 'button');
@@ -196,11 +196,9 @@ t('a mark with nothing near it says so rather than inventing a link', async () =
 
 // ------------------------------------------------------------ extension -----
 
-test('the extension does not fork the overlay', () => {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const shared = fs.readFileSync(path.join(here, '..', 'lib', 'overlay', 'annotate.js'), 'utf8');
-  const copy = fs.readFileSync(path.join(here, '..', 'extension', 'annotate.js'), 'utf8');
-  assert.equal(copy, shared, 'extension/annotate.js is stale: run `npm run sync-extension`');
+test('the extension does not fork the overlay', async () => {
+  const { inSync } = await import('../scripts/sync-extension.mjs');
+  assert.ok(inSync(), 'extension/annotate.js is stale: run `npm run sync-extension`');
 });
 
 test('the extension asks for no more permission than it needs', () => {
@@ -237,7 +235,7 @@ test('the agent picker supports finding a task by name', () => {
 
 t('past annotations show as pins anchored to their elements', async () => {
   annotations.clear();
-  await ops.installOverlay(conn, tabId, { bridgePort: 1, force: true });
+  await ops.installOverlay(conn, tabId, { force: true });
   await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#go', 'first note')");
   await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#name', 'second note')");
   await new Promise(r => setTimeout(r, 1200));

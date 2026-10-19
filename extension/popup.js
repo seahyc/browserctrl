@@ -56,8 +56,15 @@ async function count() {
   document.getElementById('count').textContent = `${m.length} marked · ${annotations.length} annotations waiting`;
 }
 
-document.getElementById('open-tray').addEventListener('click', () => {
-  chrome.tabs.create({ url: `${BRIDGE}/tray` });
+// The bridge trusts this page by its extension origin; a tab navigation has no
+// origin, so the tray is opened with a token the bridge hands to the extension.
+document.getElementById('open-tray').addEventListener('click', async () => {
+  try {
+    const { token } = await (await fetch(`${BRIDGE}/api/token`)).json();
+    chrome.tabs.create({ url: `${BRIDGE}/tray?t=${token}` });
+  } catch {
+    document.getElementById('count').textContent = 'bridge not running: run `browserctrl bridge`';
+  }
 });
 
 async function activeAction(kind, button) {

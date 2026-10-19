@@ -5,8 +5,25 @@
 //
 // It deliberately holds no annotation logic. annotate.js is the same file the
 // daemon injects.
+//
+// How it authenticates: the bridge refuses anything without its token, and
+// trusts this extension by its Origin header (chrome-extension://<id>), which a
+// web page cannot set. The id is fixed by the `key` in manifest.json. So these
+// fetches carry no secret; the one place a token is needed is opening the tray
+// in a tab (a navigation has no Origin), and openTray() asks for it.
 const BRIDGE = 'http://127.0.0.1:17222';
 const OUTBOX_KEY = 'cdp-annotation-outbox';
+
+async function openTray() {
+  try {
+    const { token } = await (await fetch(`${BRIDGE}/api/token`)).json();
+    await chrome.tabs.create({ url: `${BRIDGE}/tray?t=${token}` });
+  } catch {
+    await chrome.notifications.create(`cdp-tray-${Date.now()}`, {
+      type: 'basic', iconUrl: 'icons/icon48.png', title: 'Could not open the tray', message: 'Could not reach the cdp bridge. Run `browserctrl bridge`.',
+    }).catch(() => {});
+  }
+}
 
 async function post(path, body) {
   const res = await fetch(BRIDGE + path, {
@@ -154,7 +171,7 @@ installMenus();
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab) return;
   if (info.menuItemId === 'cdp-hand-tab') await handTab(tab);
-  if (info.menuItemId === 'cdp-open-tray') chrome.tabs.create({ url: `${BRIDGE}/tray` });
+  if (info.menuItemId === 'cdp-open-tray') await openTray();
 });
 
 chrome.commands.onCommand.addListener(async command => {

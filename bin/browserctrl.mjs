@@ -20,7 +20,7 @@ import {getNativeTabAdapter} from '../lib/adapters/index.mjs';
 import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
-import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
+import { ensureRunning, bridgeFetch, bridgeToken, BRIDGE_PORT } from '../lib/bridge.mjs';
 import { listRecipes, loadRecipe, runRecipe, findRecipes, listTaps, tapAdd, tapUpdate, tapRemove } from '../lib/recipes.mjs';
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
@@ -214,7 +214,7 @@ function usage() {
     browserctrl recipe find <url or words>                recipes for a page or task; open/nav/read also hint at them
     browserctrl recipe run shopee.sg/orders --browser dia run one; key=value args override params; --raw skips output mapping
     browserctrl recipe list                               all recipes, local and tapped
-    browserctrl recipe tap add <git-url> [name]           add a shared recipe repo; tap list | update [name] | remove <name>
+    browserctrl recipe tap add <git-url> [name]           add a shared recipe repo; tap list | update [name] [--accept] | remove <name>
     browserctrl recipe endpoints [host]                   fetch/XHR endpoints captured from attached tabs (after capture on)
     browserctrl recipe inspect <host> [match]             full captured exemplars (headers, tokens, bodies)
 
@@ -599,9 +599,9 @@ const main = async () => {
       const action = positional[2] || 'list';
       if (action === 'list') return out(listTaps().join('\n') || '(no taps)');
       if (action === 'add') return out(await tapAdd(positional[3], positional[4]));
-      if (action === 'update') return out(await tapUpdate(positional[3]));
+      if (action === 'update') return out(await tapUpdate(positional[3] ?? (typeof flags.accept === "string" ? flags.accept : undefined), undefined, { accept: Boolean(flags.accept) }));
       if (action === 'remove') return out(tapRemove(positional[3]));
-      throw new Error('Usage: browserctrl recipe tap list | add <git-url> [name] | update [name] | remove <name>');
+      throw new Error('Usage: browserctrl recipe tap list | add <git-url> [name] | update [name] [--accept] | remove <name>');
     }
     const store = createStore();
     if (sub === 'endpoints') {
@@ -642,14 +642,14 @@ const main = async () => {
 
   if (cmd === 'bridge') {
     await ensureRunning();
-    return out({ bridge: `http://127.0.0.1:${BRIDGE_PORT}`, tray: `http://127.0.0.1:${BRIDGE_PORT}/tray` });
+    return out({ bridge: `http://127.0.0.1:${BRIDGE_PORT}`, tray: `http://127.0.0.1:${BRIDGE_PORT}/tray?t=${bridgeToken()}` });
   }
 
   if (cmd === 'record' && positional[1] === 'stop') {
     await ensureRunning();
-    const id = positional[2] || (await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`)).json()).find(r => !r.stoppedAt)?.id;
+    const id = positional[2] || (await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`)).json()).find(r => !r.stoppedAt)?.id;
     if (!id) throw new Error('No recording is running.');
-    const res = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/stop`, { method: 'POST' })).json();
+    const res = await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/stop`, { method: 'POST' })).json();
     return out({
       ...res,
       next: res.hasVideo ? `browserctrl annotate ${id} --browser <name>` : `browserctrl recording ${id} --steps`,
@@ -658,7 +658,7 @@ const main = async () => {
 
   if (cmd === 'recordings') {
     await ensureRunning();
-    const rows = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`)).json();
+    const rows = await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`)).json();
     return out(
       rows.length
         ? rows.map(r => `${r.id}  ${r.stoppedAt ? 'done' : 'RECORDING'}  ${r.events} events  ${r.marks} marks${r.label ? `  ${r.label}` : ''}`).join('\n')
@@ -670,10 +670,10 @@ const main = async () => {
     await ensureRunning();
     const id = positional[1];
     if (!id) throw new Error('Which recording? See: browserctrl recordings');
-    if (flags.steps) return out(await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/steps`)).text());
-    const marks = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/marks`)).json();
+    if (flags.steps) return out(await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/steps`)).text());
+    const marks = await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/marks`)).json();
     if (flags.json) return out(marks);
-    const summary = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}`)).json();
+    const summary = await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}`)).json();
     const lines = [`${summary.id}  ${Math.round(summary.durationMs / 1000)}s  ${summary.events} events  video: ${summary.hasVideo ? 'yes' : 'no'}`, ''];
     for (const m of marks) {
       lines.push(`${m.clock}  ${m.note || '(no note)'}`);
@@ -744,7 +744,7 @@ const main = async () => {
     }
     if (cmd === 'tray') {
       await ensureRunning();
-      const trayUrl = `http://127.0.0.1:${BRIDGE_PORT}/tray`;
+      const trayUrl = `http://127.0.0.1:${BRIDGE_PORT}/tray?t=${bridgeToken()}`;
       await ops.newTab(conn, trayUrl);
       return out({ tray: trayUrl });
     }
@@ -752,7 +752,7 @@ const main = async () => {
       await ensureRunning();
       const sub = positional[1];
       if (sub === 'start') {
-        const meta = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`, {
+        const meta = await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ port, video: Boolean(flags.video), apps: flags.apps !== 'false', label: flags.label === true ? null : flags.label }),
@@ -760,13 +760,13 @@ const main = async () => {
         return out({ ...meta, note: 'Drive the browser now. Stop with: browserctrl record stop ' + meta.id });
       }
       if (sub === 'stop') {
-        const id = positional[2] || (await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`)).json()).find(r => !r.stoppedAt)?.id;
+        const id = positional[2] || (await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings`)).json()).find(r => !r.stoppedAt)?.id;
         if (!id) throw new Error('No recording is running.');
-        const res = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/stop`, { method: 'POST' })).json();
+        const res = await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${id}/stop`, { method: 'POST' })).json();
         return out({ ...res, annotate: res.hasVideo ? `browserctrl annotate ${id} --browser <name>` : 'no video: read the steps with browserctrl recording ' + id + ' --steps' });
       }
       if (sub === 'arm') {
-        const st = await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/prewarm`, {
+        const st = await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/prewarm`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ port }),
@@ -774,17 +774,17 @@ const main = async () => {
         return out({ ...st, note: 'Capture is warming. `browserctrl record start --video` will adopt it, so the first seconds are on film.' });
       }
       if (sub === 'disarm') {
-        return out(await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/prewarm`, { method: 'DELETE' })).json());
+        return out(await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/prewarm`, { method: 'DELETE' })).json());
       }
       if (sub === 'status') {
-        return out(await (await fetch(`http://127.0.0.1:${BRIDGE_PORT}/api/prewarm`)).json());
+        return out(await (await bridgeFetch(`http://127.0.0.1:${BRIDGE_PORT}/api/prewarm`)).json());
       }
       throw new Error('Usage: browserctrl record start|stop [id] | browserctrl record arm|disarm|status');
     }
     if (cmd === 'annotate') {
       await ensureRunning();
       const id = positional[1];
-      const url = `http://127.0.0.1:${BRIDGE_PORT}/annotator?id=${encodeURIComponent(id)}`;
+      const url = `http://127.0.0.1:${BRIDGE_PORT}/annotator?id=${encodeURIComponent(id)}&t=${bridgeToken()}`;
       await ops.newTab(conn, url);
       return out({ annotator: url });
     }

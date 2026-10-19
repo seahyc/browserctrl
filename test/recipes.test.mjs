@@ -69,20 +69,63 @@ test('recipes are found by URL (site, origin host and subdomains, or match) and 
   assert.equal(recipeHint('about:blank', rows), null);
 });
 
-test('taps are cloned from git, updated fast-forward and removed', async () => {
+test('taps are pinned at add time; an update is shown and applied only when accepted', async () => {
   const repo = path.join(tmp, 'tap-src');
   fs.mkdirSync(path.join(repo, 'shop.example'), { recursive: true });
-  fs.writeFileSync(path.join(repo, 'shop.example', 'orders.json'), '{"description":"one"}');
-  const g = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'ignore' });
-  g('init', '-q'); g('add', '.'); g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'one');
+  fs.writeFileSync(path.join(repo, 'shop.example', 'orders.json'), '{"description":"one","origin":"https://shop.example"}');
+  const g = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8' }).trim();
+  const commit = m => { g('add', '.'); g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', m); };
+  g('init', '-q'); commit('one');
+  const first = g('rev-parse', 'HEAD');
   const taps = path.join(tmp, 'tapdir');
-  assert.deepEqual(await tapAdd(repo, 'shared', taps), { tap: 'shared', recipes: 1 });
+  const added = await tapAdd(repo, 'shared', taps);
+  assert.deepEqual(added, { tap: 'shared', pinned: first.slice(0, 12), recipes: 1 });
   await assert.rejects(tapAdd(repo, 'shared', taps), /already exists/);
+  assert.equal(loadRecipe('shop.example/orders', path.join(tmp, 'no-local'), taps).description, 'one');
+
+  // The upstream changes: an edited recipe and a new one.
+  fs.writeFileSync(path.join(repo, 'shop.example', 'orders.json'), '{"description":"evil","origin":"https://shop.example"}');
   fs.writeFileSync(path.join(repo, 'shop.example', 'returns.json'), '{}');
-  g('add', '.'); g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'two');
-  assert.deepEqual(await tapUpdate('shared', taps), [{ tap: 'shared', recipes: 2 }]);
+  commit('two');
+  const second = g('rev-parse', 'HEAD');
+
+  const [shown] = await tapUpdate('shared', taps);
+  assert.equal(shown.pinned, first.slice(0, 12));
+  assert.equal(shown.available, second.slice(0, 12));
+  assert.deepEqual(shown.changed.map(c => c.split(' ').slice(0, 2).join(' ')).sort(), ['A shop.example/returns.json', 'M shop.example/orders.json']);
+  assert.match(shown.changed.join('\n'), /orders\.json \(\+1 -1\)/);
+  // Nothing moved: still one recipe, still the reviewed text.
+  assert.equal(scanCount(taps), 1);
+  assert.equal(loadRecipe('shop.example/orders', path.join(tmp, 'no-local'), taps).description, 'one');
+
+  const [done] = await tapUpdate('shared', taps, { accept: true });
+  assert.equal(done.pinned, second.slice(0, 12));
+  assert.equal(done.recipes, 2);
+  assert.equal(loadRecipe('shop.example/orders', path.join(tmp, 'no-local'), taps).description, 'evil');
+  assert.equal((await tapUpdate('shared', taps))[0].upToDate, true);
+
+  // A tap moved or edited behind our back does not run.
+  fs.writeFileSync(path.join(taps, 'shared', 'shop.example', 'orders.json'), '{"description":"tampered","origin":"https://shop.example"}');
+  assert.throws(() => loadRecipe('shop.example/orders', path.join(tmp, 'no-local'), taps), /not at its pinned commit/);
+
   assert.deepEqual(tapRemove('shared', taps), { removed: 'shared' });
   assert.deepEqual(listTaps(taps), []);
+  assert.equal(JSON.stringify(JSON.parse(fs.readFileSync(path.join(taps, '.pins.json'), 'utf8'))), '{}');
+});
+
+test('a tap cloned before pinning existed will not run until it is accepted', async () => {
+  const repo = path.join(tmp, 'tap-legacy');
+  fs.mkdirSync(path.join(repo, 'old.example'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'old.example', 'a.json'), '{"origin":"https://old.example"}');
+  const g = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'ignore' });
+  g('init', '-q'); g('add', '.'); g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'one');
+  const taps = path.join(tmp, 'tapdir-legacy');
+  await tapAdd(repo, 'old', taps);
+  fs.rmSync(path.join(taps, '.pins.json'));
+  assert.throws(() => loadRecipe('old.example/a', path.join(tmp, 'no-local'), taps), /no pinned commit/);
+  const [pinned] = await tapUpdate('old', taps, { accept: true });
+  assert.ok(pinned.pinned);
+  assert.ok(loadRecipe('old.example/a', path.join(tmp, 'no-local'), taps));
 });
 
 test('a captured frame is used only while it is recent and not about to expire', () => {
@@ -96,6 +139,8 @@ test('a captured frame is used only while it is recent and not about to expire',
   assert.equal(freshFrameValue(frames, { path: 'key', max_age_s: 60 }, now), null, 'older than max_age_s');
   assert.equal(freshFrameValue([], src, now), null);
 });
+
+const scanCount = taps => listRecipes(path.join(tmp, 'no-local'), taps).length;
 
 const haveBrowser = Boolean(chromeBinary());
 let fixture, browser, conn, origin;

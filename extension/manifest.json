@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "browserctrl handoff",
   "version": "3.0.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhwB/WQjLtJsuAyBiwlmbiEs9/3f5slWfULuvjgv476RI041HtIxXxdFHIjIOU0xsHfs59KgBOyPTe4gkNcolgcJ/b2sM+LHXpbWqNLd0RBuFmjzrWpefWzEp6F5Vmyk0ARc/ZvsZ5KzcEMKd2OTqGqqjFkWMv0YJ81z+0+4dMpF999tVZOBJZ/MGPjTyjgxroKlrtAMlr9vbp8DzSctxvUSkaZExJ0Ig+/3n7nShTcBOFcCXjRWOx1yU6CSUwgHx/KceBJtM3/Uwb0v40BBMt5533iUIPb5v7wPogx1xAsTivrSKnwoecJFoDn1rgE9u5nG6izx4Xj2yCRUK8Yi0uwIDAQAB",
   "description": "Hand tabs and page elements to a coding agent, and let the agent drive browser-level chrome.* APIs the DevTools Protocol cannot reach.",
   "icons": {
     "16": "icons/icon16.png",
