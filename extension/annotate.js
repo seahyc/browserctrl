@@ -55,7 +55,7 @@
   }
 
   function nameOf(el) {
-    if (typeof accName === 'function') return accName(el).replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (typeof accName === 'function') return accName(el);
     var t = (el.getAttribute && el.getAttribute('aria-label')) || '';
     if (t.trim()) return t.trim();
     var own = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
