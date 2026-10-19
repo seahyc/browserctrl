@@ -1,25 +1,35 @@
-// read v2: the page-reading techniques of Browser Use's serializer, on offline fixtures.
-// A card link is one row, covered and inert controls are marked, ids are stable and new
-// rows are marked, stats and loading hints, same-origin frames, the viewport window, and
-// clickable divs found by cursor or click listener.
+// What read reports: rows, names, refs, ids, covered and inert controls, frames, the viewport
+// window, loading hints and stale refs.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
+import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as jev from '../lib/jev.mjs';
-import { formatRead } from '../lib/refs.mjs';
-import { runSteps } from '../lib/steps.mjs';
+import { deepTextExpression, formatRead } from '../lib/refs.mjs';
+import { itemsExpression, formatItems } from '../lib/items.mjs';
+import { runSteps, formatSteps } from '../lib/steps.mjs';
+import { planJev } from './fake-jev.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 
-process.env.CDP_AGENT_ID = 'test-read-v2';
+const TRACES = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-test-traces-'));
+const MEMO = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-test-memo-'));
+process.env.CDP_AGENT_ID = 'test-read-snapshot';
 process.env.BROWSERCTRL_NOTIFY = '0';
+process.env.BROWSERCTRL_TRACES = TRACES;
+process.env.BROWSERCTRL_NOTES = 'off';
+process.env.BROWSERCTRL_READ_TOKENS = path.join(MEMO, 'read-tokens.json');
+process.env.BROWSERCTRL_SETTLE_MEMORY = path.join(MEMO, 'never.json');
+process.env.BROWSERCTRL_SITE_TROUBLE = path.join(MEMO, 'trouble.json');
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const cli = (...args) => promisify(execFile)(process.execPath, [path.join(ROOT, 'bin/browserctrl.mjs'), ...args, '--port', String(TEST_PORT)], { env: process.env, timeout: 60000 }).then(r => r.stdout);
+const cliRun = (args, env = process.env, timeout = 120000) => promisify(execFile)(process.execPath, [path.join(ROOT, 'bin/browserctrl.mjs'), ...args], { env, timeout });
+const cli = (...args) => cliRun([...args, '--port', String(TEST_PORT)]);
+const cliOut = (...args) => cliRun([...args, '--port', String(TEST_PORT)]).then(r => r.stdout);
 
 const haveBrowser = Boolean(chromeBinary());
 let fixture, browser, conn;
@@ -35,14 +45,18 @@ after(async () => {
   try { conn?.close(); } catch {}
   await browser?.close();
   await fixture?.close();
+  fs.rmSync(TRACES, { recursive: true, force: true });
+  fs.rmSync(MEMO, { recursive: true, force: true });
 });
-
 const t = (name, fn) => test(name, { skip: haveBrowser ? false : 'no Chromium-family browser installed' }, fn);
-const open = async (page) => {
-  const id = (await ops.newTab(conn, fixture.url + 'fixtures/' + page)).targetId;
-  await ops.waitForReady(conn, id, { waitUntil: 'load' });
+const url = (page) => fixture.url + 'fixtures/' + page;
+const open = async (page, waitUntil = 'load') => {
+  const id = (await ops.newTab(conn, url(page))).targetId;
+  await ops.waitForReady(conn, id, { waitUntil });
   return id;
 };
+const state = (id) => ops.evaluate(conn, id, `document.querySelector('#state').textContent`);
+const rowOf = (snap, re) => snap.elements.find(e => re.test(e.name || ''));
 const title = (id) => ops.evaluate(conn, id, 'document.title');
 const byName = (snap, re) => snap.elements.filter(e => re.test(e.name || ''));
 
@@ -204,14 +218,123 @@ t('a div dropdown with a pointer cursor and click listener is listed and opens b
 
 t('the read command windows by default and lists the whole page with --all', async () => {
   const id = await open('read-long.html');
-  const text = await cli('read', id, '--text', 'none');
+  const text = await cliOut('read', id, '--text', 'none');
   assert.match(text, /^stats: \d+ interactive · 121 links · \d+ elements$/m);
   assert.match(text, /Top action/);
   assert.doesNotMatch(text, /link\s+Next\b/);
   assert.match(text, /more elements not listed: \d+ below; --all lists the whole page/);
-  const all = JSON.parse(await cli('read', id, '--all', '--json', '--text', 'none'));
+  const all = JSON.parse(await cliOut('read', id, '--all', '--json', '--text', 'none'));
   assert.ok(all.elements.find(e => e.name === 'Next'));
   assert.equal(all.omitted, undefined);
   assert.ok(all.elements.every(e => /^e\d+$/.test(e.id) && /^ref_\d+$/.test(e.ref)));
+  await ops.closeTab(conn, id);
+});
+
+t('an open dropdown rendered outside its dialog is listed first and is not inert', async () => {
+  const id = await open('slice-portal.html');
+  const snap = await ops.readPage(conn, id, { all: false });
+  const six = rowOf(snap, /^600$/);
+  assert.ok(six, 'the 600 option is listed within the default limit');
+  assert.equal(six.role, 'option');
+  assert.ok(!six.inert, JSON.stringify(six));
+  assert.ok(six.popup);
+  assert.ok(snap.elements.indexOf(six) < 5, `listed first, not at ${snap.elements.indexOf(six)}`);
+  assert.ok(rowOf(snap, /^Listing 3$/)?.inert, 'the page behind the dialog stays inert');
+  assert.match(formatRead(snap), /option\s+600\s+\(open list\)/);
+  await ops.click(conn, id, { ref: six.ref, token: snap.token });
+  assert.equal(await ops.evaluate(conn, id, 'document.getElementById("sqft").textContent'), '600');
+});
+
+t('icon-only stepper buttons are named from their row and direction', async () => {
+  const id = await open('slice-controls.html');
+  const snap = await ops.readPage(conn, id);
+  const inc = rowOf(snap, /^Increase Children/);
+  const dec = rowOf(snap, /^Decrease Children/);
+  assert.ok(inc && dec, formatRead(snap));
+  assert.equal(inc.nameFrom, 'context');
+  assert.ok(rowOf(snap, /^Increase Adults/));
+  await ops.click(conn, id, { ref: inc.ref, token: snap.token });
+  assert.equal(await ops.evaluate(conn, id, 'kids.textContent'), '1');
+  assert.match(formatRead(snap), /Increase Children\s+\(named from its row\)/);
+});
+
+t('a custom checkbox is not covered by its own stretched input; the click checks it', async () => {
+  const id = await open('slice-controls.html');
+  const snap = await ops.readPage(conn, id);
+  const black = rowOf(snap, /^Black 179$/);
+  assert.ok(black, formatRead(snap));
+  assert.ok(!black.covered, `flagged covered by ${black.covered}`);
+  await ops.click(conn, id, { ref: black.ref, token: snap.token });
+  assert.equal(await ops.evaluate(conn, id, 'window.blackChecked === true'), true);
+});
+
+t('a bare combobox is named from its row label, with its described-by hint as the placeholder', async () => {
+  const id = await open('slice-b2-fields.html');
+  const snap = await ops.readPage(conn, id, {});
+  const box = snap.elements.find(e => e.role === 'combobox');
+  assert.equal(box.name, 'Make and Model', JSON.stringify(box));
+  assert.equal(box.placeholder, 'Type to Search');
+  assert.equal(box.nameFrom, 'context');
+  // Two fields in one row: the row's text belongs to neither.
+  const pair = snap.elements.filter(e => e.role === 'textbox' && e.name !== 'Make and Model');
+  assert.equal(pair.length, 2);
+  assert.ok(pair.every(e => e.name !== 'Plate and state'), JSON.stringify(pair));
+  const { stdout } = await cli('read', id.slice(0, 8));
+  assert.match(stdout, /combobox\s+Make and Model.*\(named from its row\)/, stdout);
+  await ops.closeTab(conn, id);
+});
+
+t('a ref into a frame that loaded a new page is reported stale, not "not a field"', async () => {
+  const id = await open('slice-b2-frame.html');
+  const { stdout } = await cli('read', id.slice(0, 8));
+  const ref = stdout.match(/(ref_\d+)\s+e\d+\s+textbox\s+Enter your answer/)?.[1];
+  assert.ok(ref, stdout);
+  await ops.evaluate(conn, id, `new Promise(r => { const f = document.getElementById('quiz'); f.onload = () => r(1); f.src = 'slice-b2-question.html?q=2'; })`);
+  const err = await cli('fill', id.slice(0, 8), ref, '132').then(() => null, e => e);
+  assert.ok(err, 'fill on the replaced frame must fail');
+  assert.match(String(err.stderr || err.message), /frame that has loaded a new page.*read/i);
+  assert.doesNotMatch(String(err.stderr || err.message), /not a field you can type into/);
+  // After a fresh read the field in the new page takes the value.
+  const again = (await cli('read', id.slice(0, 8))).stdout;
+  const ref2 = again.match(/(ref_\d+)\s+e\d+\s+textbox\s+Enter your answer/)?.[1];
+  await cli('fill', id.slice(0, 8), ref2, '132');
+  const v = await ops.evaluate(conn, id, `document.getElementById('quiz').contentDocument.getElementById('answer').value`);
+  assert.equal(v, '132');
+  await ops.closeTab(conn, id);
+});
+
+// Best Buy's filter read "Sam ung Galaxy S25+": the page-side label cleanup was written
+// /\s+/ inside a template string, which the page received as /s+/.
+t('a field named by its <label for> keeps every letter', async () => {
+  const id = await open('slice-c-results.html');
+  const snap = await ops.readPage(conn, id, {});
+  const box = snap.elements.find(e => e.role === 'checkbox');
+  assert.equal(box?.name, 'Samsung Galaxy S25+ (12)', JSON.stringify(box));
+  await ops.closeTab(conn, id);
+});
+
+t('a getRootNode polyfill that returns undefined does not break reading the page', async () => {
+  const id = await open('slice-r1.html?polyfill');
+  const snap = await ops.readPage(conn, id, { maxText: 0, max: 1500, all: true });
+  assert.ok(snap.elements.some(e => e.name === 'Inside a span'), JSON.stringify(snap.elements.slice(0, 3)));
+  await ops.closeTab(conn, id);
+});
+
+t('text, read and items see a quiz drawn in a shadow root, and a plan can answer it', async () => {
+  const id = await open('slice-r2.html?shadowquiz=1');
+  const text = await ops.evaluate(conn, id, deepTextExpression());
+  assert.match(text, /How often do you exercise\?/);
+  assert.match(text, /Most days/);
+  assert.match(text, /Weight quiz/);
+  assert.ok(text.indexOf('Weight quiz') < text.indexOf('How often'), 'light text before the component that follows it');
+  const snap = await ops.readPage(conn, id, { maxText: 20000, max: 1500, all: true });
+  assert.match(snap.text, /How often do you exercise\?/);
+  const items = await ops.evaluate(conn, id, itemsExpression({}));
+  assert.match(formatItems(items, { full: true }), /Most days/, formatItems(items, { full: true }));
+  const r = await runSteps(conn, id, ['click "Most days"'], { jev: planJev(), noNotes: true });
+  console.log(formatSteps(r));
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.equal(r.steps[0].checked, true);
+  assert.equal(await state(id), 'Most days');
   await ops.closeTab(conn, id);
 });
