@@ -26,7 +26,7 @@ import * as ext from '../lib/ext.mjs';
 import * as claims from '../lib/claims.mjs';
 import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
-import { ensureRunning, BRIDGE_PORT } from '../lib/bridge.mjs';
+import { ensureRunning, BRIDGE_PORT, bridgeFetch } from '../lib/bridge.mjs';
 import * as sessions from '../lib/sessions.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
@@ -707,17 +707,17 @@ const handlers = {
     const root = `http://127.0.0.1:${BRIDGE_PORT}/api/recordings`;
     if (args.action === 'show') {
       const base = `${root}/${args.id}`;
-      if (args.steps) return text(await (await fetch(`${base}/steps`)).text());
-      const marks = await (await fetch(`${base}/marks`)).json();
-      const summary = await (await fetch(base)).json();
+      if (args.steps) return text(await (await bridgeFetch(`${base}/steps`)).text());
+      const marks = await (await bridgeFetch(`${base}/marks`)).json();
+      const summary = await (await bridgeFetch(base)).json();
       return text({ summary, marks });
     }
-    if (args.action === 'list') return text(await (await fetch(root)).json());
+    if (args.action === 'list') return text(await (await bridgeFetch(root)).json());
     if (args.action === 'start') {
       const port = resolveBrowserArg(args);
       if (!port) throw new Error('Which browser should be recorded? Pass browser=<name>.');
       const meta = await (
-        await fetch(root, {
+        await bridgeFetch(root, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ port, video: Boolean(args.video), apps: true, label: args.label ?? null }),
@@ -726,9 +726,9 @@ const handlers = {
       return text({ ...meta, next: 'The human drives the browser now. Stop with browser_record action=stop.' });
     }
     if (args.action !== 'stop') throw new Error('action must be start, stop, list, tab_start, tab_stop, tab_status or show');
-    const id = args.id || (await (await fetch(root)).json()).find(r => !r.stoppedAt)?.id;
+    const id = args.id || (await (await bridgeFetch(root)).json()).find(r => !r.stoppedAt)?.id;
     if (!id) throw new Error('No recording is running.');
-    return text(await (await fetch(`${root}/${id}/stop`, { method: 'POST' })).json());
+    return text(await (await bridgeFetch(`${root}/${id}/stop`, { method: 'POST' })).json());
   },
 
   browser_site: async args => text(site.format(site.lookup(args.site))),
