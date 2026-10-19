@@ -1,6 +1,6 @@
 ---
 name: browserctrl
-description: Control explicitly selected Chromium browsers or Safari 27+ from the terminal or MCP. Use for page automation, browser QA, or tab organization; macOS Dia supports dormant tabs. Safari uses Apple's separate automation session.
+description: Control explicitly selected Chromium browsers or Safari 27+ from the terminal or MCP. Use for page automation, browser QA, multi-step research, long forms and multi-screen flows, or tab organization; macOS Dia supports dormant tabs. Safari uses Apple's separate automation session.
 ---
 
 # browserctrl
@@ -85,6 +85,7 @@ All options: [`do` reference](references/reading-and-acting.md#plan-several-step
 
 | Read | For |
 | --- | --- |
+| [multi-step-flows.md](references/multi-step-flows.md), [batch.md](references/batch.md), [workflow.md](references/workflow.md) | long forms and multi-screen flows: guarded batches and workflows, verifying outcomes |
 | [reading-and-acting.md](references/reading-and-acting.md) | full `do` reference, `read`, waiting, console, network, Jev |
 | [sites.md](references/sites.md), [recipes.md](references/recipes.md) | recipes, flow notes, captchas |
 | [recording.md](references/recording.md) | recordings, replay, video, annotation |
