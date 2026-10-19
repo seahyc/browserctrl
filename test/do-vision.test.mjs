@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import * as trace from '../lib/trace.mjs';
 import { randomUUID } from 'node:crypto';
 import {
   startFixtureServer,
@@ -395,3 +398,65 @@ t(
     }
   },
 );
+
+for (const container of ['role="region"', 'tabindex="0"']) {
+  for (const smallButton of [false, true]) {
+    t(`vision ${smallButton ? 'chooses small button in' : 'rejects'} large ${container} container`, async () => {
+      const id = await open();
+      try {
+        await ops.evaluate(conn, id, `(() => {
+          const icon = document.querySelector('#icon');
+          const container = document.createElement('div');
+          container.innerHTML = '<div ${container} style="position:absolute;left:60px;top:60px;width:700px;height:500px;background:white"></div>';
+          const parent = container.firstChild;
+          document.body.append(parent);
+          parent.onmouseover = () => { document.body.dataset.containerHovered = 'yes'; };
+          ${smallButton ? 'parent.append(icon);' : "const svg = icon.querySelector('svg'); svg.style.cssText = 'position:absolute;left:80px;top:80px;width:48px;height:48px'; parent.append(svg); icon.remove();"}
+        })()`);
+        const box = await ops.evaluate(conn, id, `(() => {
+          const r = document.querySelector('svg').getBoundingClientRect();
+          return {left:r.left/innerWidth,right:r.right/innerWidth,top:r.top/innerHeight,bottom:r.bottom/innerHeight};
+        })()`);
+        const j = scripted(box);
+        const r = await run(id, ['hover "the little book icon next to README"'], j);
+        assert.equal(visionCalls(j).length, 1);
+        assert.equal(r.done, smallButton, JSON.stringify(r.stopped));
+        if (smallButton) {
+          assert.equal(await ops.evaluate(conn, id, 'document.body.dataset.hovered'), 'yes');
+          assert.equal(await ops.evaluate(conn, id, 'document.querySelector("[data-bc-pin]").tagName'), 'BUTTON');
+        } else {
+          assert.match(r.stopped.reason, /no visible interactive element.*screenshot box/);
+          assert.equal(await ops.evaluate(conn, id, 'document.body.dataset.containerHovered || null'), null);
+          assert.equal(await ops.evaluate(conn, id, 'document.querySelector("[data-bc-pin]")'), null);
+        }
+      } finally {
+        await ops.closeTab(conn, id);
+      }
+    });
+  }
+}
+
+t('vision details stay inside the run in text and JSON traces', async () => {
+  const id = await open();
+  try {
+    const box = await boxAt(id);
+    const r = await run(id, ['hover "the magnifying glass"'], scripted(box));
+    assert.equal(r.done, true, JSON.stringify(r.stopped));
+    const runs = trace.read(id);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].steps.length, 1);
+    assert.deepEqual(runs[0].steps[0].vision, r.steps[0].vision);
+    const cli = (...args) => execFileSync(process.execPath, [fileURLToPath(new URL('../bin/browserctrl.mjs', import.meta.url)), 'trace', id, ...args], { env: process.env, encoding: 'utf8' });
+    const text = cli();
+    assert.match(text, /vision: p=0.96, box confidence=0.94/);
+    assert.doesNotMatch(text, /run undefined|incomplete/);
+    assert.equal((text.match(/  run /g) || []).length, 1);
+    const json = JSON.parse(cli('--json'));
+    assert.equal(json.length, 1);
+    assert.deepEqual(json[0].steps[0].vision.box, box);
+    assert.equal(json[0].steps[0].vision.p, 0.96);
+    assert.equal(json[0].steps[0].vision.confidence, 0.94);
+  } finally {
+    await ops.closeTab(conn, id);
+  }
+});
