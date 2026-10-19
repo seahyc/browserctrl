@@ -38,6 +38,21 @@ const findTask = (id) => {
   if (m.length !== 1) throw new Error(`task ${id}: ${m.length} matches`);
   return m[0];
 };
+// Which browserctrl an arm runs, so two versions can be compared on the same tasks:
+//   OM2W_BROWSERCTRL=<checkout>  the harness and the agent both use that checkout's CLI and
+//                                SKILL.md (default: browserctrl on PATH, ~/.agents/skills)
+//   OM2W_BC_HOME=<folder>        its BROWSERCTRL_HOME, so a newer version keeps its files
+//                                apart from the user's own
+//   OM2W_VARIANT=<label>         recorded with each run (results.jsonl "variant")
+const BC_DIR = process.env.OM2W_BROWSERCTRL ? path.resolve(process.env.OM2W_BROWSERCTRL) : null;
+const SKILL = BC_DIR ? path.join(BC_DIR, 'SKILL.md') : '~/.agents/skills/browserctrl/SKILL.md';
+const VARIANT = process.env.OM2W_VARIANT || null;
+if (BC_DIR) {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'om2w-bc-'));
+  fs.writeFileSync(path.join(bin, 'browserctrl'), `#!/bin/sh\nexec "${process.execPath}" "${path.join(BC_DIR, 'bin', 'browserctrl.mjs')}" "$@"\n`, { mode: 0o755 });
+  process.env.PATH = `${bin}${path.delimiter}${process.env.PATH}`;
+}
+if (process.env.OM2W_BC_HOME) process.env.BROWSERCTRL_HOME = path.resolve(process.env.OM2W_BC_HOME);
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 const bc = (...args) => sh('browserctrl', [...args, '--port', PORT]);
 const bcJson = (...args) => JSON.parse(bc(...args));
@@ -90,8 +105,8 @@ function methodText(arm, tab) {
   // native: Codex's own browser tool on the same browser (through the ChatGPT extension), the
   // baseline the README compares browserctrl against.
   if (arm === 'native') return 'Method: see and operate the page with your built-in browser tool (cua).';
-  if (arm === 'A') return `Method: drive the page yourself with plain browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md): read the page with \`browserctrl read ${tab}\` (or text/items), then act by ref, one action per call, e.g. \`browserctrl click ${tab} --ref ref_12\`, \`browserctrl fill ${tab} --ref ref_5 --value "…"\`, \`browserctrl select\`, \`browserctrl key\`, \`browserctrl nav\`. Do not use do, visit, --intent, check, or any other command that calls Jev, and do not use jev-tool.`;
-  return `Method: use browserctrl as its skill describes (~/.agents/skills/browserctrl/SKILL.md): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
+  if (arm === 'A') return `Method: drive the page yourself with plain browserctrl (skill: ${SKILL}): read the page with \`browserctrl read ${tab}\` (or text/items), then act by ref, one action per call, e.g. \`browserctrl click ${tab} --ref ref_12\`, \`browserctrl fill ${tab} --ref ref_5 --value "…"\`, \`browserctrl select\`, \`browserctrl key\`, \`browserctrl nav\`. Do not use do, visit, --intent, check, or any other command that calls Jev, and do not use jev-tool.`;
+  return `Method: use browserctrl as its skill describes (${SKILL}): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
   browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items
 It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. The report's url params line shows filters you can set with a nav step. Trust a report whose steps all show ✓ and don't re-read the page after it; a ⚠ step needs checking. When a filter's chips or options change after each pick, put one pick per do call. For a calendar, open it and use a \`date YYYY-MM-DD\` step. You can name an element from your last read directly: \`click ref_25\` in a do step, or \`browserctrl click ${tab} ref_25\`. Do not use jev-tool.`;
 }
@@ -196,7 +211,7 @@ async function start(taskId, arm, notesArm) {
   const env = notesEnv(notesArm);
   const run = {
     runId, task_id: task.task_id, task: task.confirmed_task, website: task.website, level: task.level, reference_length: task.reference_length,
-    arm, notes_arm: notesArm || null, notes_env: env, tab, tabsBefore, rec, cleaned, relaunched, startedAt: new Date().toISOString(), load: os.loadavg()[0], model: MODEL, effort: EFFORT,
+    arm, variant: VARIANT, browserctrl: BC_DIR, notes_arm: notesArm || null, notes_env: env, tab, tabsBefore, rec, cleaned, relaunched, startedAt: new Date().toISOString(), load: os.loadavg()[0], model: MODEL, effort: EFFORT,
   };
   const prompt = agentPrompt(task, tab, arm) + notesPrompt(notesArm, env) + '\n';
   fs.writeFileSync(runPath(runId, 'prompt.txt'), prompt);
@@ -305,7 +320,7 @@ function recBytes(dir, stopped) {
 
 function row(run) {
   return {
-    run: run.runId, task_id: run.task_id, website: run.website, level: run.level, arm: run.arm, notes_arm: run.notes_arm,
+    run: run.runId, task_id: run.task_id, website: run.website, level: run.level, arm: run.arm, variant: run.variant ?? null, notes_arm: run.notes_arm,
     notes_added: run.answer?.notes_added ?? null, at: run.startedAt, load: run.load, model: run.model, effort: run.effort,
     seconds: run.agent ? Math.round(run.agent.ms / 1000) : null, timed_out: run.agent?.timed_out ?? null,
     tool_calls: run.agent?.tools ?? null, tokens: run.agent?.tokens ?? null, output_tokens: run.agent?.output_tokens ?? null,
