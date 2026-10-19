@@ -6,8 +6,10 @@ permission, text generation, branch selection and business-outcome verification.
 
 ## Start one persistent process
 
+From the skill root:
+
 ```sh
-node ~/.agents/skills/browserctrl/bin/batch.mjs \
+node bin/batch.mjs \
   --browser dia --tab EXACT_TAB_ID --origin https://example.com
 ```
 
@@ -75,7 +77,7 @@ ordinary browserctrl network/console/DOM tools. Preserve state for human auth/ap
 checkpoints rather than reopening or replaying the flow.
 
 Telemetry records step status and timing without prepared values. Zero model/API
-cost fields refer only to the executor: the parent Codex usage and any paid website
+cost fields refer only to the executor: the parent agent's usage and any paid website
 operation are outside that accounting. Reports must distinguish local loop latency
 from end-to-end user-task latency and all recovery work.
 
@@ -87,5 +89,5 @@ exclusive locking.
 
 Offline contracts are part of `node --test test/batch.test.mjs`.
 The explicitly opted-in live benchmark is `node test/batch-live.mjs --browser dia`;
-it uses temporary local fixture tabs and no model APIs. Consult the browser-workflow
-[design](../../browser-workflow/references/design.md) for measurements and limitations.
+it uses temporary local fixture tabs and no model APIs. Consult the
+[multi-step flows design](multi-step-flows-design.md) for measurements and limitations.

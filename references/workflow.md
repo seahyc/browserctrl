@@ -8,8 +8,10 @@ and verifies the result. Plans cannot contain JavaScript or selectors.
 
 ## Start the persistent runner
 
+From the skill root:
+
 ```sh
-node ~/.agents/skills/browserctrl/bin/workflow.mjs \
+node bin/workflow.mjs \
   --browser dia --tab EXACT_TAB_ID --origin https://example.com
 ```
 
