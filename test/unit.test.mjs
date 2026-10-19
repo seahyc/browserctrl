@@ -52,6 +52,40 @@ test('claims: releaseMine only drops this agent\'s claims', () => {
   } catch {}
 });
 
+test('claims: a claim held by a pid owner whose process is gone counts as released', async () => {
+  const { spawnSync } = await import('node:child_process');
+  // A process that has already exited: its pid is free again.
+  const dead = spawnSync(process.execPath, ['-e', '0']).pid;
+  assert.equal(claims.ownerGone(`pid:${dead}`), true);
+  assert.equal(claims.ownerGone(`pid:${process.pid}`), false);
+  assert.equal(claims.ownerGone('agent-a'), false, 'only pid:N owners are checked');
+  fs.writeFileSync(CLAIMS_FILE, JSON.stringify({
+    '9999:gone': { owner: `pid:${dead}`, label: 'shell', ts: Date.now() },
+    '9999:alive': { owner: `pid:${process.pid}`, label: 'shell', ts: Date.now() },
+  }));
+  assert.equal(claims.get(9999, 'gone'), null);
+  assert.ok(claims.get(9999, 'alive'));
+  // The next command of the same agent (new shell, new pid) is not blocked by the dead one.
+  assert.doesNotThrow(() => claims.claim(9999, 'gone', { owner: 'pid:1234567', label: 'shell' }));
+  assert.throws(() => claims.claim(9999, 'alive', { owner: 'someone-else' }), /claimed by/);
+  fs.unlinkSync(CLAIMS_FILE);
+});
+
+test('agentId falls back to the parent pid, and BROWSERCTRL_AGENT_ID wins over CDP_AGENT_ID', async () => {
+  const { agentId } = await import('../lib/env.mjs');
+  const keep = Object.fromEntries(['CDP_AGENT_ID', 'BROWSERCTRL_AGENT_ID', 'CODEX_THREAD_ID', 'CODEX_SESSION_ID', 'CLAUDE_CODE_SESSION_ID'].map(k => [k, process.env[k]]));
+  for (const k of Object.keys(keep)) delete process.env[k];
+  try {
+    assert.equal(agentId(), `pid:${process.ppid}`);
+    process.env.CDP_AGENT_ID = 'old';
+    assert.equal(agentId(), 'old');
+    process.env.BROWSERCTRL_AGENT_ID = 'new';
+    assert.equal(agentId(), 'new');
+  } finally {
+    for (const [k, v] of Object.entries(keep)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
+
 test('no implicit browser default: omitting one errors with the list', async () => {
   await assert.rejects(() => requireBrowser({}), /No browser specified/);
 });

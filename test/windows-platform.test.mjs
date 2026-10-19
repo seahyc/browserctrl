@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
-import { browserDataDirs, daemonAddress } from '../lib/platform.mjs';
+import { browserDataDirs, daemonAddress, runtimePath } from '../lib/platform.mjs';
 import { acquireFileLock, releaseFileLock, withFileLock } from '../lib/file-lock.mjs';
 
 test('Windows daemon uses a per-user named pipe without filesystem socket operations', () => {
@@ -12,7 +12,8 @@ test('Windows daemon uses a per-user named pipe without filesystem socket operat
   assert.match(first, /^\\\\\.\\pipe\\browserctrl-[a-f0-9]{12}-9222$/);
   assert.equal(daemonAddress(9222, 'win32', 'alice'), first);
   assert.notEqual(daemonAddress(9222, 'win32', 'Bob'), first);
-  assert.equal(daemonAddress(9222, 'linux', 'Alice'), '/tmp/cdp-master-9222.sock');
+  assert.equal(daemonAddress(9222, 'linux', 'Alice'), runtimePath('master-9222.sock'));
+  assert.ok(Buffer.byteLength(daemonAddress(9222, 'linux', 'Alice')) < 100, 'a unix socket path must stay short');
 });
 
 test('Windows mutex can be acquired and released repeatedly by one synchronous process', { skip: process.platform !== 'win32' }, () => {
