@@ -87,3 +87,49 @@ t('a button in a language the word lists do not cover is checked before it is cl
   const off = await run(tab, ['click "Αγορά τώρα"'], fakeJev({ fail: true }));
   assert.match(off.stopped.reason, /cannot tell whether "Αγορά τώρα" commits something/);
 });
+
+const longLines = n => Array.from({ length: n }, (_, i) => `primary language entry ${i} ${'x'.repeat(130)}`);
+t('extract offers a distant short answer with heading context in one request', async () => {
+  const tab = await open();
+  const lines = [...Array.from({length: 350}, (_, i) => `Unrelated row ${i}`), 'Languages', 'JavaScript 100.0%'];
+  await ops.evaluate(conn, tab, `document.body.innerText=${JSON.stringify(lines.join('\n'))}`);
+  const jev = fakeJev({choice: q => optionWith(q, 'Languages: JavaScript 100.0%')});
+  const r = await run(tab, ['extract "the primary language" as $lang'], jev);
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].raw, 'JavaScript 100.0%');
+  assert.equal(jev.calls.filter(c => c.questions.extract).length, 1);
+});
+t('extract retries omitted lines once and respects the question budget', async () => {
+  const tab = await open();
+  const lines = longLines(500);
+  await ops.evaluate(conn, tab, `document.body.innerText=${JSON.stringify(lines.join('\n'))}`);
+  let first;
+  const jev = fakeJev({choice: q => {
+    first ||= new Set(Object.values(q.criteria));
+    return Object.entries(q.criteria).find(([id, text]) => id !== 'none' && !first.has(text))?.[0] || 'none';
+  }});
+  const r = await run(tab, ['extract "primary language" as $lang'], jev);
+  assert.equal(r.done, true);
+  const calls = jev.calls.filter(c => c.questions.extract);
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(c => JSON.stringify(c.questions.extract).length <= 24000));
+  assert.match(formatSteps(r), /second pass/);
+});
+t('none diagnostics show probability and coverage without zero candidates', async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerText=${JSON.stringify(longLines(500).join('\n'))}`);
+  const jev = fakeJev({choice: () => ({choice:'none', probabilities:{none:.97}})});
+  const r = await run(tab, ['extract "primary language" as $lang'], jev);
+  assert.match(r.stopped.reason, /Jev: no offered line answers \(none p=0\.97\); \d+ of 500 lines offered/);
+  assert.equal(jev.calls.filter(c => c.questions.extract).length, 2);
+});
+
+t('extraction diagnostics print two decimal probabilities', async () => {
+  const tab = await open();
+  const jev = fakeJev({choice: q => ({choice: optionWith(q, 'Total for 3 nights'), probabilities: {
+    [optionWith(q, 'Total for 3 nights')]: .14 + .15, none: .71,
+  }})});
+  const r = await run(tab, ['extract "the total" as $price'], jev);
+  assert.match(r.stopped.reason, /p=0\.29/);
+  assert.doesNotMatch(formatSteps(r), /0\.29000000000000004/);
+});

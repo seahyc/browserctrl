@@ -12,9 +12,9 @@ test('spans: lines in page order, long lines split, duplicates once', () => {
 
 test('shortlist keeps lines that share words, and numbers when an amount is asked', () => {
   const spans = [...Array(300)].map(() => 'filler line').concat(['Total prize: $50,000', 'Prize pool details']);
-  const kept = shortlistSpans(spans, 'what is the total prize', 5);
+  const kept = shortlistSpans(spans, 'what is the total prize', 1000);
   assert.ok(kept.some(k => k.text === 'Total prize: $50,000'));
-  assert.equal(kept.length, 5);
+  assert.ok(JSON.stringify(extractQuestion('what is the total prize', kept)).length <= 1000);
 });
 
 test('extract: question lists lines and none; the answer is a line verbatim', () => {
@@ -44,4 +44,13 @@ test('condition and alternatives', () => {
   assert.deepEqual(alternatives('"Filters" | "All filters"'), ['Filters', 'All filters']);
   assert.equal(alternatives('"Size | Fit"'), null);
   assert.equal(alternatives('Filters'), null);
+});
+
+test('extraction budget covers page regions as well as matching lines', () => {
+  const lines = Array.from({length: 500}, (_, i) => `primary language ${i} ${'x'.repeat(130)}`);
+  lines[400] = 'Languages'; lines[401] = 'JavaScript 100.0%';
+  const spans = shortlistSpans(lines, 'primary language');
+  assert.ok(spans.some(s => s.i > 450));
+  assert.ok(spans.some(s => s.i < 30));
+  assert.ok(JSON.stringify(extractQuestion('primary language', spans)).length <= 24000);
 });

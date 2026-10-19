@@ -311,6 +311,8 @@ browserctrl do <tab> 'fill "Where" = "Manhattan"' 'key Enter' \
   answers `<what>`, and the report copies it verbatim under `extracted:`. Jev never writes an
   answer, so a value is always text the page shows. Below 75% it is marked ⚠ with the other
   likely lines; when no line answers, the step is skipped and says so.
+  Lines fit a size budget with page-wide coverage and heading context; values stay verbatim.
+  If omitted lines remain and the answer is missing or uncertain, one retry checks them; the report shows coverage and whether it ran.
 - `pick "<criterion>"`: Jev chooses the item of the page's main list (ads left out) that fits
   best, judged from each item's own text: prices, ratings, dates, labels. It opens the item's
   link, or clicks it. When none fits, the plan stops with the closest items.
@@ -319,7 +321,7 @@ browserctrl do <tab> 'fill "Where" = "Manhattan"' 'key Enter' \
 - `click "A" | "B"`: alternatives for one control; the first exact name on the page is used
   with no model call, otherwise Jev looks for either.
 
-All four ask in the step's one Jev request, so they add no round trips. They need a TypeSafe
+All four normally ask in the step's one Jev request; extraction may retry as described above. They need a TypeSafe
 key. Keep criteria to what the items' text shows: "under $200 with free cancellation" works;
 "the best value" asks Jev to weigh things it cannot see.
 

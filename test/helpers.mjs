@@ -8,6 +8,10 @@ import { spawn, execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
+// Ownership tests must not inherit the invoking agent's identity.
+delete process.env.BROWSERCTRL_AGENT_ID;
+delete process.env.CDP_AGENT_ID;
+
 // Notes are off by default; the suite turns them on, since tests exercise them.
 process.env.BROWSERCTRL_NOTES ??= 'on';
 
