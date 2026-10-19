@@ -513,5 +513,54 @@
    "f05e87c5b92d9869e08806103c1c15a1",
    "0e5536aaad9d3462b06cf725e6ed535a"
   ]
+ },
+ "heldout-2": {
+  "drawn": "2026-10-19, before any run",
+  "level": "medium",
+  "seed": 20261019,
+  "sites": [
+   "americanexpress.com",
+   "backcountry.com",
+   "ca.gov",
+   "cboe.com",
+   "craigslist.org",
+   "eventbrite.com",
+   "ign.com",
+   "irs.gov",
+   "jobs.chronicle.com",
+   "landwatch.com",
+   "medicare.gov",
+   "nba.com",
+   "publicstorage.com",
+   "redbull.com",
+   "remax.com",
+   "sec.gov",
+   "superlawyers.com",
+   "thumbtack.com",
+   "us.trip.com",
+   "uscis.gov"
+  ],
+  "tasks": [
+   "01abae9608f2d8752a83e08f136f720c",
+   "1aeca99e6a60b0e3aefb3ef212bdce79",
+   "2c20d87a046fadcb6ff07ee877bfbf37",
+   "2fc51dd3febd447f0fdcdabca8d944ce_110325",
+   "330cd04c773ac498f51afa4665461ec8",
+   "3adeea7627f4343069f38adae40f73d0_110325",
+   "4c186c6ed888d0c8d4cf4adb39443080",
+   "59b7b990b4828bc305ab0d7ed6071b55",
+   "63d6866fc000fcb1f153e07604bd1395",
+   "7072d09436972a5d5fe7476e3e9f1559",
+   "753f372c189d3b306623cb0c65b50320",
+   "78f397336b6fd1cbba0127db7a8cd502",
+   "7abdceee212151f187ee1a1744c57606",
+   "9f1cba613830ca1c6a58f9498c06e679_110325",
+   "a7a73c8fa75441fc76df9746c327bdd6",
+   "b320c68bffc1f3c7f2a8dc9d5478fb27",
+   "b922508886ded315c9835457a6eb43ea",
+   "c698ff3fc0f6cbce39947c597ab5749b_121425",
+   "d1807551297ac60ecaaabbd2a2ed301a_110325",
+   "d730f4ff450da1bd60a836163736ef6a_110325"
+  ]
  }
 }
