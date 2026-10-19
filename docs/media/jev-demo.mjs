@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 // Show, on the page itself, how Jev resolves an intent to an element.
-//   node scripts/jev-demo.mjs <tab> "<intent>" [--action click|fill] [--value text] [--dry] [--browser dia]
+//   node docs/media/jev-demo.mjs <tab> "<intent>" --browser <name> [--action click|fill] [--value text] [--dry]
 // 1. outlines every candidate element Jev is offered, 2. tints them by Jev's probability,
 // 3. clicks the pick (unless --dry or the pick is refused) and shows the page checks.
 import { execFileSync } from 'node:child_process';
-import * as jev from '../lib/jev.mjs';
+import * as jev from '../../lib/jev.mjs';
 
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf(n); return i < 0 ? d : args[i + 1]; };
 const [tab, intent] = args;
 const action = flag('--action', 'click');
-const browser = flag('--browser', 'dia');
+const browser = flag('--browser', process.env.BROWSERCTRL_BROWSER);
 const dry = args.includes('--dry');
-if (!tab || !intent) { console.error('usage: jev-demo.mjs <tab> "<intent>" [--action click|fill] [--value text] [--dry]'); process.exit(1); }
+if (!tab || !intent || !browser) { console.error('usage: jev-demo.mjs <tab> "<intent>" --browser <name> [--action click|fill] [--value text] [--dry]'); process.exit(1); }
 
 const bc = (...a) => execFileSync('browserctrl', [...a, '--browser', browser], { encoding: 'utf8', maxBuffer: 32 << 20 });
 const evalJs = (js) => JSON.parse(bc('eval', tab, `JSON.stringify(${js})`) || 'null');

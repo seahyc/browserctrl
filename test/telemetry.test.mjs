@@ -10,7 +10,7 @@ function fixture(t) {
   const previousDir = process.env.CDP_TELEMETRY_DIR;
   const previousEnabled = process.env.CDP_TELEMETRY;
   process.env.CDP_TELEMETRY_DIR = directory;
-  delete process.env.CDP_TELEMETRY;
+  process.env.CDP_TELEMETRY = '1'; // off by default; these tests are about what it writes when on
   t.after(() => {
     if (previousDir === undefined) delete process.env.CDP_TELEMETRY_DIR;
     else process.env.CDP_TELEMETRY_DIR = previousDir;
@@ -70,7 +70,7 @@ test('disabled telemetry and filesystem failures do not interrupt callers', t =>
   process.env.CDP_TELEMETRY = '0';
   createTelemetry(9222)('daemon_start');
   assert.deepEqual(fs.readdirSync(directory), []);
-  delete process.env.CDP_TELEMETRY;
+  process.env.CDP_TELEMETRY = '1'; // off by default; these tests are about what it writes when on
   const file = path.join(directory, 'not-a-directory');
   fs.writeFileSync(file, 'keep');
   process.env.CDP_TELEMETRY_DIR = file;
@@ -95,4 +95,12 @@ test('telemetry refuses a symlink log file', t => {
   const rows = fs.readFileSync(filename, 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(rows.map(row => [row.event, row.requestId, row.clientId]),
     [['request_started', 1, 2], ['request_complete', 1, 2]]);
+});
+
+test('telemetry is off unless asked for', t => {
+  const { directory } = fixture(t);
+  delete process.env.CDP_TELEMETRY;
+  delete process.env.BROWSERCTRL_TELEMETRY;
+  createTelemetry(9222)('daemon_start', {});
+  assert.deepEqual(fs.readdirSync(directory), []);
 });

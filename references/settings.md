@@ -91,7 +91,7 @@ Jev answers "which control does this step mean?" for names that are not exact. S
 | `BROWSERCTRL_SHOW` | off | Same as `--show`: bring the tab forward, outline each target, show a panel of steps. |
 | `BROWSERCTRL_PREFETCH` | on | After a call ends on a list, load the first few item links in background tabs for `visit`. `0` turns it off. |
 | `BROWSERCTRL_PREFETCH_REAPER` | on | Close prefetched tabs nobody took (after 90 s). |
-| `BROWSERCTRL_TELEMETRY` | on | Local connection lifecycle logs (no page data), at most 32 files of 1 MB. `0` turns it off. |
+| `BROWSERCTRL_TELEMETRY` | off | `1` keeps local connection lifecycle logs (no page data) for debugging daemon restarts, at most 32 files of 1 MB. |
 | `BROWSERCTRL_DIAGNOSTIC_LOG` | off | A file. A fresh daemon writes a protocol trace there. |
 | `BROWSERCTRL_READ_WAIT_MS` | 8000 | How long `read`, `text` and `items` wait for a loading page. |
 | `BROWSERCTRL_IDLE_EXIT_MIN` | 720 | Minutes without clients before a daemon exits. It never exits while recording. |
