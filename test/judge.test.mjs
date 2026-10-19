@@ -54,3 +54,10 @@ test('extraction budget covers page regions as well as matching lines', () => {
   assert.ok(spans.some(s => s.i < 30));
   assert.ok(JSON.stringify(extractQuestion('primary language', spans)).length <= 24000);
 });
+
+test('an extract question never offers more lines than a Jev choice allows', () => {
+  const spans = Array.from({ length: 600 }, (_, i) => `n${i}`);
+  const offered = shortlistSpans(spans, 'the number of stars');
+  assert.ok(offered.length <= 254, `offered ${offered.length}`);
+  assert.ok(Object.keys(extractQuestion('the number of stars', offered).criteria).length <= 255);
+});
