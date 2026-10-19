@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         node-version: [22, 24]
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,6 +31,12 @@ jobs:
         with:
           chrome-version: stable
       - run: npm ci
+      - name: Check the npm package and the bundled extension copy
+        run: |
+          npm pack --dry-run
+          node scripts/sync-extension.mjs --check
+      - name: Install the Python package
+        run: python -m pip install ./python
       - run: python -m unittest discover -s test -p 'test_*.py' -v
       - name: Probe Windows screenshot rendering
         if: runner.os == 'Windows'

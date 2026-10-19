@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('client', ROOT / 'python/chrome_cdp/__init__.py')
+spec = importlib.util.spec_from_file_location('client', ROOT / 'python/browserctrl/__init__.py')
 client = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(client)
 
@@ -212,3 +212,32 @@ class ClientTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FindSidecarTests(unittest.TestCase):
+    def test_setting_wins_and_legacy_name_still_works(self):
+        self.assertEqual(client.find_stdio({'BROWSERCTRL_STDIO': '/x/stdio.mjs'}), Path('/x/stdio.mjs'))
+        self.assertEqual(client.find_stdio({'CDP_STDIO': '/y/stdio.mjs'}), Path('/y/stdio.mjs'))
+
+    def test_repo_layout_is_found_without_settings(self):
+        self.assertEqual(client.find_stdio({}, which=lambda _name: None), ROOT / 'bin' / 'stdio.mjs')
+
+    def test_installed_command_is_followed_to_its_package(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = Path(tmp) / 'lib' / 'node_modules' / 'browserctrl' / 'bin'
+            pkg.mkdir(parents=True)
+            (pkg / 'stdio.mjs').write_text('')
+            (pkg / 'browserctrl.mjs').write_text('')
+            link = Path(tmp) / 'bin-browserctrl'
+            try:
+                link.symlink_to(pkg / 'browserctrl.mjs')
+            except OSError:
+                self.skipTest('symlinks not permitted')
+            with patch.object(client, '__file__', str(Path(tmp) / 'elsewhere' / 'a' / 'b.py')):
+                self.assertEqual(client.find_stdio({}, which=lambda _name: str(link)), (pkg / 'stdio.mjs').resolve())
+
+    def test_clear_error_when_nothing_is_found(self):
+        with patch.object(client, '__file__', '/nowhere/a/b.py'):
+            with self.assertRaisesRegex(client.CDPError, 'BROWSERCTRL_STDIO'):
+                client.find_stdio({}, which=lambda _name: None)

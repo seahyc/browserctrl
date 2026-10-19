@@ -1,4 +1,4 @@
-# Chrome CDP helpers
+# browserctrl helpers
 
 This module provides a small, opt-in workspace for reusable task code and
 domain-specific reference notes. It does not change browser operations and it
@@ -6,12 +6,14 @@ never loads code automatically from a URL or page content.
 
 ## Workspace
 
-The default workspace is `~/.local/share/chrome-cdp/helpers`. Set
-`CDP_HELPER_WORKSPACE` or pass `workspace=` to use another location. Creation
+The default workspace is the `helpers` folder of browserctrl's data directory
+(`~/Library/Application Support/browserctrl` on macOS, `$XDG_DATA_HOME/browserctrl` on Linux,
+`%LOCALAPPDATA%\browserctrl` on Windows, or `$BROWSERCTRL_HOME/helpers`). Set
+`BROWSERCTRL_HELPER_WORKSPACE` or pass `workspace=` to use another location. Creation
 is explicit:
 
 ```python
-from chrome_cdp.helpers import init_workspace
+from browserctrl.helpers import init_workspace
 
 root = init_workspace()
 ```
@@ -33,7 +35,7 @@ domain-skills/
 Then discover them for a URL:
 
 ```python
-from chrome_cdp.helpers import helpers_for
+from browserctrl.helpers import helpers_for
 
 for path in helpers_for("https://example.com/checkout"):
     print(path)
@@ -51,7 +53,7 @@ Task helpers must be Python files with simple identifier names under
 `task_helpers/`. Load one only after choosing it explicitly:
 
 ```python
-from chrome_cdp.helpers import load_helper
+from browserctrl.helpers import load_helper
 
 helper = load_helper("page_title")
 title = helper.page_title(client, target)
