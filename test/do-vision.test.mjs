@@ -51,10 +51,10 @@ const boxAt = async (id) =>
     id,
     `(()=>{const r=document.querySelector('button,canvas').getBoundingClientRect();return {left:r.left/innerWidth,right:r.right/innerWidth,top:r.top/innerHeight,bottom:r.bottom/innerHeight}})()`,
   );
-const scripted = (box, { visible = 0.96, confidence = 0.94, choice } = {}) =>
+const scripted = (box, { visible = 0.96, confidence = 0.94, match = 0.95, choice } = {}) =>
   fakeJev({
     choice,
-    noul: (q, id) => (id === 'visible' ? visible : 0.04),
+    noul: (q, id) => (id === 'visible' ? visible : id === 'match' ? match : 0.04),
     box: () => ({ box, confidence }),
   });
 const visionCalls = (j) =>
@@ -126,6 +126,8 @@ t(
       assert.match(r.steps[0].how, /screenshot.*p=.*box confidence=/);
       assert.equal(r.steps[0].unsure, true);
       assert.equal(visionCalls(j).length, 1);
+      assert.equal(j.calls.filter(c => c.questions.match).length, 0);
+      assert.equal(r.steps[0].vision.match_p, undefined);
       const c = visionCalls(j)[0];
       assert.equal(c.model, 'jev-1.14.0');
       assert.equal(c.questions.visible.type, 'noul');
@@ -460,3 +462,87 @@ t('vision details stay inside the run in text and JSON traces', async () => {
     await ops.closeTab(conn, id);
   }
 });
+
+// These adjacent controls reproduce a box grounded on Watch for a fork intent.
+const namedControls = async (id, { siblings = false } = {}) => {
+  await ops.evaluate(conn, id, `(() => {
+    const icon = document.querySelector('#icon');
+    icon.setAttribute('aria-label', 'Watch: Participating');
+    icon.onmouseover = () => { document.body.dataset.hovered = 'Watch'; };
+    ${siblings ? `const fork = icon.cloneNode(true);
+    fork.id = 'fork'; fork.setAttribute('aria-label', 'Fork');
+    fork.style.left = '210px';
+    fork.onmouseover = () => { document.body.dataset.hovered = 'Fork'; };
+    icon.after(fork);` : ''}
+  })()`);
+  if (!siblings) return boxAt(id);
+  return ops.evaluate(conn, id, `({left:120/innerWidth,right:260/innerWidth,top:120/innerHeight,bottom:200/innerHeight})`);
+};
+
+for (const match of [0.1, 0.95]) {
+  t(`named Watch visual pick ${match < 0.6 ? 'rejects mismatch without hover' : 'hovers after matching intent'}`, async () => {
+    const id = await open();
+    try {
+      const j = scripted(await namedControls(id), { match });
+      j.cfg.model = 'jev-1.13.0';
+      const r = await run(id, ['hover "the fork icon"'], j);
+      assert.equal(r.done, match >= 0.6, JSON.stringify(r.stopped));
+      assert.equal(await ops.evaluate(conn, id, 'document.body.dataset.hovered || null'), match >= 0.6 ? 'Watch' : null);
+      assert.equal(r.steps[0].vision.match_p, match);
+      assert.ok(Number.isFinite(r.steps[0].vision.match_ms));
+      assert.ok(r.steps[0].vision.match_ms >= 0);
+      const matches = j.calls.filter(c => c.questions.match);
+      assert.equal(matches.length, 1);
+      const c = matches[0];
+      assert.deepEqual(Object.keys(c.questions), ['match']);
+      assert.equal(c.questions.match.type, 'noul');
+      assert.match(c.questions.match.instructions, /the fork icon/);
+      assert.equal(c.model, 'jev-1.13.0');
+      assert.equal(c.state.element.name, 'Watch: Participating');
+      assert.equal(c.state.element.role, 'button');
+      assert.equal(c.state.page.url, fixture.url + 'fixtures/vision-icons.html');
+      assert.equal(c.state.page.title, 'Visual controls');
+      assert.equal(c.assets, undefined);
+      assert.equal(c.state.screenshot, undefined);
+      const request = j.requests.find(q => q.body === c);
+      assert.equal(new Headers(request.headers).get('TypeSafe-Danger-Zone-Images'), null);
+      if (match < 0.6) {
+        assert.match(r.stopped.reason, /Watch: Participating/);
+        assert.match(r.stopped.reason, /0\.1/);
+      } else {
+        assert.match(r.steps[0].how, /match=0\.95/);
+      }
+    } finally {
+      await ops.closeTab(conn, id);
+    }
+  });
+}
+
+for (const match of [0.1, 0.95]) {
+  t(`ambiguous sibling box ${match < 0.6 ? 'reports both names and refuses mismatch' : 'matches and pins the highest overlap control'}`, async () => {
+    const id = await open();
+    try {
+      // Watch overlaps 80px and Fork 50px of this 140px box (62.5%).
+      const j = scripted(await namedControls(id, { siblings: true }), { match });
+      const r = await run(id, ['hover "the fork icon"'], j);
+      assert.equal(r.done, match >= 0.6, JSON.stringify(r.stopped));
+      const names = r.steps[0].vision.neighbours.map(e => e.name);
+      assert.ok(names.includes('Watch: Participating'), JSON.stringify(names));
+      assert.ok(names.includes('Fork'), JSON.stringify(names));
+      const c = j.calls.find(c => c.questions.match);
+      assert.equal(c.state.element.name, 'Watch: Participating');
+      assert.equal(await ops.evaluate(conn, id, 'document.querySelector("[data-bc-pin]").id'), 'icon');
+      assert.equal(await ops.evaluate(conn, id, 'document.body.dataset.hovered || null'), match >= 0.6 ? 'Watch' : null);
+      if (match < 0.6) {
+        assert.match(r.stopped.reason, /Watch: Participating/);
+        assert.match(r.stopped.reason, /Fork/);
+      } else {
+        assert.match(r.steps[0].how, /Watch: Participating/);
+        assert.match(r.steps[0].how, /Fork/);
+        assert.match(r.steps[0].how, /match=0\.95/);
+      }
+    } finally {
+      await ops.closeTab(conn, id);
+    }
+  });
+}
