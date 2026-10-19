@@ -1,6 +1,6 @@
 # Tabs and the browser: claims, the human, profiles, browser-level control, the extension
 
-Part of the [browserctrl skill](../SKILL.md): these sections moved here whole from the skill file.
+Part of the [browserctrl skill](../SKILL.md).
 
 ## Sharing tabs with the human
 
@@ -18,10 +18,15 @@ instruction. They expire after 8 hours.
 
 ```bash
 browserctrl mark "review-app" --note "check the empty state" --browser dia   # by URL substring
-browserctrl tray --browser dia          # a page listing every tab with a checkbox each
+browserctrl tray --browser dia          # prints the tray URL: a page listing every tab with a checkbox each
 browserctrl marks --browser dia
 browserctrl read marked --browser dia   # the agent resolves the handover
 ```
+
+The tray is served by the local bridge, which needs a per-install token. The URL that
+`browserctrl tray` prints carries it (`http://127.0.0.1:17222/tray?t=...`), so open that URL
+rather than typing the address. The token lives in the private runtime folder
+(`browserctrl where`).
 
 ## Browser-level control the protocol does not have
 
@@ -69,7 +74,7 @@ back as JSON. That is the escape hatch — reach for the named subcommands when
 they fit and `eval` when they do not.
 
 This needs the extension loaded (`chrome://extensions` -> Developer mode ->
-Load unpacked -> `extension/`). Without it you get a message saying so rather
+Load unpacked -> the install folder's `extension/`). Without it you get a message saying so rather
 than a confusing failure. MV3 terminates idle service workers, so the
 extension keeps a 30s alarm heartbeat and `browserctrl ext` retries a few times before
 declaring it absent.
@@ -83,9 +88,10 @@ buy nothing and cost a great deal of trust.
 
 Up to ten agents have been tested concurrently, both as separate client processes
 and through one MCP server. Give each agent a unique, stable identity: set
-`CDP_AGENT_ID` for CLI/Python, or pass `agentId` on MCP browser calls. Keep that
-identity across the agent's calls. Sibling agents must not inherit the same ID.
-Without an override, the client uses its chat/session ID, then its process ID.
+`BROWSERCTRL_AGENT_ID` (`CDP_AGENT_ID` still works) for CLI/Python, or pass `agentId` on MCP
+browser calls. Keep that identity across the agent's calls. Sibling agents must not inherit the
+same ID. Without an override, the client uses the harness session ID (Codex, Claude Code),
+then the parent process ID. A claim whose owner process has exited counts as released.
 
 Open a separate tab for each agent and keep using its returned tab ID. New tabs
 open in the background. Target commands, including reads that create snapshot
@@ -109,10 +115,6 @@ access because they can affect tabs outside the caller's ownership.
 
 Agents still share Dia's cookies, account sessions and website storage; tab leases are coordination, not
 isolated accounts or a security sandbox.
-
-After upgrading from clients without identity support, reload their MCP servers.
-The daemon rejects identity-less target commands with a reload instruction;
-a fresh CLI process uses the new protocol immediately.
 
 ```bash
 browserctrl open https://example.com --browser dia
@@ -175,7 +177,9 @@ new window in it; this needs a local browser process, not a forwarded port.
 
 ## The extension
 
-`extension/` is loaded unpacked from `chrome://extensions` (Developer mode).
+`extension/` (inside the install folder that `browserctrl where` prints) is loaded unpacked from
+`chrome://extensions` (Developer mode). The bridge accepts the extension by its fixed id, so
+if you loaded it before this id was fixed, remove it and load it again.
 Its toolbar click is the primary path: it immediately enters annotation mode.
 It also provides browser-level shortcuts (option+A annotate, option+M hand over
 this tab), and a right-click toolbar menu for the less-common whole-tab and

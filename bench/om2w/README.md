@@ -34,6 +34,7 @@ node bench/om2w/run.mjs batch jobs.txt [--parallel 2]                 # lines: <
 node bench/om2w/run.mjs judge <run>                                   # re-grade a run
 node bench/om2w/run.mjs report                                        # success, time, tool calls, tokens per task and arm
 browserctrl replay bench/om2w/runs/<run>/rec                          # watch a run
+node bench/om2w/export.mjs <recording dir> <out dir> --task-id ID --task "..." [--answer "..."]   # judge input from one recording
 ```
 
 Each run opens a fresh tab on the task's start site, records it (rrweb DOM events plus a

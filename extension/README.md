@@ -15,8 +15,9 @@ injection cannot do:
 ## Install
 
 Chrome or Dia: `chrome://extensions` → Developer mode → Load unpacked → choose
-this folder. The bridge starts automatically when an agent uses `cdp`; run
+this folder. The bridge starts automatically when an agent uses the annotation or tray features; run
 `browserctrl bridge` once if you want the extension ready before the agent arrives.
+The extension folder is `extension/` inside the install folder (`browserctrl where` prints it).
 
 To hand off a precise problem: click the toolbar icon → click the element →
 write the note → Save. The confirmation tells you the exact Codex message to

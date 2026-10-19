@@ -2,6 +2,8 @@
 
 Evidence collected on 2026-10-12. These are capability checks, not a comparative performance benchmark.
 
+Node.js 22 or newer is required on every platform; the CLI checks this at start. Where files live differs per OS: `browserctrl where` prints the folders, and [settings.md](../references/settings.md) lists them.
+
 | Browser/platform | Result | Scope |
 | --- | --- | --- |
 | Dia, macOS | Live session tested | Native inventory includes dormant tabs. Live extension inspection, group collapse, duplicate-tab closure, and refusal to move a claimed tab were verified. A browser restart restored a group expanded, so its collapse state needed restoring. |
@@ -19,7 +21,7 @@ Page snapshots, input, waits, shared connections, tab claims, and extension APIs
 
 The optional extension's tab-group APIs are Chromium APIs, not Dia-specific. Chrome can use them after loading the extension, but extension grouping in Chrome has not yet been tested here. Dormant tabs absent from both CDP and the extension require the Dia native adapter. Do not infer that Chrome or another browser has the same dormant-tab behavior.
 
-Browser profile discovery supports macOS, Linux and Windows. Relaunching your running browser with a debug port is macOS-only.
+Browser profile discovery supports macOS, Linux and Windows. Relaunching your running browser with a debug port is macOS-only. On Linux and Windows the debug port comes from a separate profile, or from the `chrome://inspect/#remote-debugging` toggle in a normal Chrome.
 
 `browserctrl launch <browser>` on Linux and Windows (intended behaviour; unit-tested for path and argument planning only, not yet run against a real browser on those systems): it finds Chrome, Edge, Brave or Chromium (Program Files and LocalAppData on Windows; `/usr/bin`, `/opt` and `/snap/bin` locations plus `PATH` on Linux; `BROWSERCTRL_<BROWSER>_BIN` overrides) and starts a separate, detached instance with `--remote-debugging-port` and its own profile folder (`--user-data-dir`, default under browserctrl's data folder). It never quits or restarts the browser you are already using, and Dia and Arc are macOS-only. If something already answers on the port, nothing is started. Screen-video capture uses macOS-specific APIs; screenshots use CDP.
 
@@ -31,7 +33,7 @@ Sources: [Chrome debugging changes](https://developer.chrome.com/blog/remote-deb
 
 ## Upstream comparison
 
-Compared with `pasky/chrome-cdp-skill` main at `ffea76a24b0471663ddd9d9f24335bbc442b6266`, browserctrl adds one shared connection per browser port, cooperating-agent claims, richer snapshots and actions, a typed MCP frontend, a persistent Python client, bounded batches/workflows, optional browser-level extension APIs, and Dia native adapters.
+Compared with `pasky/chrome-cdp-skill` main at `ffea76a24b0471663ddd9d9f24335bbc442b6266`, browserctrl adds one shared connection per browser port, cooperating-agent claims, richer snapshots and actions, a typed MCP frontend, a persistent Python client, optional browser-level extension APIs, and Dia native adapters.
 
 Upstream is smaller, requires no npm dependencies for its CLI, and documents Chrome-family discovery on macOS, Linux, and Windows. browserctrl has broader workflow and coordination features, and now includes a Windows pipe and lock adapter. We have not run an equivalent upstream-vs-browserctrl latency or reliability benchmark, so there is no defensible percentage improvement.
 

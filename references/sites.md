@@ -1,6 +1,6 @@
 # Sites: recipes, flow notes and captchas
 
-Part of the [browserctrl skill](../SKILL.md): these sections moved here whole from the skill file.
+Part of the [browserctrl skill](../SKILL.md).
 
 ## Use a recipe before driving a site's UI
 
@@ -85,7 +85,7 @@ the sound and notification; `BROWSERCTRL_NOTIFY_SOUND` picks another sound file.
 Off by default. Only when the user asks for it for a site:
 
 ```sh
-browserctrl captcha solver enable shopee.sg      # prints a warning; stored in ~/.config/browserctrl/captcha.json
+browserctrl captcha solver enable shopee.sg      # prints a warning; stored in captcha.json in the config folder
 browserctrl captcha solver status                # enabled sites and pinned selectors
 browserctrl captcha solver disable shopee.sg
 ```
