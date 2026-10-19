@@ -361,9 +361,15 @@ browserctrl do <tab> 'extract "nightly price" as number currency SGD as $nightly
   }'
 ```
 
-`extract "<what>" as $name` binds the exact chosen page line. It requires an
-observed choice at p >= 0.75; a missing or uncertain binding stops before a
-dependent input. Ordinary extraction without a binding keeps its existing
+`extract "<what>" as $name` groups agreeing observed candidates before binding.
+The winning group's summed p must be >= 0.75, or >= 0.5 with every competing
+value group <= 0.15. The chosen line is the group's highest-p member; the
+report includes its members and summed p. Untyped groups conservatively
+normalize case, whitespace, letter-digit boundaries and punctuation other than
+numeric separators/signs, removing only singular/plural Star/Fork/button UI words. Different
+answer words, numbers or dates remain distinct. A missing or uncertain binding
+stops before dependent input and reports candidate lines/groups, probabilities
+and the missed bar. Ordinary extraction without a binding keeps its existing
 null/unsure behavior. Bindings are immutable and local to the run. Branches
 have child scopes, so a name defined only inside a branch cannot be read after
 the block. Outer bindings remain readable inside it.
@@ -390,10 +396,13 @@ browserctrl do <tab> \
   'answer "Offer: ${offer}. Check-in: ${arrival}."'
 ```
 
-Typed extraction chooses observed text first, then parses it locally. A record
-asks one choice question per field in the step's one request. Every required
-field needs p >= 0.75. The report keeps raw text, source line, probability and
-typed value. Numbers support localized separators and explicit currency;
+Typed extraction parses observed text locally and groups by typed value with
+currency/unit, or by date, using the same probability rules for every required
+field. A record asks one choice question per field in the step's one request.
+The report keeps raw text, source line, probability and typed value; failed
+bindings also report parse failures. Numbers support localized separators and explicit currency;
+compact `k`/`K`, `M`, `B`, `lakh` and `crore` scale the value (for example,
+`3.3k` becomes 3300), retaining raw text and a note that the page rounded it;
 dates become ISO dates. A single comma or dot followed by three digits is a
 thousands separator; mixed separators use the final separator for decimals.
 Ranges, several numbers, ambiguous required currencies or dates

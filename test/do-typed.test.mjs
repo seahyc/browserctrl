@@ -45,10 +45,10 @@ test('bindings retain exact selected evidence and stop for uncertain or malforme
   const step = { action: 'extract', target: 'price', binding: 'p', extraction: { type: 'number', currency: 'SGD' } };
   const row = { step: '2.then.1' };
   assert.deepEqual(settleJudgment(ctx, step, row, { spans: [{ text: 'S$180', i: 4 }] }, { extract: choice() }), { result: {} });
-  assert.deepEqual(ctx.bindings.get('p'), { normalization: parseExtractEvidence('S$180', step.extraction).normalization, source_step: '2.then.1', value: 180, raw: 'S$180', p: 0.95, type: 'number', currency: 'SGD', url: 'https://example.test/offer', span: 4 });
+  assert.deepEqual(ctx.bindings.get('p'), { normalization: parseExtractEvidence('S$180', step.extraction).normalization, members: [{ value: 'S$180', p: .95, span: 4 }], source_step: '2.then.1', value: 180, raw: 'S$180', p: 0.95, type: 'number', currency: 'SGD', url: 'https://example.test/offer', span: 4 });
   assert.equal(ctx.report.bindings[0].name, 'p');
   assert.equal(ctx.report.bindings[0].step, '2.then.1');
-  for (const answer of [choice('l1', 0.74), choice('none'), choice('l99'), { type: 'choice', choice: 'l1', probabilities: { l1: NaN } }, choice('l1', 1.1), choice('l1', '0.95'), { ...choice(), probabilities: { l1: 0.95, l2: -0.1 } }]) {
+  for (const answer of [choice('none'), choice('l99'), { type: 'choice', choice: 'l1', probabilities: { l1: NaN } }, choice('l1', 1.1), choice('l1', '0.95'), { ...choice(), probabilities: { l1: 0.95, l2: -0.1 } }]) {
     const bad = context();
     assert.ok(settleJudgment(bad, { ...step, optional: true }, {}, { spans: [{ text: 'S$180', i: 0 }] }, { extract: answer }).result.stop);
     assert.equal(bad.bindings.size, 0);
@@ -122,4 +122,62 @@ test('bound extraction rejects numeric-equivalent unoffered choice identifiers',
 test('required three-letter currencies are parsed from explicit evidence', () => {
   assert.equal(parseExtractValue('NOK 180', {type:'number',currency:'NOK'}),180);
   assert.throws(()=>parseExtractValue('180',{type:'number',currency:'NOK'}));
+});
+
+test('split probability mass binds agreeing text lines', () => {
+  const ctx = context(), row = { step: 1 };
+  const result = settleJudgment(ctx, { action: 'extract', binding: 's' }, row,
+    { spans: [{ text: '3.3k stars', i: 0 }, { text: 'Star3.3k', i: 1 }] },
+    { extract: { type: 'choice', choice: 'l1', probabilities: { l1: .56, l2: .27, none: .17 } } });
+  assert.deepEqual(result, { result: {} });
+  assert.equal(ctx.bindings.get('s').p, .83);
+  assert.equal(ctx.bindings.get('s').members.length, 2);
+});
+
+test('compact numbers preserve locale parsing and describe rounding', () => {
+  for (const [raw, value] of [['3.3k',3300], ['3.3k stars',3300], ['Star3.3k',3300], ['2K',2000], ['2M',2000000], ['2B',2000000000], ['2 lakh',200000], ['2 crore',20000000]]) {
+    assert.equal(number(raw), value, raw);
+    assert.match(parseExtractEvidence(raw, { type: 'number' }).normalization, /rounded by the page/);
+  }
+  assert.equal(number('1,234'),1234);
+  assert.equal(number('1.234'),1234);
+  for (const raw of ['3.3k to 4k', '3.3k stars 202 forks']) assert.throws(() => number(raw));
+});
+
+test('binding calibrates distinct values and explains failed candidates', () => {
+  for (const [a,b,ok] of [[.5,.4,false],[.6,.14,true],[.6,.3,false]]) {
+    const ctx = context();
+    const result = settleJudgment(ctx, { action: 'extract', binding: 'n', extraction: { type: 'number' } }, {},
+      { spans: [{ text: '100', i: 0 }, { text: '200', i: 1 }] },
+      { extract: { type: 'choice', choice: 'l1', probabilities: { l1: a, l2: b } } });
+    assert.equal(ctx.bindings.has('n'),ok);
+    if (!ok) {
+      assert.match(result.result.stop.reason,/100.*p=0\.[56].*200.*p=0\.[34]/);
+      assert.match(result.result.stop.reason,/0\.75.*0\.5.*0\.15/);
+    }
+  }
+});
+
+test('typed grouping combines parsed values while separating currency and units', () => {
+  for (const [raw,ok] of [['USD 1,000',true],['SGD 1000',false],['USD 1000 per night',false]]) {
+    const ctx=context();
+    settleJudgment(ctx,{action:'extract',binding:'n',extraction:{type:'number'}},{},
+      {spans:[{text:'USD 1k',i:0},{text:raw,i:1}]},
+      {extract:{type:'choice',choice:'l1',probabilities:{l1:.56,l2:.27,none:.17}}});
+    assert.equal(ctx.bindings.has('n'),ok,raw);
+  }
+});
+
+test('failed typed binding reports parse failure with the observed line', () => {
+  const result=settleJudgment(context(),{action:'extract',binding:'n',extraction:{type:'number'}},{},
+    {spans:[{text:'No count',i:0}]},{extract:choice()});
+  assert.match(result.result.stop.reason,/could not read a number from "No count"/);
+});
+
+test('typed count groups keep stars and forks distinct', () => {
+  const ctx=context();
+  const result=settleJudgment(ctx,{action:'extract',binding:'n',extraction:{type:'number'}},{},
+    {spans:[{text:'3.3k stars',i:0},{text:'3.3k forks',i:1}]},
+    {extract:{type:'choice',choice:'l1',probabilities:{l1:.56,l2:.27,none:.17}}});
+  assert.ok(result.result.stop);
 });

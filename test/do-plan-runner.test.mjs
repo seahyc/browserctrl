@@ -45,7 +45,7 @@ t('bound extraction fills exact hostile line as data, renders answer', async tab
   assert.match(formatSteps(r), /answer: Copied:/);
 });
 t('failed binding sends no dependent input', async tab => {
-  const j = fakeJev({ choice: q => ({ choice: optionWith(q, 'SGD 180'), p: 0.74 }) });
+  const j = fakeJev({ choice: q => ({ choice: optionWith(q, 'SGD 180'), p: 0.4 }) });
   const r = await run(tab, ['extract "price" as $x', 'fill "Max" = $x'], j);
   assert.equal(r.done, false);
   assert.equal(await ops.evaluate(conn, tab, 'inputs'), 0);
@@ -187,4 +187,17 @@ t('progress callbacks receive failed step marks', async tab=>{
   assert.equal(r.done,false);
   assert.equal(seen.length,1);
   assert.equal(seen[0].stopped,true);
+});
+
+t('split-mass typed and text extractions bind through fake Jev', async tab => {
+  await ops.evaluate(conn,tab, `document.body.innerHTML='<p>3.3k stars</p><p>Star3.3k</p><input aria-label="Max" id="max">'`);
+  const j=fakeJev({choice:(q,id)=> id==='extract' ? {choice:optionWith(q,'3.3k stars'), probabilities: {
+    [optionWith(q,'3.3k stars')]:.56, [optionWith(q,'Star3.3k')]:.27, none:.17
+  }} : 'none'});
+  const r=await run(tab,['extract "stars" as number as $n','extract "stars" as $s','answer "${n}"'],j);
+  assert.equal(r.done,true,JSON.stringify(r.stopped));
+  assert.equal(r.answer,'3300');
+  assert.equal(r.bindings[0].p,.83);
+  assert.equal(r.bindings[1].members.length,2);
+  assert.match(formatSteps(r),/group p=0\.83/);
 });

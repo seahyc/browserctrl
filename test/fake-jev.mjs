@@ -23,8 +23,9 @@ export function fakeJev({ choice, noul, box, fail, model, usage = { input_tokens
       else if (q.type === 'box') answers[id] = { type: 'box', ...(box?.(q, id, body.state, body.assets) ?? { box: { top: 0, bottom: 1, left: 0, right: 1 }, confidence: 0.04 }) };
       else {
         const rule = choice?.(q, id, body.state) ?? 'none';
-        const { choice: pick, p, confidence } = typeof rule === 'string' ? { choice: rule } : rule;
-        if (p == null) answers[id] = { type: 'choice', choice: pick, probabilities: { [pick]: 0.9, ...(pick === 'none' ? {} : { none: 0.1 }) }, confidence: 0.9 };
+        const { choice: pick, p, confidence, probabilities } = typeof rule === 'string' ? { choice: rule } : rule;
+        if (probabilities) answers[id] = { type: 'choice', choice: pick, probabilities };
+        else if (p == null) answers[id] = { type: 'choice', choice: pick, probabilities: { [pick]: 0.9, ...(pick === 'none' ? {} : { none: 0.1 }) }, confidence: 0.9 };
         else {
           const keys = Object.keys(q.criteria);
           answers[id] = { type: 'choice', choice: pick, probabilities: Object.fromEntries(keys.map(k => [k, k === pick ? p : (1 - p) / (keys.length - 1)])), confidence: confidence ?? p };
