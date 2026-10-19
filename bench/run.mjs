@@ -11,13 +11,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setting } from '../lib/config.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const runsDir = path.join(here, 'runs');
 const resultsFile = path.join(here, 'results.jsonl');
 const tasks = JSON.parse(fs.readFileSync(path.join(here, 'tasks.json'), 'utf8'));
 const fixtures = JSON.parse(fs.readFileSync(path.join(here, 'fixtures.json'), 'utf8'));
-const JEV_DIR = path.join(os.homedir(), 'Code/jev-ultrafast');
+// The Jev arm (J) drives the page with an outside tool. Where it lives is yours to say:
+// BROWSERCTRL_BENCH_JEV_DIR (its checkout) and BROWSERCTRL_BENCH_JEV_SKILL (its SKILL.md).
+const JEV_DIR = setting('BENCH_JEV_DIR');
+const JEV_SKILL = setting('BENCH_JEV_SKILL');
+const SKILL = path.join(path.dirname(here), 'SKILL.md');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
@@ -503,22 +508,23 @@ Add "notes": a one-line string on anything that went wrong.`;
   // H: the D method, run by a fast model (the arm only differs in the model that runs it).
   if (arm === 'D' || arm === 'H') return `${common}
 
-Method: use browserctrl as its skill describes (~/.agents/skills/browserctrl/SKILL.md): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
+Method: use browserctrl as its skill describes (${SKILL}): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
   browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items --browser dia
 It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. For lists that span pages, add --repeat 'click "Next"' --until "<when to stop>" --collect items to the do call. To open several items from a list, add --open N --grep "<what to find>" to the do call (it opens the first N items of the main list in parallel and returns matching lines), or pass links to \`browserctrl visit <link>... --from ${tab} --grep "<what to find>" --browser dia\`, instead of clicking into each. The report's url params line shows filters you can set with a nav step. Trust a report whose steps all show ✓. Do not use jev-tool.`;
   if (arm === 'C') return `${common}
 
-Method: drive the page yourself with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md), using its Jev intent commands instead of reading the page to find refs:
+Method: drive the page yourself with browserctrl (skill: ${SKILL}), using its Jev intent commands instead of reading the page to find refs:
   browserctrl click ${tab} --intent "<the element, in words>" [--expect "<what the page should show after>"] --browser dia
   (also fill/select with --intent; exit 3 means Jev was unsure or the control can commit something, and it prints candidate refs to act on by ref)
   browserctrl check ${tab} --expect "<state>" --browser dia   to confirm the page state cheaply
 Read the page (text/eval) only for the facts you must report. Do not use jev-tool.`;
   if (arm === 'A') return `${common}
 
-Method: drive the page yourself with browserctrl (skill: ~/.agents/skills/browserctrl/SKILL.md). Do not use Jev.`;
+Method: drive the page yourself with browserctrl (skill: ${SKILL}). Do not use Jev.`;
+  if (!JEV_DIR || !JEV_SKILL) throw new Error('The Jev arm needs BROWSERCTRL_BENCH_JEV_DIR (the jev-tool checkout) and BROWSERCTRL_BENCH_JEV_SKILL (its SKILL.md).');
   return `${common}
 
-Method: use Jev for the navigation (skill: ~/.agents/skills/jev-browser/SKILL.md). Start with one bounded run:
+Method: use Jev for the navigation (skill: ${JEV_SKILL}). Start with one bounded run:
   cd ${JEV_DIR} && uv run jev-tool --browser dia --tab ${tab} --goal '<the task, in your words>' --run --max-steps 15 --max-seconds 180${allow}
 Then read the page with browserctrl to extract and verify the answer. If Jev paused, failed or stopped early, finish the task with browserctrl or a persistent Jev session, as the skill describes. Do not relaunch the same failing goal.
 Add to your JSON "jev": {"runs": n, "predictions": n, "exit_codes": [..], "finished_by": "jev" | "agent"}.`;

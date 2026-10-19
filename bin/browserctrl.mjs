@@ -28,6 +28,7 @@ import * as cooldown from '../lib/cooldown.mjs';
 import * as jigsaw from '../lib/jigsaw.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
+import { setting, number, dirs, migrateLegacy } from '../lib/config.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { formatRead, deepTextExpression } from '../lib/refs.mjs';
 import { runSteps, formatSteps, PAGE_PARAMS, formatParams, mainLinks } from '../lib/steps.mjs';
@@ -67,7 +68,7 @@ async function selectorOnPage(conn, targetId, p) {
 // finished, not mid-load. --no-wait skips; BROWSERCTRL_READ_WAIT_MS changes the limit.
 async function waitToRead(conn, targetId, flags, { quiet = false } = {}) {
   if (flags['no-wait'] || flags.wait === false) return null;
-  const st = await ops.settle(conn, targetId, { timeoutMs: Number(process.env.BROWSERCTRL_READ_WAIT_MS || 8000) });
+  const st = await ops.settle(conn, targetId, { timeoutMs: number('READ_WAIT_MS', 8000) });
   const note = ops.describeSettle(st);
   if (note && !quiet) console.error(`(${note})`);
   return st;
@@ -182,6 +183,7 @@ function usage() {
 
   Pick a browser first. There is no default:
     browserctrl browsers                                 what is debuggable right now
+    browserctrl where                                    the install folder and the data, config, state and runtime folders
     browserctrl launch <browser> [--user-data-dir D]     relaunch with its debug port; waits until ready (D = separate instance)
     browserctrl tabs --browser dia                       tabs, with who has claimed them
     browserctrl native-tabs --browser dia                all Dia tabs, including dormant tabs
@@ -207,7 +209,6 @@ function usage() {
     browserctrl replay <DIR> --video out.mp4 [--gif out.gif] [--webp out.webp] [--gif-speed 4] [--trim-start] [--speed 1] [--width 1280] [--label L] [--proxy socks5://…] [--no-captions] [--no-clock]
                                                           real-time MP4: captions in plain words, a clock, stills where DOM replay is blank
     browserctrl replay --side-by-side <A> <B> --labels "Without,With" --video out.mp4 [--gif out.gif]   two runs on one clock
-    browserctrl rec om2w <DIR> --task-id ID --task "…" [--answer "…"] [--root R]   Online-Mind2Web result.json for its judge
 
   Recipes: a site's own API call, faster than its UI (see references/recipes.md):
     browserctrl recipe find <url or words>                recipes for a page or task; open/nav/read also hint at them
@@ -360,8 +361,8 @@ const cmd = positional[0];
 // The browser is never guessed, but whoever launches an agent can choose it once:
 // BROWSERCTRL_BROWSER=dia or BROWSERCTRL_PORT=9230 stands for --browser/--port on every command.
 if (flags.browser === undefined && flags.port === undefined) {
-  if (process.env.BROWSERCTRL_PORT) flags.port = process.env.BROWSERCTRL_PORT;
-  else if (process.env.BROWSERCTRL_BROWSER) flags.browser = process.env.BROWSERCTRL_BROWSER;
+  if (setting('PORT')) flags.port = setting('PORT');
+  else if (setting('BROWSER')) flags.browser = setting('BROWSER');
 }
 
 // Commands are the words the help text documents after "browserctrl", plus every case below.
@@ -391,6 +392,7 @@ export function suggestCommand(word, known = knownCommands()) {
 }
 
 const main = async () => {
+  migrateLegacy();
   if (!cmd || cmd === 'help' || flags.help) return out(usage());
   if (/^[a-z][a-z_-]*$/.test(cmd)) {
     const near = suggestCommand(cmd);
@@ -428,6 +430,11 @@ const main = async () => {
     if (seconds !== null && report.port) report.capture = await captureConnections(report.port, { seconds, daemonPid: report.daemonPid });
     report.cooldowns = cooldown.list().map(e => ({ site: e.site, kind: e.kind, until: new Date(e.until).toISOString(), strikes: e.strikes, summary: cooldown.describe(e) }));
     return out(report);
+  }
+
+  if (cmd === 'where') {
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    return out({ install: root, stdio: path.join(root, 'bin', 'stdio.mjs'), ...dirs });
   }
 
   if (cmd === 'browsers') {
@@ -538,10 +545,6 @@ const main = async () => {
     fs.writeFileSync(file, rec.replayHtml(dir));
     if (!flags['no-open']) execFile(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open', [file]);
     return out({ replay: file, bytes: fs.statSync(file).size });
-  }
-  if (cmd === 'rec' && positional[1] === 'om2w') {
-    if (!positional[2]) throw new Error('Usage: browserctrl rec om2w <recording dir> --task-id ID --task "…" [--answer "…"] [--root DIR]');
-    return out(rec.exportOm2w(positional[2], { taskId: flags['task-id'], task: flags.task, answer: flags.answer === true ? '' : flags.answer, root: flags.root }));
   }
   if (cmd === 'rec' && positional[1] === 'status') {
     const rows = Object.entries(rec.all());

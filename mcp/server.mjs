@@ -4,10 +4,11 @@
 // Schema so the server carries no zod version coupling.
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import fs from 'fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { safariMCP } from '../lib/safari-frontend.mjs';
 import { connect } from '../lib/daemon.mjs';
 import { listBrowsers, resolveBrowserArg } from '../lib/discovery.mjs';
@@ -31,6 +32,10 @@ import * as profiles from '../lib/profiles.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { visit, formatVisits } from '../lib/visit.mjs';
+import { setting, flag, migrateLegacy } from '../lib/config.mjs';
+
+migrateLegacy();
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const SERVER_NAME = 'browser';
 const SERVER_VERSION = '2.3.0';
@@ -44,373 +49,286 @@ const IMAGE_CLIENTS = [/claude/i, /cursor/i, /vscode/i, /zed/i];
 
 const BROWSER_ENUM = [...Object.keys(BROWSERS), 'safari'];
 const browserProp = {
-  agentId: { type: 'string', description: 'Stable unique identity for this agent. Required when multiple agents share one MCP server; reuse it on every call.' },
-  browser: {
-    type: 'string',
-    enum: BROWSER_ENUM,
-    description: 'Which browser to drive. Required: there is no default, and guessing drives the wrong window. Call browser_list first if unsure.',
-  },
-  port: { type: 'number', description: 'Debug port, as an alternative to browser.' },
+  agentId: { type: 'string', description: 'Your stable agent id.' },
+  browser: { type: 'string', enum: BROWSER_ENUM, description: 'Browser to drive; no default.' },
+  port: { type: 'number', description: 'Debug port.' },
 };
 const tabProp = {
-  tab: {
-    type: 'string',
-    description: 'Chromium: tab id from browser_tabs, its 8-character prefix, or a title/URL substring. Safari: the full native tab handle only.',
-  },
+  tab: { type: 'string', description: 'Tab id or prefix from browser_tabs, or title/URL substring. Safari: full handle.' },
 };
 const targetProps = {
-  ref: { type: 'string', description: 'Chromium snapshot ref, e.g. ref_3, or a Safari node UID from its own content read. Never mix the two.' },
-  selector: { type: 'string', description: 'CSS selector, when no ref is available.' },
+  ref: { type: 'string', description: 'Ref from browser_read (ref_3), or a Safari node UID.' },
+  selector: { type: 'string', description: 'CSS selector.' },
   x: { type: 'number', description: 'CSS pixel x, last resort.' },
   y: { type: 'number', description: 'CSS pixel y, last resort.' },
 };
+const untilProp = { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle', 'none'], description: 'Readiness to wait for; default load.' };
+const forceProp = { type: 'boolean', description: 'Load the site although it is cooling down after a challenge. Only when the user wants it now.' };
+const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
+
+// The tools an agent needs to drive pages. Every other tool is listed only when
+// BROWSERCTRL_MCP_TOOLS is "all" or a comma list of tool names (added to these).
+// Calls to any tool work either way; this only decides what tools/list shows.
+export const CORE_TOOLS = [
+  'browser_list', 'browser_tabs', 'browser_open', 'browser_close', 'browser_navigate',
+  'browser_read', 'browser_items', 'browser_act', 'browser_do', 'browser_wait', 'browser_screenshot',
+  'browser_eval', 'browser_site', 'browser_recipe', 'browser_visit', 'browser_notes', 'browser_captcha', 'browser_annotations',
+];
+
+// Tools merged into one with an action; old names still work when called.
+const LEGACY = {
+  browser_refresh: ['browser_reload', {}],
+  browser_marks: ['browser_annotations', { action: 'marks' }],
+  browser_annotate_mode: ['browser_annotations', { action: 'arm' }],
+  browser_rec: ['browser_record', null],
+  browser_recording: ['browser_record', { action: 'show' }],
+};
+const TAB_REC = { start: 'tab_start', stop: 'tab_stop', status: 'tab_status' };
 
 const TOOLS = [
-  { name: 'browser_safari', description: "Safari 27+ on macOS via Apple's official MCP server. Use action=tools to discover native tools and schemas, or action=call with tool and arguments. Every page operation requires an explicit full tab handle; node UIDs come from get_page_content. Shared daemon serializes current-tab selection and action. Chromium grouping, recording and raw CDP are unsupported.",
-    inputSchema: { type: 'object', properties: { agentId: browserProp.agentId, action: { type: 'string', enum: ['tools', 'call', 'status', 'stop'] }, tool: { type: 'string' }, arguments: { type: 'object' }, tab: { type: 'string' } }, required: ['action'] } },
+  { name: 'browser_safari', description: "Safari 27+ on macOS through Apple's MCP server: action=tools lists its native tools, action=call runs one (tool, arguments, full tab handle).",
+    inputSchema: obj({ agentId: browserProp.agentId, action: { type: 'string', enum: ['tools', 'call', 'status', 'stop'] }, tool: { type: 'string' }, arguments: { type: 'object' }, tab: { type: 'string' } }, ['action']) },
   {
     name: 'browser_list',
-    description:
-      'List every Chromium-family browser on this machine: which are running, which are debuggable right now, tab counts, and which tabs other agents have claimed. Call this first; no other tool has a default browser.',
-    inputSchema: { type: 'object', properties: {} },
+    description: 'List the Chromium browsers on this machine: running, debuggable, tab counts, tabs claimed by other agents. Call first; no other tool has a default browser.',
+    inputSchema: obj({}),
   },
   {
     name: 'browser_tabs',
-    description: 'List open tabs in one browser, with their ids, browser profile names, and any claims held by other agents.',
-    inputSchema: { type: 'object', properties: { ...browserProp, profile: { type: 'string', description: 'Only tabs in this browser profile: directory, display name, or unique name prefix (see browser_profiles).' } } },
+    description: 'List the open tabs of one browser with ids, profile names and claims by other agents.',
+    inputSchema: obj({ ...browserProp, profile: { type: 'string', description: 'Only this profile (see browser_profiles).' } }),
   },
   {
     name: 'browser_profiles',
-    description: 'List the browser profiles (Chromium user profiles, e.g. Work and Personal): directory, display name, open tab count, and which is the default for new tabs.',
-    inputSchema: { type: 'object', properties: { ...browserProp } },
+    description: 'List browser profiles: directory, display name, tab count, which is the default.',
+    inputSchema: obj({ ...browserProp }),
   },
   {
     name: 'browser_open',
-    description: 'Open a new tab at a URL and wait for it to load. Optionally use a clean temporary Chromium session with no profile cookies or storage. Safari uses its separate automation session. Returns the new tab id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...browserProp,
-        url: { type: 'string' },
-        until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle', 'none'] },
-        anonymous: { type: 'boolean', description: 'Use a temporary isolated browser context with no profile cookies or storage. Closing the tab disposes the entire context.' },
-        profile: { type: 'string', description: 'Open in this browser profile (directory, display name, or unique prefix; see browser_profiles). Opens a window in the profile if it has none.' },
-        force: { type: 'boolean', description: 'Load the site even though it is cooling down after a challenge. Only when the user wants it now: retrying into a challenge escalates it.' },
-      },
-      required: ['url'],
-    },
+    description: 'Open a new tab at a URL and wait for it to load. Returns the tab id.',
+    inputSchema: obj({
+      ...browserProp,
+      url: { type: 'string' },
+      until: untilProp,
+      anonymous: { type: 'boolean', description: 'Temporary context with no cookies or storage; closing the tab disposes it.' },
+      profile: { type: 'string', description: 'Open in this profile (see browser_profiles).' },
+      force: forceProp,
+    }, ['url']),
   },
   {
     name: 'browser_close',
     description: 'Close a tab.',
-    inputSchema: { type: 'object', properties: { ...browserProp, ...tabProp }, required: ['tab'] },
+    inputSchema: obj({ ...browserProp, ...tabProp }, ['tab']),
   },
   {
     name: 'browser_group',
-    description: 'Group all tabs whose URLs contain any supplied pattern. Requires the cdp handoff extension; returns the group id and count.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...browserProp,
-        urlPatterns: { type: 'array', items: { type: 'string' }, description: 'URL substrings; all matching tabs are included.' },
-        title: { type: 'string' },
-        color: { type: 'string' },
-        collapsed: { type: 'boolean' },
-      },
-      required: ['urlPatterns'],
-    },
+    description: 'Group every tab whose URL contains any of the patterns. Needs the handoff extension.',
+    inputSchema: obj({
+      ...browserProp,
+      urlPatterns: { type: 'array', items: { type: 'string' }, description: 'URL substrings.' },
+      title: { type: 'string' },
+      color: { type: 'string' },
+      collapsed: { type: 'boolean' },
+    }, ['urlPatterns']),
   },
   {
     name: 'browser_ungroup',
-    description: 'Remove matching tabs from their current tab groups without closing them.',
-    inputSchema: {
-      type: 'object',
-      properties: { ...browserProp, urlPatterns: { type: 'array', items: { type: 'string' } } },
-      required: ['urlPatterns'],
-    },
+    description: 'Take matching tabs out of their tab groups without closing them.',
+    inputSchema: obj({ ...browserProp, urlPatterns: { type: 'array', items: { type: 'string' }, description: 'URL substrings.' } }, ['urlPatterns']),
   },
   {
     name: 'browser_do',
-    description: 'Run a multi-step plan on a Chromium tab in one call, the fastest way through a page task. Steps: click <element>, fill <element> = <value>, select <element> = <option>, hover, key Enter, type "<text>" (into the focused element), scroll down|up, nav <url>, wait <ms>, expect <page state>. Name elements as they appear; exact names match without a model, others are grounded by Jev (needs TYPESAFE_API_KEY). Append => "<expected result>" to check a step; prefix optional to skip a missing element; click! "<exact name>" for a committing control the user authorized. Stops at the first uncertain step and reports candidates, hidden matches and on-screen controls: re-plan from that.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...browserProp,
-        ...tabProp,
-        steps: { type: 'array', items: { type: 'string' }, description: 'Plan lines, e.g. [\'fill "the search box" = "aeron"\', "key Enter", \'click "Price: low to high"\'].' },
-        then: { type: 'string', enum: ['items', 'text'], description: 'Return the resulting page as items (lists, cards, rows) or text in the same call.' },
-        dismiss: { type: 'string', description: 'Kinds of popups to close when they block a step, e.g. "cookie banner, app-install prompt".' },
-        repeat: { type: 'string', description: 'A step to repeat after the plan, usually click Next.' },
-        until: { type: 'string', description: 'Page condition that ends repeat.' },
-        max: { type: 'number', description: 'Most repeats, default 10.' },
-        collect: { type: 'string', enum: ['items', 'text'], description: 'Collect each repeated page, merged.' },
-        open: { type: 'number', description: 'Then open the first N items of the main list (ads skipped) in parallel and return what grep finds on each.' },
-        grep: { type: 'string', description: 'With open: case-insensitive regex for the lines to return from each opened page.' },
-        steal: { type: 'boolean' },
-      },
-      required: ['tab'],
-    },
+    description: 'Run a multi-step plan on a tab in one call, the fastest way through a page task. Steps: click <el>, fill <el> = <value>, select <el> = <option>, hover, key Enter, type "<text>", scroll down|up, nav <url>, wait <ms>, expect <state>, date YYYY-MM-DD. Name elements as they appear. Append => "<expected>" to check a step; prefix optional to skip a missing element; click! "<exact name>" for a committing control the user authorized. Stops at the first uncertain step and reports candidates. Full grammar: resource browserctrl://guide.',
+    inputSchema: obj({
+      ...browserProp,
+      ...tabProp,
+      steps: { type: 'array', items: { type: 'string' }, description: 'Plan lines, e.g. [\'fill "search box" = "aeron"\', "key Enter", \'click "Price: low to high"\'].' },
+      then: { type: 'string', enum: ['items', 'text'], description: 'Also return the resulting page as items or text.' },
+      dismiss: { type: 'string', description: 'Popup kinds to close when they block a step, e.g. "cookie banner".' },
+      repeat: { type: 'string', description: 'Step to repeat after the plan, usually click Next.' },
+      until: { type: 'string', description: 'Page condition that ends repeat.' },
+      max: { type: 'number', description: 'Most repeats, default 10.' },
+      collect: { type: 'string', enum: ['items', 'text'], description: 'Collect and merge each repeated page.' },
+      open: { type: 'number', description: 'Open the first N items of the main list in parallel and return what grep finds on each.' },
+      grep: { type: 'string', description: 'With open: regex for the lines to return from each page.' },
+      steal: { type: 'boolean' },
+    }, ['tab']),
   },
   {
     name: 'browser_visit',
-    description: 'Open several links at once in background tabs, let each render, and return what you are looking for on each: lines matching grep (with neighbouring lines), the page items, or the main text. Tabs are closed afterwards. Use it to drill into a list (each PR, each listing) in one call; paths resolve against the from tab.',
-    inputSchema: { type: 'object', properties: { ...browserProp, urls: { type: 'array', items: { type: 'string' } }, from: { type: 'string', description: 'Tab whose URL relative paths resolve against.' }, grep: { type: 'string', description: 'Case-insensitive regex for the lines to return.' }, context: { type: 'number' }, then: { type: 'string', enum: ['text', 'items'] }, parallel: { type: 'number', description: 'Tabs at once, default 4.' } }, required: ['urls'] },
+    description: 'Open several links in background tabs and return, for each, the lines matching grep, the items or the text. Tabs are closed afterwards. Use it to drill into a list in one call.',
+    inputSchema: obj({ ...browserProp, urls: { type: 'array', items: { type: 'string' } }, from: { type: 'string', description: 'Tab that relative paths resolve against.' }, grep: { type: 'string', description: 'Case-insensitive regex for the lines to return.' }, context: { type: 'number', description: 'Lines around each match.' }, then: { type: 'string', enum: ['text', 'items'] }, parallel: { type: 'number', description: 'Tabs at once, default 4.' } }, ['urls']),
   },
   {
     name: 'browser_items',
-    description: 'The repeated items on a page (search results, listings, table rows, inbox, chat messages, standalone headlines) grouped by page region and heading, each with its own text and link. Use it to report what a list shows instead of page text.',
-    inputSchema: { type: 'object', properties: { ...browserProp, ...tabProp, all: { type: 'boolean' }, group: { type: 'string', description: 'Show one group in full, e.g. g2.' } }, required: ['tab'] },
+    description: 'The repeated items on a page (results, listings, rows, messages) grouped by region, each with its text and link. Use it to report what a list shows.',
+    inputSchema: obj({ ...browserProp, ...tabProp, all: { type: 'boolean' }, group: { type: 'string', description: 'Show one group in full, e.g. g2.' } }, ['tab']),
   },
   {
     name: 'browser_read',
-    description:
-      'Safari returns Apple content with node UIDs. Chromium snapshots list the interactive elements within about one screen of the viewport (all: true for the whole page) as ref_1..ref_N with role, accessible name, test id and a stable id, plus the visible text. A card link is one element; covered, inert (behind a modal) and new (* since the last read) elements are marked; the header has page stats, a loading hint and screens above/below. Read before acting, then pass refs to browser_act. Refs are invalidated by navigation and the tools say so rather than clicking the wrong element.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...browserProp,
-        ...tabProp,
-        maxText: { type: 'number', description: 'Cap on returned page text, default 20000 characters.' },
-        includeHidden: { type: 'boolean', description: 'Include off-screen and hidden elements. Default false.' },
-        all: { type: 'boolean', description: 'List elements from the whole page, not just near the viewport. Default false.' },
-      },
-      required: ['tab'],
-    },
+    description: 'Snapshot a tab: interactive elements near the viewport as ref_1..ref_N with role and name, then the visible text. Read before acting; pass refs to browser_act. Refs die on navigation. Safari returns Apple content with node UIDs.',
+    inputSchema: obj({
+      ...browserProp,
+      ...tabProp,
+      maxText: { type: 'number', description: 'Cap on page text, default 20000 characters.' },
+      includeHidden: { type: 'boolean', description: 'Include off-screen and hidden elements.' },
+      all: { type: 'boolean', description: 'List the whole page, not just near the viewport.' },
+    }, ['tab']),
   },
   ...['browser_focus', 'browser_wake'].map(name => ({
     name, description: name === 'browser_wake'
-      ? 'Keep a background tab rendering (lazy lists, animations) without selecting it or taking focus. The page sees itself visible and focused. off=true stops it.'
-      : 'Select a tab without reloading it. Use browser_wait readyState for background readiness.',
-    inputSchema: {type: 'object', properties: {...browserProp, ...tabProp, ...(name === 'browser_wake' ? {off: {type: 'boolean'}} : {})}, required: ['tab']},
-  })),
-  ...['browser_reload', 'browser_refresh'].map(name => ({
-    name, description: name === 'browser_refresh' ? 'Compatibility alias for browser_reload.' : 'Reload the current page without selecting its tab, then wait for the new document. The reload is never automatically replayed.',
-    inputSchema: {type: 'object', properties: {...browserProp, ...tabProp, until: {type: 'string', enum: ['load','domcontentloaded','networkidle','none']}, timeoutMs: {type: 'number'}}, required: ['tab']},
+      ? 'Keep a background tab rendering without selecting it. off=true stops it.'
+      : 'Select a tab without reloading it.',
+    inputSchema: obj({ ...browserProp, ...tabProp, ...(name === 'browser_wake' ? { off: { type: 'boolean' } } : {}) }, ['tab']),
   })),
   {
+    name: 'browser_reload',
+    description: 'Reload a tab without selecting it and wait for the new document. Never replayed automatically.',
+    inputSchema: obj({ ...browserProp, ...tabProp, until: untilProp, timeoutMs: { type: 'number' } }, ['tab']),
+  },
+  {
     name: 'browser_navigate',
-    description: 'Navigate a tab and wait for real readiness (load, domcontentloaded, or networkidle). No fixed sleeps.',
-    inputSchema: {
-      type: 'object',
-      properties: { ...browserProp, ...tabProp, url: { type: 'string' }, until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle', 'none'] }, force: { type: 'boolean', description: 'Load the site even though it is cooling down after a challenge. Only when the user wants it now: retrying into a challenge escalates it.' }, },
-      required: ['tab', 'url'],
-    },
+    description: 'Navigate a tab to a URL and wait for real readiness.',
+    inputSchema: obj({ ...browserProp, ...tabProp, url: { type: 'string' }, until: untilProp, force: forceProp, steal: { type: 'boolean' } }, ['tab', 'url']),
   },
   {
     name: 'browser_activity',
-    description: 'List agent activity and rapid navigation warnings, describe your task and progress, or pause/resume an owner. Pause stops subsequent browser requests without closing tabs; already sent actions can finish.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...browserProp,
-        action: {type: 'string', enum: ['list', 'describe', 'pause', 'resume']},
-        owner: {type: 'string', description: 'Owner to pause or resume. Defaults to caller.'},
-        intent: {type: 'string', maxLength: 240},
-        completed: {type: 'integer', minimum: 0},
-        total: {type: 'integer', minimum: 0},
-      },
-      required: ['action'],
-    },
+    description: 'List agent activity and rapid-navigation warnings, describe your task and progress, or pause/resume an owner.',
+    inputSchema: obj({
+      ...browserProp,
+      action: { type: 'string', enum: ['list', 'describe', 'pause', 'resume'] },
+      owner: { type: 'string', description: 'Owner to pause or resume; default you.' },
+      intent: { type: 'string', maxLength: 240 },
+      completed: { type: 'integer', minimum: 0 },
+      total: { type: 'integer', minimum: 0 },
+    }, ['action']),
   },
   {
     name: 'browser_wait',
-    description:
-      'Wait for a condition instead of sleeping: a selector appearing, a selector disappearing, text on the page, a URL fragment, network idle, or a JS predicate. Use this after any action that triggers loading.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...browserProp,
-        ...tabProp,
-        selector: { type: 'string' },
-        gone: { type: 'string', description: 'Selector that must disappear, e.g. a spinner.' },
-        text: { type: 'string' },
-        url: { type: 'string' },
-        fn: { type: 'string', description: 'JS expression that must become truthy.' },
-        readyState: {type: 'string', enum: ['load','domcontentloaded'], description: 'Wait for page readiness in the background without navigation or tab activation. May combine with selector/text/url.'},
-        networkIdle: { type: 'boolean' },
-        present: { type: 'boolean', description: 'Match mere presence in the DOM instead of visibility. Default false: selector waits require a visible element, so a display:none placeholder does not satisfy them.' },
-        timeoutMs: { type: 'number' },
-      },
-      required: ['tab'],
-    },
+    description: 'Wait for a condition instead of sleeping: selector present or gone, text, URL fragment, network idle, or a JS predicate. Use after any action that loads.',
+    inputSchema: obj({
+      ...browserProp,
+      ...tabProp,
+      selector: { type: 'string' },
+      gone: { type: 'string', description: 'Selector that must disappear, e.g. a spinner.' },
+      text: { type: 'string' },
+      url: { type: 'string' },
+      fn: { type: 'string', description: 'JS expression that must become truthy.' },
+      readyState: { type: 'string', enum: ['load', 'domcontentloaded'], description: 'Wait for readiness in the background; combines with selector/text/url.' },
+      networkIdle: { type: 'boolean' },
+      present: { type: 'boolean', description: 'Match presence in the DOM, not visibility.' },
+      timeoutMs: { type: 'number' },
+    }, ['tab']),
   },
   {
     name: 'browser_act',
-    description:
-      'Do something on the page. One action, or a batch that runs in order and stops at the first failure. Actions: click, double_click, right_click, hover, type, key, fill, select, scroll, scroll_to, drag, upload. Target elements by ref from browser_read where possible.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...browserProp,
-        ...tabProp,
-        action: {
-          type: 'string',
-          enum: ['click', 'double_click', 'right_click', 'hover', 'type', 'key', 'fill', 'select', 'scroll', 'scroll_to', 'drag', 'upload'],
-        },
-        ...targetProps,
-        text: { type: 'string', description: 'For type: literal text to insert.' },
-        key: { type: 'string', description: 'For key: "Enter", "Tab", "cmd+a", "shift+Tab".' },
-        value: { type: 'string', description: 'For fill and select.' },
-        label: { type: 'string', description: 'For select: match the option by visible label.' },
-        dy: { type: 'number', description: 'For scroll: vertical delta, default 400.' },
-        from: { type: 'string', description: 'For drag: source ref.' },
-        to: { type: 'string', description: 'For drag: destination ref.' },
-        files: { type: 'array', items: { type: 'string' }, description: 'For upload: absolute file paths.' },
-        modifiers: { type: 'array', items: { type: 'string' }, description: 'cmd, ctrl, alt, shift.' },
-        steal: { type: 'boolean', description: 'Take the tab even if another agent holds a claim on it.' },
-        steps: {
-          type: 'array',
-          description: 'Batch: each item takes the same fields as a single action. Runs sequentially, stops on first error.',
-          items: { type: 'object' },
-        },
-      },
-      required: ['tab'],
-    },
+    description: 'One page action, or steps that run in order and stop at the first failure. Actions: click, double_click, right_click, hover, type, key, fill, select, scroll, scroll_to, drag, upload. Target by ref from browser_read.',
+    inputSchema: obj({
+      ...browserProp,
+      ...tabProp,
+      action: { type: 'string', enum: ['click', 'double_click', 'right_click', 'hover', 'type', 'key', 'fill', 'select', 'scroll', 'scroll_to', 'drag', 'upload'] },
+      ...targetProps,
+      text: { type: 'string', description: 'type: literal text.' },
+      key: { type: 'string', description: 'key: "Enter", "Tab", "cmd+a".' },
+      value: { type: 'string', description: 'fill, select.' },
+      label: { type: 'string', description: 'select: option by visible label.' },
+      dy: { type: 'number', description: 'scroll: vertical delta, default 400.' },
+      from: { type: 'string', description: 'drag: source ref.' },
+      to: { type: 'string', description: 'drag: destination ref.' },
+      files: { type: 'array', items: { type: 'string' }, description: 'upload: absolute paths.' },
+      modifiers: { type: 'array', items: { type: 'string' }, description: 'cmd, ctrl, alt, shift.' },
+      steal: { type: 'boolean', description: 'Take the tab although another agent claimed it.' },
+      steps: { type: 'array', description: 'Batch of objects with these same fields.', items: { type: 'object' } },
+    }, ['tab']),
   },
   {
     name: 'browser_screenshot',
-    description: 'Capture the viewport, the full page, or one element by ref or selector. Always writes a PNG and returns its path; inline image data is returned to clients that render it.',
-    inputSchema: {
-      type: 'object',
-      properties: { ...browserProp, ...tabProp, full: { type: 'boolean' }, ref: { type: 'string' }, selector: { type: 'string' }, path: { type: 'string' }, emulateFocus: { type: 'boolean', description: 'Chromium only: temporarily emulate page focus to generate background frames without activating an OS window. Disabled again after capture.' } },
-      required: ['tab'],
-    },
+    description: 'Capture the viewport, the full page or one element to a PNG and return its path (inline image for clients that render it).',
+    inputSchema: obj({ ...browserProp, ...tabProp, full: { type: 'boolean' }, ref: { type: 'string' }, selector: { type: 'string' }, path: { type: 'string' }, emulateFocus: { type: 'boolean', description: 'Chromium: emulate focus to render a background tab.' } }, ['tab']),
   },
   {
     name: 'browser_diagnostics',
-    description: 'Chromium only. For Safari use browser_safari with browser_console_messages and list_network_requests. Console output, uncaught JS errors, and the network log for a tab, buffered since the daemon attached. Use failedOnly for 4xx/5xx and failed requests.',
-    inputSchema: {
-      type: 'object',
-      properties: { ...browserProp, ...tabProp, limit: { type: 'number' }, failedOnly: { type: 'boolean' }, clear: { type: 'boolean' } },
-      required: ['tab'],
-    },
+    description: 'Chromium: console output, uncaught errors and the network log of a tab since the daemon attached. failedOnly for 4xx/5xx. Safari: use browser_safari.',
+    inputSchema: obj({ ...browserProp, ...tabProp, limit: { type: 'number' }, failedOnly: { type: 'boolean' }, clear: { type: 'boolean' } }, ['tab']),
   },
   {
     name: 'browser_captcha',
-    description: 'Chromium only. Clear a captcha or verification challenge on a tab. Tries Alibaba\'s drag-to-end slider once with a trusted drag (and a jigsaw puzzle slider only where the user enabled the solver); for anything else or after a failed attempt, brings the tab to the front, sounds and notifies the human, and returns as soon as the challenge is gone. Returns {captcha, solvedBy: auto|solver|human, waitedMs} or {captcha: null}; errors when not cleared in time. A challenge starts a cool-down for its site: do not reload or retry into it.',
-    inputSchema: {
-      type: 'object',
-      properties: { ...browserProp, ...tabProp, timeoutMs: { type: 'number', description: 'How long to wait for the human (default 300000)' }, attempt: { type: 'boolean', description: 'Try the automatic slider drag first (default true)' }, focus: { type: 'boolean', description: 'Bring the tab to the front for the human (default true)' } },
-      required: ['tab'],
-    },
+    description: 'Chromium: clear a captcha or bot check. Tries a plain slider once, otherwise brings the tab to the human and returns when it is gone. The site then cools down: do not reload into it.',
+    inputSchema: obj({ ...browserProp, ...tabProp, timeoutMs: { type: 'number', description: 'Wait for the human, default 300000.' }, attempt: { type: 'boolean', description: 'Try the slider first, default true.' }, focus: { type: 'boolean', description: 'Bring the tab to the front, default true.' } }, ['tab']),
   },
   {
     name: 'browser_recipe',
-    description:
-      "Chromium only. Get a site's data through its own API instead of its UI: seconds instead of minutes. action=find with query (a URL or words, e.g. 'shopee orders') lists matching recipes; browser_open/navigate/read also hint when a page has one. action=run runs one (name like shopee.sg/orders; params override its defaults) inside a tab on that site and returns structured items. Recipes with tab=handoff (e.g. Taobao) need a tab the human opened. action=list shows every recipe, local and tapped. action=endpoints lists fetch/XHR endpoints captured from tabs you drove (host optional); action=inspect returns full captured exemplars to write a new recipe from. See references/recipes.md.",
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...browserProp,
-        action: { type: 'string', enum: ['find', 'run', 'list', 'endpoints', 'inspect'] },
-        query: { type: 'string', description: 'For find: a URL or words' },
-        name: { type: 'string', description: 'For run: a recipe such as shopee.sg/orders' },
-        params: { type: 'object', description: 'Overrides for the recipe params' },
-        raw: { type: 'boolean', description: 'Return unmapped items' },
-        host: { type: 'string', description: 'Host for endpoints/inspect, e.g. shopee.sg' },
-        match: { type: 'string', description: 'Template substring for inspect' },
-        force: { type: 'boolean', description: 'Load the site even though it is cooling down after a challenge. Only when the user wants it now: retrying into a challenge escalates it.' },
-        handoff: { type: 'boolean', description: 'On a challenge, hand the tab to the human and wait (default true); false fails at once' },
-        handoffMs: { type: 'number', description: 'How long to wait for the human (default 300000)' },
-      },
-      required: ['action'],
-    },
+    description: "Chromium: get a site's data through its own API, in seconds. find (query: URL or words) lists matching recipes; run (name like shopee.sg/orders, params) runs one in a tab on that site; list; endpoints (host) lists captured fetch/XHR endpoints; inspect (host, match) returns exemplars to write a recipe from.",
+    inputSchema: obj({
+      ...browserProp,
+      action: { type: 'string', enum: ['find', 'run', 'list', 'endpoints', 'inspect'] },
+      query: { type: 'string', description: 'find: a URL or words.' },
+      name: { type: 'string', description: 'run: recipe name.' },
+      params: { type: 'object', description: 'run: overrides of the recipe params.' },
+      raw: { type: 'boolean', description: 'run: unmapped items.' },
+      host: { type: 'string', description: 'endpoints, inspect: e.g. shopee.sg.' },
+      match: { type: 'string', description: 'inspect: template substring.' },
+      force: forceProp,
+      handoff: { type: 'boolean', description: 'On a challenge hand the tab to the human and wait; default true.' },
+      handoffMs: { type: 'number', description: 'Wait for the human, default 300000.' },
+    }, ['action']),
   },
   {
     name: 'browser_annotations',
-    description:
-      'Read what the human marked on a page for you: their note plus the element they pointed at (role, accessible name, test id, selectors, cropped screenshot) and which tab it was. Call this when a result mentions pending annotations, when the human refers to something they marked, or at the start of browser work.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        consume: { type: 'boolean', description: 'Mark them handled so they stop being reported. Do this once you have acted on them.' },
-        clear: { type: 'boolean', description: 'Throw them away without acting.' },
-        all: { type: 'boolean', description: 'Include annotations the human aimed at a different agent session.' },
-      },
-    },
-  },
-  {
-    name: 'browser_marks',
-    description: 'Tabs the human handed over, with their notes. Resolve one by passing tab="marked" to any other tool.',
-    inputSchema: { type: 'object', properties: { ...browserProp } },
-  },
-  {
-    name: 'browser_annotate_mode',
-    description:
-      'Arm annotation on a tab so the human can point at elements: installs the overlay, which they toggle with option+A. Use when you want the human to show you which elements they mean.',
-    inputSchema: { type: 'object', properties: { ...browserProp, ...tabProp, on: { type: 'boolean', description: 'Also switch annotate mode on immediately.' } }, required: ['tab'] },
+    description: 'What the human marked for you. action=read (default) returns pending annotations with the element pointed at; consume marks them handled; clear discards; marks lists tabs the human handed over (pass tab="marked" elsewhere); arm installs the overlay on a tab (option+A toggles it).',
+    inputSchema: obj({
+      ...browserProp,
+      action: { type: 'string', enum: ['read', 'consume', 'clear', 'marks', 'arm'] },
+      all: { type: 'boolean', description: 'read: include annotations aimed at other agent sessions.' },
+      ...tabProp,
+      on: { type: 'boolean', description: 'arm: switch annotate mode on now.' },
+    }),
   },
   {
     name: 'browser_record',
-    description:
-      'Record a play: every click, input and navigation across the browser with element identity, optionally with screen video and a frontmost-app timeline. action=start begins, action=stop ends and writes readable steps, action=list shows recordings.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...browserProp,
-        action: { type: 'string', enum: ['start', 'stop', 'list'] },
-        id: { type: 'string', description: 'Which recording to stop. Defaults to the one running.' },
-        video: { type: 'boolean', description: 'Also capture the screen, so moments outside the browser are visible.' },
-        label: { type: 'string' },
-      },
-      required: ['action'],
-    },
-  },
-  {
-    name: 'browser_rec',
-    description:
-      'Record one tab for watching later, in little space: rrweb DOM events plus one small JPEG still per action, across navigations, until stopped. action=start (optional out dir, label), stop (returns the directory and sizes; open it with `browserctrl replay <dir>`), status.',
-    inputSchema: {
-      type: 'object',
-      properties: { ...browserProp, action: { type: 'string', enum: ['start', 'stop', 'status'] }, tab: { type: 'string' }, out: { type: 'string' }, label: { type: 'string' } },
-      required: ['action'],
-    },
+    description: 'Recordings. start/stop/list: record the human across the browser (video: also the screen). tab_start/tab_stop/tab_status: record one tab for later replay (rrweb events plus a small still per action). show (id): the steps of a recording and the moments the human marked.',
+    inputSchema: obj({
+      ...browserProp,
+      action: { type: 'string', enum: ['start', 'stop', 'list', 'tab_start', 'tab_stop', 'tab_status', 'show'] },
+      id: { type: 'string', description: 'stop, show: recording id; stop defaults to the running one.' },
+      video: { type: 'boolean', description: 'start: also capture the screen.' },
+      label: { type: 'string' },
+      ...tabProp,
+      out: { type: 'string', description: 'tab_start: output directory.' },
+      steps: { type: 'boolean', description: 'show: the full step list, not just the marks.' },
+    }, ['action']),
   },
   {
     name: 'browser_site',
-    description:
-      'Before planning a task on a site: everything browserctrl knows about it. Recipes first (the site\'s own API calls, faster than any UI, with run usage for browser_recipe), then flow notes (facts about how its UI works, with ids; a page URL puts that page\'s notes first). api notes are recipe candidates.',
-    inputSchema: { type: 'object', properties: { site: { type: 'string', description: 'example.com or a page URL' } }, required: ['site'] },
+    description: 'Before planning a task on a site: its recipes (its own API calls, faster than any UI) and flow notes (facts about its UI). A page URL puts that page\'s notes first.',
+    inputSchema: obj({ site: { type: 'string', description: 'example.com or a page URL.' } }, ['site']),
   },
   {
     name: 'browser_notes',
-    description:
-      'Flow notes: short facts about how a site works, hinted on open, navigate, read and do steps with an id. After finishing a task on a site, add up to 3 one-line facts that would have saved you the most time on a different task there (never the answer or the task\'s values; Jev rejects those). confirm a note you relied on that held; drop one that was wrong, with why. When the lesson is how to reach a control hidden behind another (Pets under Guests) or how to clear a recurring interruption, add it with reveal or on so do runs it next time. action=add (site or url, text, optional path template like /search), confirm (id), drop (id, why), list (optional site).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        action: { type: 'string', enum: ['add', 'confirm', 'drop', 'list'] },
-        site: { type: 'string', description: 'example.com or a page URL (its path becomes the note\'s page)' },
-        text: { type: 'string' }, path: { type: 'string' }, id: { type: 'string' }, why: { type: 'string' },
-        force: { type: 'boolean', description: 'Store even if Jev judges it task-specific.' },
-        api: { type: 'boolean', description: 'The note says where a page\'s data comes from (an endpoint): a recipe candidate.' },
-        recipe: { type: 'string', description: 'Name of a recipe this note points to.' },
-        reveal: { type: 'object', description: 'A note do can run: when a step\'s target cannot be found and matches this target, run these do steps, then retry. {target, steps}', properties: { target: { type: 'string' }, steps: { type: 'array', items: { type: 'string' } } } },
-        on: { type: 'object', description: 'A note do can run: when Jev sees this situation during a do step, run these do steps and carry on. {situation, steps}', properties: { situation: { type: 'string' }, steps: { type: 'array', items: { type: 'string' } } } },
-      },
-      required: ['action'],
-    },
-  },
-  {
-    name: 'browser_recording',
-    description:
-      'Read a recording: its steps, and any moments the human marked on the video resolved to the nearest real event, so a mark comes back as "click on button Confirm and apply", not a frame number.',
-    inputSchema: {
-      type: 'object',
-      properties: { id: { type: 'string' }, steps: { type: 'boolean', description: 'Return the full step list rather than just the marks.' } },
-      required: ['id'],
-    },
+    description: 'Flow notes about how a site works. After a task add up to 3 one-line facts that would save time on another task there, never task values. confirm a note that held; drop a wrong one with why. Actions: add, confirm, drop, list. reveal/on notes: see the guide.',
+    inputSchema: obj({
+      action: { type: 'string', enum: ['add', 'confirm', 'drop', 'list'] },
+      site: { type: 'string', description: 'example.com or a page URL.' },
+      text: { type: 'string' }, path: { type: 'string', description: 'Page path, e.g. /search.' }, id: { type: 'string' }, why: { type: 'string' },
+      force: { type: 'boolean', description: 'Store even if judged task-specific.' },
+      api: { type: 'boolean', description: 'The note names an endpoint: a recipe candidate.' },
+      recipe: { type: 'string', description: 'Recipe this note points to.' },
+      reveal: { type: 'object', description: '{target, steps}: when a do step cannot find a matching target, run these steps and retry.', properties: { target: { type: 'string' }, steps: { type: 'array', items: { type: 'string' } } } },
+      on: { type: 'object', description: '{situation, steps}: when Jev sees this situation in a do step, run these steps.', properties: { situation: { type: 'string' }, steps: { type: 'array', items: { type: 'string' } } } },
+    }, ['action']),
   },
   {
     name: 'browser_eval',
-    description: 'Evaluate JavaScript in the page and return the value. Use when reading or acting needs logic the other tools do not cover.',
-    inputSchema: {
-      type: 'object',
-      properties: { ...browserProp, ...tabProp, js: { type: 'string' } },
-      required: ['tab', 'js'],
-    },
+    description: 'Evaluate JavaScript in the page and return the value, for logic the other tools do not cover.',
+    inputSchema: obj({ ...browserProp, ...tabProp, js: { type: 'string' } }, ['tab', 'js']),
   },
 ];
+
+function listedTools(spec = setting('MCP_TOOLS')) {
+  if (spec === 'all') return TOOLS;
+  const names = new Set([...CORE_TOOLS, ...String(spec || '').split(',').map(s => s.trim()).filter(Boolean)]);
+  return TOOLS.filter(t => names.has(t.name));
+}
 
 let clientRendersImages = false;
 
@@ -506,7 +424,7 @@ async function actOnce(conn, targetId, a) {
 async function safariHandler(args, name = 'browser_safari') {
   if (args.port) throw new Error('Safari uses Apple MCP, not a CDP port.');
   const safari = await import('../lib/safari.mjs');
-  if (name === 'browser_reload' || name === 'browser_refresh') {
+  if (name === 'browser_reload') {
     const {safariReload} = await import('../lib/safari-reload.mjs');
     return text(await safariReload(args.tab, {waitUntil: args.until || 'load', timeoutMs: args.timeoutMs ?? 30000}));
   }
@@ -630,7 +548,6 @@ const handlers = {
     const tab = await ops.resolveTab(conn, args.tab);
     return text(await ops.reload(conn, tab.targetId, {waitUntil: args.until || 'load', timeoutMs: args.timeoutMs ?? 30000}));
   }),
-  browser_refresh: args => handlers.browser_reload(args),
 
   browser_navigate: args =>
     withConn(args, async (conn, port) => {
@@ -750,9 +667,25 @@ const handlers = {
   },
 
   browser_annotations: async args => {
-    if (args.clear) return text({ cleared: annotations.clear() });
+    const action = args.action || (args.clear ? 'clear' : args.consume ? 'consume' : 'read');
+    if (action === 'marks') {
+      const rows = state.marks(resolveBrowserArg(args));
+      return text(
+        rows.length
+          ? rows.map(m => ({ targetId: m.targetId, id: m.targetId.slice(0, 8), port: m.port, note: m.note, title: m.title, url: m.url, minutesAgo: Math.round(m.ageMs / 60000) }))
+          : 'No tabs are marked. Ask the human to run `browserctrl tray` or `browserctrl mark <url-substring>`.',
+      );
+    }
+    if (action === 'arm') return withConn(args, async conn => {
+      await ensureRunning();
+      const tab = await ops.resolveTab(conn, args.tab);
+      const res = await ops.installOverlay(conn, tab.targetId, { bridgePort: BRIDGE_PORT, force: Boolean(args.force) });
+      if (args.on) await ops.toggleOverlay(conn, tab.targetId);
+      return text({ ...res, tab: tab.id, hotkey: 'option+A toggles annotate mode in that page', state: await ops.overlayState(conn, tab.targetId) });
+    });
+    if (action === 'clear') return text({ cleared: annotations.clear() });
     const sessionId = args.all ? null : SESSION_ID;
-    const rows = args.consume ? annotations.consume({ sessionId }) : annotations.pending({ sessionId });
+    const rows = action === 'consume' ? annotations.consume({ sessionId }) : annotations.pending({ sessionId });
     const others = args.all ? [] : annotations.pending().filter(r => r.for && r.for !== SESSION_ID);
     const note = others.length
       ? `\n\n(${others.length} more annotation${others.length === 1 ? '' : 's'} are aimed at another agent session; pass all=true to see them.)`
@@ -760,42 +693,30 @@ const handlers = {
     return text(annotations.render(rows) + note);
   },
 
-  browser_marks: async args => {
-    const port = resolveBrowserArg(args);
-    const rows = state.marks(port);
-    return text(
-      rows.length
-        ? rows.map(m => ({
-            targetId: m.targetId,
-            id: m.targetId.slice(0, 8),
-            port: m.port,
-            note: m.note,
-            title: m.title,
-            url: m.url,
-            minutesAgo: Math.round(m.ageMs / 60000),
-          }))
-        : 'No tabs are marked. Ask the human to run `cdp tray` or `cdp mark <url-substring>`.',
-    );
-  },
-
-  browser_annotate_mode: args =>
-    withConn(args, async conn => {
-      await ensureRunning();
-      const tab = await ops.resolveTab(conn, args.tab);
-      const res = await ops.installOverlay(conn, tab.targetId, { bridgePort: BRIDGE_PORT, force: Boolean(args.force) });
-      if (args.on) await ops.toggleOverlay(conn, tab.targetId);
-      return text({ ...res, tab: tab.id, hotkey: 'option+A toggles annotate mode in that page', state: await ops.overlayState(conn, tab.targetId) });
-    }),
-
   browser_record: async args => {
+    if (args.action?.startsWith('tab_')) {
+      if (args.action === 'tab_status') return text(rec.all());
+      return withConn(args, async conn => {
+        const tab = await ops.resolveTab(conn, args.tab);
+        if (args.action === 'tab_start') return text(await rec.start(conn, tab.targetId, { out: args.out, label: args.label }));
+        return text(await rec.stop(conn, tab.targetId));
+      });
+    }
     await ensureRunning();
-    const base = `http://127.0.0.1:${BRIDGE_PORT}/api/recordings`;
-    if (args.action === 'list') return text(await (await fetch(base)).json());
+    const root = `http://127.0.0.1:${BRIDGE_PORT}/api/recordings`;
+    if (args.action === 'show') {
+      const base = `${root}/${args.id}`;
+      if (args.steps) return text(await (await fetch(`${base}/steps`)).text());
+      const marks = await (await fetch(`${base}/marks`)).json();
+      const summary = await (await fetch(base)).json();
+      return text({ summary, marks });
+    }
+    if (args.action === 'list') return text(await (await fetch(root)).json());
     if (args.action === 'start') {
       const port = resolveBrowserArg(args);
       if (!port) throw new Error('Which browser should be recorded? Pass browser=<name>.');
       const meta = await (
-        await fetch(base, {
+        await fetch(root, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ port, video: Boolean(args.video), apps: true, label: args.label ?? null }),
@@ -803,18 +724,10 @@ const handlers = {
       ).json();
       return text({ ...meta, next: 'The human drives the browser now. Stop with browser_record action=stop.' });
     }
-    const id = args.id || (await (await fetch(base)).json()).find(r => !r.stoppedAt)?.id;
+    if (args.action !== 'stop') throw new Error('action must be start, stop, list, tab_start, tab_stop, tab_status or show');
+    const id = args.id || (await (await fetch(root)).json()).find(r => !r.stoppedAt)?.id;
     if (!id) throw new Error('No recording is running.');
-    return text(await (await fetch(`${base}/${id}/stop`, { method: 'POST' })).json());
-  },
-
-  browser_rec: async args => {
-    if (args.action === 'status') return text(rec.all());
-    return withConn(args, async conn => {
-      const tab = await ops.resolveTab(conn, args.tab);
-      if (args.action === 'start') return text(await rec.start(conn, tab.targetId, { out: args.out, label: args.label }));
-      return text(await rec.stop(conn, tab.targetId));
-    });
+    return text(await (await fetch(`${root}/${id}/stop`, { method: 'POST' })).json());
   },
 
   browser_site: async args => text(site.format(site.lookup(args.site))),
@@ -832,15 +745,6 @@ const handlers = {
     return text(args.site ? notes.format(notes.show(args.site)) : notes.sites());
   },
 
-  browser_recording: async args => {
-    await ensureRunning();
-    const base = `http://127.0.0.1:${BRIDGE_PORT}/api/recordings/${args.id}`;
-    if (args.steps) return text(await (await fetch(`${base}/steps`)).text());
-    const marks = await (await fetch(`${base}/marks`)).json();
-    const summary = await (await fetch(base)).json();
-    return text({ summary, marks });
-  },
-
   browser_eval: args =>
     withConn(args, async conn => {
       const tab = await ops.resolveTab(conn, args.tab);
@@ -850,14 +754,31 @@ const handlers = {
 
 // Announce this session so the human can aim an annotation at it by name.
 const SESSION_ID =
-  process.env.CODEX_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || `pid:${process.ppid}`;
+  setting('AGENT_ID') || process.env.CODEX_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || `pid:${process.ppid}`;
 
-const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} } });
+// The guide and the references, so tool descriptions can stay short.
+const RESOURCES = [
+  { uri: 'browserctrl://guide', name: 'guide', description: 'How to use browserctrl: what to use when, the do plan grammar, recovery, safety.', file: 'SKILL.md' },
+  ...(() => { try { return fs.readdirSync(path.join(ROOT, 'references')).filter(f => f.endsWith('.md')).sort().map(f => ({ uri: `browserctrl://reference/${f.slice(0, -3)}`, name: `reference: ${f.slice(0, -3)}`, description: `Reference: ${f.slice(0, -3).replace(/-/g, ' ')}.`, file: `references/${f}` })); } catch { return []; } })(),
+].map(r => ({ ...r, mimeType: 'text/markdown' }));
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {}, resources: {} } });
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: listedTools() }));
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: RESOURCES.map(({ file, ...r }) => r) }));
+server.setRequestHandler(ReadResourceRequestSchema, async request => {
+  const r = RESOURCES.find(x => x.uri === request.params.uri);
+  if (!r) throw new Error(`Unknown resource ${request.params.uri}`);
+  return { contents: [{ uri: r.uri, mimeType: r.mimeType, text: fs.readFileSync(path.join(ROOT, r.file), 'utf8') }] };
+});
 
 server.setRequestHandler(CallToolRequestSchema, async request => {
-  const { name, arguments: args = {} } = request.params;
+  let { name, arguments: args = {} } = request.params;
+  const old = LEGACY[name];
+  if (old) {
+    args = name === 'browser_rec' ? { ...args, action: TAB_REC[args.action] || args.action } : { ...old[1], ...args };
+    name = old[0];
+  }
   const handler = name === 'browser_safari' || args.browser === 'safari' ? () => safariHandler(args, name) : handlers[name];
   if (!handler) return fail(`Unknown tool ${name}`);
   sessions.touch(SESSION_ID);
@@ -865,7 +786,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
     const result = await withTimeout(withAgentIdentity(args.agentId ?? agentId(), () => handler(args)), TOOL_TIMEOUT_MS, name);
     // The only handoff path that needs nothing from the harness: if the human
     // has left annotations or marked tabs, say so on the way out.
-    if (name !== 'browser_annotations' && name !== 'browser_marks' && !result.isError) {
+    if (name !== 'browser_annotations' && !result.isError) {
       const note = annotations.piggyback(state.marks().length);
       const last = result.content?.filter(c => c.type === 'text').pop();
       if (note && last) last.text += note;
@@ -890,9 +811,8 @@ const client = process.env.CODEX_SESSION_ID ? 'codex' : sessions.inferClient(inf
 sessions.register({
   id: SESSION_ID,
   client,
-  cwd: process.env.CDP_SESSION_CWD || process.cwd(),
+  cwd: setting('SESSION_CWD') || process.cwd(),
 });
 clientRendersImages = IMAGE_CLIENTS.some(rx => rx.test(client));
-if (process.env.CDP_MCP_IMAGES === '1') clientRendersImages = true;
-if (process.env.CDP_MCP_IMAGES === '0') clientRendersImages = false;
+if (setting('MCP_IMAGES') !== undefined) clientRendersImages = flag('MCP_IMAGES');
 void fs;

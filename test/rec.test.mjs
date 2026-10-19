@@ -1,5 +1,5 @@
-// Watch-later recordings: the page script, the files a recording leaves, the
-// Online-Mind2Web export and the replay page, then one real recording end to end.
+// Watch-later recordings: the page script, the files a recording leaves and the
+// replay page, then one real recording end to end.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -49,22 +49,6 @@ test('finish compresses the event stream and keeps appending across stops', () =
   assert.deepEqual(rec.readEvents(dir).map(e => e.type), [4, 2, 3]);
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8')).label, 'demo');
   assert.equal(first.steps, 3);
-});
-
-test('Online-Mind2Web export writes a v2 result its judge can read', () => {
-  const dir = fakeRecording();
-  const root = tmp();
-  const r = rec.exportOm2w(dir, { taskId: 'abc', task: 'Find a sofa', answer: 'done', root });
-  const result = JSON.parse(fs.readFileSync(r.result, 'utf8'));
-  assert.equal(result.schema_version, 'online-mind2web-v2');
-  assert.equal(result.task_id, 'abc');
-  assert.equal(result.agent_final_answer, 'done');
-  // The failed capture reuses the previous still; the final stop row is dropped.
-  assert.deepEqual(result.action_history.map(h => [h.step, h.screenshot, h.action]), [
-    [0, '0000.jpg', 'start recording'], [1, '0000.jpg', 'click ref_9'], [2, '0001.jpg', 'do: click "Sort"'],
-  ]);
-  for (const h of result.action_history) assert.ok(fs.existsSync(path.join(root, 'abc', 'trajectory', h.screenshot)));
-  assert.throws(() => rec.exportOm2w(dir, { task: 'x' }), /task-id/);
 });
 
 test('daemon sink writes only for tabs that are recording', () => {

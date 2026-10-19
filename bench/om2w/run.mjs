@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exportOm2w } from './export.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const runsDir = path.join(here, 'runs');
@@ -274,7 +275,7 @@ function finish(runId) {
   // The judge's trajectories_dir layout: om2w/<task_id>/{result.json, trajectory/}.
   let exported = null;
   try {
-    exported = bcJson('rec', 'om2w', runPath(runId, 'rec'), '--task-id', run.task_id, '--task', run.task, '--answer', answer?.answer ?? raw.trim(), '--root', runPath(runId, 'om2w'));
+    exported = exportOm2w(runPath(runId, 'rec'), { taskId: run.task_id, task: run.task, answer: answer?.answer ?? raw.trim(), root: runPath(runId, 'om2w') });
   } catch (e) { console.error(`export failed: ${String(e.stderr || e).trim()}`); }
   // Tabs that appeared during the run are the run's; in parallel runs, only those on the
   // task's own site (agents open links in new tabs; the other run is on another site).

@@ -73,7 +73,15 @@ test('jevKey reads the environment first, then the private env file', () => {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'jev-')), '.env');
   fs.writeFileSync(file, 'OTHER=1\nTYPESAFE_API_KEY="b"\n');
   assert.equal(jevKey({ BROWSERCTRL_JEV_ENV: file }).key, 'b');
-  assert.throws(() => jevKey({ BROWSERCTRL_JEV_ENV: path.join(os.tmpdir(), 'missing.env') }), /TYPESAFE_API_KEY/);
+  assert.equal(jevKey({ CDP_JEV_ENV: file }).key, 'b', 'the older CDP_ spelling still works');
+  assert.throws(() => jevKey({ BROWSERCTRL_JEV_ENV: path.join(os.tmpdir(), 'missing.env') }), /TypeSafe API key[\s\S]*missing\.env[\s\S]*exact names, refs and CSS selectors work without one/i);
+});
+
+test('without a key file the lookup uses jev.env in the config folder, never a personal checkout', () => {
+  try { jevKey({}); assert.fail('expected a missing-key error'); } catch (e) {
+    assert.match(e.message, /jev\.env/);
+    assert.doesNotMatch(e.message, /jev-ultrafast/);
+  }
 });
 
 test('a label cut through an emoji still makes a valid request', async () => {
