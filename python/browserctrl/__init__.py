@@ -57,7 +57,7 @@ def find_stdio(env=None, which=shutil.which):
             out = ""
         if out and (Path(out) / "bin" / "stdio.mjs").is_file():
             return Path(out) / "bin" / "stdio.mjs"
-    raise CDPError("Cannot find browserctrl's Node sidecar. Install it with `npm install -g browserctrl`, or set BROWSERCTRL_STDIO to the path of its bin/stdio.mjs.")
+    raise CDPError("Cannot find browserctrl's Node sidecar. Install it with `npm install -g @seahyc/browserctrl`, or set BROWSERCTRL_STDIO to the path of its bin/stdio.mjs.")
 
 
 class ChromeCDP:
