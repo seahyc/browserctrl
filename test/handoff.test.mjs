@@ -384,13 +384,10 @@ test('a client that sends no name in the handshake is not left as unknown', asyn
   assert.equal(typeof inferClient(undefined), 'string');
 });
 
-test('the Codex hook does not relabel a Codex task as Claude Code', () => {
+test('the MCP server does not relabel a Codex task as Claude Code', () => {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const hook = fs.readFileSync(path.join(here, '..', 'hooks', 'annotations.mjs'), 'utf8');
   const server = fs.readFileSync(path.join(here, '..', 'mcp', 'server.mjs'), 'utf8');
-  assert.match(hook, /process\.env\.CODEX_SESSION_ID \? 'codex' : 'claude-code'/);
   assert.match(server, /process\.env\.CODEX_SESSION_ID \? 'codex' : sessions\.inferClient/);
-  assert.match(hook, /chat: Boolean\(promptTitle\)/, 'only real prompts should count as chat recency');
 });
 
 test('video time is read off ffmpeg progress, not assumed from spawn', async () => {

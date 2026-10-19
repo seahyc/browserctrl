@@ -67,14 +67,14 @@ t('a handoff brings the tab to the front, pings, and resumes when the challenge 
   const tab = await open('fixtures/jigsaw.html?seed=2&autoclear=1500');
   const started = Date.now();
   const r = await solve(conn, tab, { timeoutMs: 10000, pollMs: 250 });
-  assert.equal(r.captcha, 'jigsaw-slider');
+  assert.equal(r.captcha, 'unknown-challenge'); // the puzzle page, with no solver plugin installed
   assert.equal(r.solvedBy, 'human');
   assert.ok(r.waitedMs >= 900 && r.waitedMs <= 3500, `waited ${r.waitedMs}`);
   assert.ok(Date.now() - started < 5000, 'resumed promptly');
-  assert.match(r.solver, /off for 127\.0\.0\.1/);
+  assert.equal(r.solver, undefined, 'no plugin, so nothing was attempted');
   const ping = pings();
   assert.equal(ping.length, 1);
-  assert.match(ping[0], /^127\.0\.0\.1 shows a puzzle slider\. The tab is in front/);
+  assert.match(ping[0], /^127\.0\.0\.1 shows a verification challenge\. The tab is in front/);
   const rows = await ops.tabs(conn, { focus: true });
   assert.equal(rows.find(x => x.targetId === tab)?.focused, true, 'the challenge tab is the selected one');
   assert.equal(cooldown.active(fixture.url), null, 'cleared, so no cool-down');
@@ -114,7 +114,7 @@ t('do stops at the challenge when handoff is off, and the next plan to that site
   const r = await runSteps(conn, tab, [`nav ${fixture.url}fixtures/jigsaw.html?seed=4`, 'wait 10'], { handoff: false });
   assert.equal(r.done, false);
   assert.equal(r.stopped.step, 1);
-  assert.match(r.stopped.reason, /jigsaw-slider blocks tab .* handoff was skipped/);
+  assert.match(r.stopped.reason, /unknown-challenge blocks tab .* handoff was skipped/);
   assert.equal(r.steps.length, 1);
   await assert.rejects(runSteps(conn, tab, [`nav ${fixture.url}fixtures/page.html`]), /cooling down/);
   await ops.closeTab(conn, tab);
@@ -133,6 +133,6 @@ t('a recipe hands its challenge to the human, then runs; with handoff off it fai
   const started = Date.now();
   await assert.rejects(runRecipe(conn, blocked, {}, { handoff: false }), /handoff was skipped/);
   assert.ok(Date.now() - started < 15000);
-  assert.equal(cooldown.active(local).kind, 'jigsaw-slider');
+  assert.equal(cooldown.active(local).kind, 'unknown-challenge');
   await assert.rejects(runRecipe(conn, blocked, {}, {}), /refusing to run fixture\/blocked against it/);
 });

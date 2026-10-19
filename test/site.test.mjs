@@ -23,7 +23,7 @@ fs.writeFileSync(path.join(TMP, 'recipes/shop.example.com/orders.json'), JSON.st
   description: 'All orders, newest first. Paged.', origin: 'https://shop.example.com', params: { tab: 'ALL', cursor: '' },
   request: { url: 'https://shop.example.com/api/orders' },
 }));
-beforeEach(() => { fs.rmSync(path.join(TMP, 'notes'), { recursive: true, force: true }); delete process.env.BROWSERCTRL_NOTES; });
+beforeEach(() => { fs.rmSync(path.join(TMP, 'notes'), { recursive: true, force: true }); process.env.BROWSERCTRL_NOTES = 'on'; });
 
 test('site lookup lists recipes with run usage, then notes with this page first', async () => {
   await notes.add('https://shop.example.com/orders', 'Order tabs are in the URL as ?tab=', { force: true });

@@ -67,7 +67,6 @@ lib/recorder.mjs    recording lifecycle    lib/recstore.mjs  where recordings li
 lib/bridge.mjs      loopback HTTP (needs a per-install token): tray, video annotator, extension endpoint
 lib/pages/          tray and video-annotator pages
 bin/browserctrl.mjs         CLI frontend        mcp/server.mjs   MCP frontend
-hooks/              Claude Code UserPromptSubmit hook
 extension/          wraps the same overlay; adds a popup and browser shortcuts
 ```
 

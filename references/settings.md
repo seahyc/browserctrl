@@ -36,7 +36,7 @@ There is no default browser. See [connecting.md](connecting.md).
 | `BROWSERCTRL_RECORDING` | `<data>/recording.json` | File that remembers `trace on\|off` and `capture on\|off`. |
 | `BROWSERCTRL_RECIPES` | `<config>/recipes` | Your own recipes. |
 | `BROWSERCTRL_TAPS` | `<config>/taps` | Tapped recipe repositories. |
-| `BROWSERCTRL_CAPTCHA_CONFIG` | `<config>/captcha.json` | Sites where the jigsaw solver is enabled. |
+| `BROWSERCTRL_CAPTCHA_PLUGINS` | none | Comma list of captcha solver plugin files, besides those in `<config>/plugins/`. |
 | `BROWSERCTRL_JEV_ENV` | `<config>/jev.env` | File holding `TYPESAFE_API_KEY=...`. |
 | `BROWSERCTRL_STATE_DIR` | `<state>` | Folder for the prefetch bookkeeping file only. |
 | `BROWSERCTRL_COOLDOWN` | `<state>/cooldown.json` | Sites cooling down after a challenge. |
@@ -87,9 +87,9 @@ Jev answers "which control does this step mean?" for names that are not exact. S
 | `BROWSERCTRL_TRACE_MAX_MB` | 50 | Total cap for traces. |
 | `BROWSERCTRL_REC_MAX_MB` | 1000 | Total cap for recordings. |
 | `BROWSERCTRL_CAPTURE_MAX_MB` | 200 | Total cap for captured traffic. |
-| `BROWSERCTRL_NOTES` | `on` | `quiet` records notes without showing hints, `off` does neither. |
+| `BROWSERCTRL_NOTES` | `off` | `on` records flow notes and shows them as hints; `quiet` records without hints. |
 | `BROWSERCTRL_SHOW` | off | Same as `--show`: bring the tab forward, outline each target, show a panel of steps. |
-| `BROWSERCTRL_PREFETCH` | on | After a call ends on a list, load the first few item links in background tabs for `visit`. `0` turns it off. |
+| `BROWSERCTRL_PREFETCH` | off | `1`: after a call ends on a list, load the first few item links in background tabs for `visit`. |
 | `BROWSERCTRL_PREFETCH_REAPER` | on | Close prefetched tabs nobody took (after 90 s). |
 | `BROWSERCTRL_TELEMETRY` | off | `1` keeps local connection lifecycle logs (no page data) for debugging daemon restarts, at most 32 files of 1 MB. |
 | `BROWSERCTRL_DIAGNOSTIC_LOG` | off | A file. A fresh daemon writes a protocol trace there. |
@@ -98,7 +98,6 @@ Jev answers "which control does this step mean?" for names that are not exact. S
 | `BROWSERCTRL_COOLDOWN_MS` | 1200000 | First cool-down after a challenge (20 min; it doubles within a day, up to 2 h). |
 | `BROWSERCTRL_REC_STILLS` | on | `off` logs recording steps without taking the per-action still. |
 | `BROWSERCTRL_STILL_SETTLE_MS` | 4000 | How long a recording still waits for the page to settle. |
-| `BROWSERCTRL_SOLVER_HOSTS` | none | Comma list of sites where the jigsaw solver is enabled, in addition to the config file. |
 | `BROWSERCTRL_NOTIFY` | on | `0` silences captcha alerts. |
 | `BROWSERCTRL_NOTIFY_SOUND` | system sound on macOS | Sound file to play, or `0` for none. |
 | `BROWSERCTRL_NOTIFY_CMD` | none | A command run as `<cmd> "<message>"` when a challenge needs you. |

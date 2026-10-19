@@ -66,8 +66,8 @@ works. A challenge seen cleared ends the cool-down early. `--force` (MCP:
 `browserctrl cooldown clear <site>` ends one by hand.
 
 To clear a challenge on a tab, run `browserctrl captcha <tab> --browser dia`
-(MCP: `browser_captcha`). It drags an Alibaba drag-to-end slider once (and a
-jigsaw puzzle slider, if the user enabled the solver for that site). Otherwise
+(MCP: `browser_captcha`). It drags an Alibaba drag-to-end slider once (and lets an
+installed solver plugin try its kinds, if there is one). Otherwise
 it hands the tab to the human: brings it to the front, plays a sound, shows a
 notification naming the site, and returns `solvedBy: human` with `waitedMs` as
 soon as the challenge is gone (polled every second; `--timeout`, default 5 min).
@@ -80,28 +80,13 @@ the shell with the message as the last argument (`$BROWSERCTRL_NOTIFY_CMD
 "<message>"`). browserctrl sends nothing itself. `BROWSERCTRL_NOTIFY=0` silences
 the sound and notification; `BROWSERCTRL_NOTIFY_SOUND` picks another sound file.
 
-### Opt-in jigsaw solver
+### Solver plugins
 
-Off by default. Only when the user asks for it for a site:
-
-```sh
-browserctrl captcha solver enable shopee.sg      # prints a warning; stored in captcha.json in the config folder
-browserctrl captcha solver status                # enabled sites and pinned selectors
-browserctrl captcha solver disable shopee.sg
-```
-
-It defeats the site's bot check, may break the site's terms, and can escalate to
-stronger checks. It makes one attempt, then hands the tab to the human. It
-brings the tab to the front, screenshots the puzzle, finds the gap from the
-image (matching the piece's picture, plus edges and shading), and drags the handle there at a human pace (probe, ease-out, overshoot
-and settle). Element discovery is generic: a small visible handle (`role=slider`,
-or class/id/aria-label containing slider/handle/drag/thumb/knob) on a wider track,
-and the largest image/canvas near it as the background with a narrower one as
-the piece. If a site's markup defeats that, pin selectors for it in the config
-file:
-
-```json
-{ "solver": { "hosts": ["shopee.sg"] },
-  "selectors": { "shopee.sg": { "handle": ".slider-btn", "track": ".slider-track",
-                                "background": ".puzzle img.bg", "piece": ".puzzle img.piece" } } }
-```
+No puzzle solver comes with browserctrl. A plugin can add one: an `.mjs` module in the
+`plugins` folder of the config folder (`browserctrl where`), or listed in
+`BROWSERCTRL_CAPTCHA_PLUGINS`. It exports `name`, `kinds`, `solve(conn, tab, found,
+{ url, focus, api })`, and optionally `detectSource(api)` (an in-page check that
+returns `{ kind }`) and `cli(args, api)` (`browserctrl captcha <name> …`). The plugin
+decides which sites it may act on; a solver that defeats a bot check can break a
+site's terms, so keep it to sites the user chose. `browserctrl captcha plugins`
+lists what is installed.

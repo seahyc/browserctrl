@@ -54,9 +54,9 @@ Fewer, cheaper turns:
   judged on the page: answer from it instead of re-reading the page to confirm.
 - `--then items` shows the main list in full and folds the other groups to one line;
   `browserctrl items <tab> --grep "<regex>"` keeps only matching items.
-- After a call that ends on a list, the first 3 item links start loading in background
-  tabs (3 per site, closed after 90 s if unused); `visit` takes them already loaded.
-  `--no-prefetch` or `BROWSERCTRL_PREFETCH=0` turns it off.
+- With `BROWSERCTRL_PREFETCH=1`, a call that ends on a list starts loading its first 3
+  item links in background tabs (3 per site, closed after 90 s if unused), and `visit`
+  takes them already loaded. Off by default: it opens tabs in the user's browser.
 - If you can delegate, let a fast model run the mechanical `do`/`visit` calls of a plan
   you wrote and report back; keep planning and the final answer for yourself.
 
@@ -289,8 +289,8 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
   flags these as recipe candidates. A note can point at a recipe with
   `--recipe <name>` (shown as `→ recipe run <name>`).
   `browserctrl notes [site] [--clear]` lists or clears them; `--no-notes` skips hints
-  once, `BROWSERCTRL_NOTES=quiet` records without hinting, `=off` disables them
-  (`BROWSERCTRL_NOTES_DIR` moves the store). MCP: `browser_notes`.
+  once. Notes are off by default: `BROWSERCTRL_NOTES=on` turns them on, `=quiet` records
+  without hinting (`BROWSERCTRL_NOTES_DIR` moves the store). MCP: `browser_notes`.
 - Intent targets, expectations, `--until` and `--dismiss` need `TYPESAFE_API_KEY` (see
   [Jev](#jev)). Exact names work without it; overlay checks are then skipped.
 

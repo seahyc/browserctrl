@@ -13,7 +13,7 @@ import * as notes from '../lib/notes.mjs';
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-notes-'));
 process.env.BROWSERCTRL_NOTES_DIR = DIR;
-beforeEach(() => { fs.rmSync(DIR, { recursive: true, force: true }); delete process.env.BROWSERCTRL_NOTES; });
+beforeEach(() => { fs.rmSync(DIR, { recursive: true, force: true }); process.env.BROWSERCTRL_NOTES = 'on'; });
 
 const MRS = 'https://gitlab.example.com/acme/web/-/merge_requests';
 const step = (n, r) => ({ run: 'r1', at: '2026-10-15T10:00:00Z', tab: 'T', step: n, ms: 100, ...r });
@@ -275,4 +275,11 @@ test('www. and two-level suffixes share one site, and old www. files are merged'
   assert.ok(!fs.existsSync(path.join(DIR, 'www.gov.uk.json')));
   assert.equal(notes.show('https://www.gov.uk/x').facts.length, 1);
   assert.equal(notes.siteOfUrl('https://www.bbc.co.uk/news'), 'bbc.co.uk');
+});
+
+test('notes are off unless asked for', async () => {
+  delete process.env.BROWSERCTRL_NOTES;
+  const notes = await import('../lib/notes.mjs');
+  assert.equal(notes.recording(), false);
+  assert.equal(notes.hinting(), false);
 });

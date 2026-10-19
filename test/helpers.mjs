@@ -8,8 +8,8 @@ import { spawn, execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
-// Tests open no speculative tabs unless a test asks for them.
-if (process.env.BROWSERCTRL_PREFETCH === undefined) process.env.BROWSERCTRL_PREFETCH = '0';
+// Notes are off by default; the suite turns them on, since tests exercise them.
+process.env.BROWSERCTRL_NOTES ??= 'on';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Every test process gets its own throwaway home for notes, recordings, state, sockets and

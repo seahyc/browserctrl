@@ -25,10 +25,9 @@ import { listRecipes, loadRecipe, runRecipe, findRecipes, listTaps, tapAdd, tapU
 import { createStore } from '../lib/exemplars.mjs';
 import * as captcha from '../lib/captcha.mjs';
 import * as cooldown from '../lib/cooldown.mjs';
-import * as jigsaw from '../lib/jigsaw.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
-import { setting, number, dirs, migrateLegacy, requireNode } from '../lib/config.mjs';
+import { setting, number, dirs, configPath, migrateLegacy, requireNode } from '../lib/config.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { formatRead, deepTextExpression } from '../lib/refs.mjs';
 import { runSteps, formatSteps, PAGE_PARAMS, formatParams, mainLinks } from '../lib/steps.mjs';
@@ -193,10 +192,10 @@ function usage() {
     browserctrl doctor --browser dia --watch-seconds 20   passive OS connection capture
 
   Captchas: browserctrl captcha <tab> --browser dia [--timeout ms] [--no-attempt] [--no-focus]
-    tries a drag-to-end slider once (or an opted-in jigsaw), otherwise brings the tab to the front,
+    tries a drag-to-end slider once (or an installed solver plugin), otherwise brings the tab to the front,
     sounds, notifies (and runs $BROWSERCTRL_NOTIFY_CMD "<message>" if set) and resumes once it clears
-    browserctrl captcha solver enable|disable <site>      opt in to the jigsaw-slider solver (off by default)
-    browserctrl captcha solver status                     enabled sites and pinned selectors
+    browserctrl captcha plugins                          optional solver plugins installed (none ship)
+    browserctrl captcha <plugin> …                       a plugin's own commands
     browserctrl cooldown [clear <site>]                   sites cooling down after a challenge
     A challenge starts a cool-down for its site (20 min, doubling within a day, max 2 h): open, nav,
     do with nav and recipe run refuse that site until it ends or clears; --force overrides.
@@ -573,19 +572,14 @@ const main = async () => {
     if (flags.json) return out(cooldown.list());
     return out(cooldownLines().join('\n') || '(no site is cooling down)');
   }
-  if (cmd === 'captcha' && positional[1] === 'solver') {
-    const action = positional[2] || 'status';
-    if (action === 'enable') {
-      const r = jigsaw.enable(positional[3]);
-      console.error(`Warning: ${r.warning}`);
-      return out(r);
-    }
-    if (action === 'disable') return out(jigsaw.disable(positional[3]));
-    if (action === 'status') {
-      const c = jigsaw.readConfig();
-      return out({ enabled: jigsaw.solverHosts(), selectors: c.selectors, config: jigsaw.configFile(), note: 'Off unless a site is listed. Add selectors per site to pin the handle, track, background and piece.' });
-    }
-    throw new Error('Usage: browserctrl captcha solver enable <site> | disable <site> | status');
+  if (cmd === 'captcha' && positional[1] === 'plugins') {
+    const list = await captcha.plugins();
+    return out(list.length ? list.map(p => p.error ? `${p.file}  (failed to load: ${p.error})` : `${p.name.padEnd(12)} ${p.kinds.join(', ')}  ${p.file}`).join('\n') : `(no solver plugins; put one in ${configPath('plugins')} or list it in BROWSERCTRL_CAPTCHA_PLUGINS)`);
+  }
+  if (cmd === 'captcha' && positional[1] && !/^[0-9a-f]{4,}$/i.test(positional[1]) && !/^\d+$/.test(positional[1])) {
+    const plugin = (await captcha.plugins()).find(p => p.name === positional[1]);
+    if (plugin?.cli) return out(await plugin.cli(positional.slice(2), captcha.pluginApi));
+    if (positional[1] === 'solver') throw new Error('The jigsaw solver is an optional plugin now: browserctrl captcha plugins lists what is installed.');
   }
   if (cmd === 'recipe' && positional[1] !== 'run') {
     const sub = positional[1] || 'list';

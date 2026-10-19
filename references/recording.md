@@ -17,8 +17,7 @@ Annotating a tab marks it too.
 
 Delivery to the agent, in order of portability: the `browser_annotations` MCP
 tool (`action: read`, `consume`, `clear`, `marks`, `arm`) works everywhere; every `browser_*` result appends a line when the queue
-is non-empty, which needs nothing from the harness; and in Claude Code a
-`UserPromptSubmit` hook puts them in front of the agent automatically.
+is non-empty, which needs nothing from the harness.
 
 When Dia's ordinary tab list omits a dormant tab, or a task needs exact
 native-tab selection and grouping, read the [Dia native tab reference](dia-native.md).
