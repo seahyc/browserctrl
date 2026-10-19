@@ -13,6 +13,8 @@ import * as ops from '../lib/ops.mjs';
 import * as finder from '../lib/find.mjs';
 import { formatRead } from '../lib/refs.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
+import { fakeJev } from './fake-jev.mjs';
+import { runSteps } from '../lib/steps.mjs';
 import { mainLinks } from '../lib/steps.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 
@@ -157,4 +159,46 @@ test('the lean view shows the main list in full and folds the rest; grep filters
   const only = formatItems(page, { grep: 'S\\$40' });
   assert.match(only, /Chair D/);
   assert.doesNotMatch(only, /Chair B/);
+});
+
+for (const [position, number, scroll] of [['above', 0, 200], ['below', 9, 200], ['partly below', 6, 195], ['visible', 4, 200]]) {
+  for (const method of ['ref', 'do selector']) t(`${method} clicks the actual ${position} listbox option`, async () => {
+    const id = await open('clipped-listbox.html');
+    await ops.evaluate(conn, id, `list.scrollTop = ${scroll}`);
+    const selector = `#option-${number}`;
+    if (method === 'ref') {
+      const snap = await ops.readPage(conn, id);
+      const row = rowOf(snap, new RegExp(`^Role ${number}$`));
+      assert.ok(row, JSON.stringify(snap.elements));
+      await ops.click(conn, id, { ref: row.ref, token: snap.token });
+    } else await runSteps(conn, id, [`click "${selector}"`], { jev: fakeJev(), noNotes: true });
+    const result = await ops.evaluate(conn, id, `({ selected: document.querySelector('${selector}').getAttribute('aria-selected'), events })`);
+    assert.deepEqual(result.events.map(e => [e.type, e.target, e.option]), ['pointerdown', 'mousedown', 'mouseup', 'click'].map(type => [type, `option-${number}`, `option-${number}`]));
+    assert.equal(result.selected, 'true');
+  });
+}
+
+t('ref clicks preserve labels, shadow controls and slotted disclosures', async () => {
+  const id = await open('clipped-listbox.html');
+  await ops.evaluate(conn, id, `document.body.innerHTML = '<label id="label">Enabled<input type="checkbox" id="check" style="opacity:0;width:1px;height:1px"></label><div id="host"></div><div id="disclosure"><span slot="heading" id="heading">Details</span></div>';
+    host.attachShadow({mode:'open'}).innerHTML = '<button id="inner">Shadow action</button>';
+    disclosure.attachShadow({mode:'open'}).innerHTML = '<details><summary><slot name="heading"></slot></summary><p>More</p></details>';
+    window.targets = [];
+    document.addEventListener('click', e => targets.push(e.composedPath()[0].id || e.composedPath()[0].tagName), true);`);
+  for (const selector of ['#check', '#host', '#heading']) {
+    await ops.click(conn, id, { selector });
+  }
+  const result = await ops.evaluate(conn, id, `({ checked: check.checked, open: disclosure.shadowRoot.querySelector('details').open, targets })`);
+  assert.equal(result.checked, true);
+  assert.equal(result.open, true);
+  assert.ok(result.targets.includes('label'), JSON.stringify(result));
+  assert.ok(result.targets.includes('inner'), JSON.stringify(result));
+  assert.ok(result.targets.includes('heading') || result.targets.includes('SUMMARY'), JSON.stringify(result));
+});
+
+t('an ancestor containing a target cannot stand in for the target', async () => {
+  const id = await open('clipped-listbox.html');
+  await ops.evaluate(conn, id, `document.querySelector('#option-4').style.pointerEvents = 'none'`);
+  await assert.rejects(ops.click(conn, id, { selector: '#option-4' }), /covered|cover/i);
+  assert.deepEqual(await ops.evaluate(conn, id, 'events'), []);
 });

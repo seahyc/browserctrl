@@ -133,6 +133,7 @@ t('refs from the last read, item ids, selectors and listbox options act without 
   assert.equal(r2.done, true, JSON.stringify(r2.stopped));
   assert.match(r2.steps[0].how, /exact|option/);
   assert.equal(await text(id, '#sqftPicked'), 'Min 600');
+  assert.ok(!r2.steps[0].unsure, 'new text outside the list verifies the selection');
   // A ref from a read the page has since replaced is refused, not guessed at.
   await ops.evaluate(conn, id, 'location.reload()');
   await ops.waitForReady(conn, id, { waitUntil: 'load' });

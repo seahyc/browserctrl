@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+body { margin: 0; font: 16px sans-serif; }
+#account { position: absolute; top: 30px; left: 30px; width: 400px; height: 650px; background: #eee; }
+#list { position: absolute; top: 250px; left: 30px; width: 300px; height: 120px; overflow: auto; padding: 0; margin: 0; list-style: none; }
+[role=option] { height: 50px; box-sizing: border-box; background: white; }
+</style>
+<div id="account"><h2>Account</h2><button role="combobox" aria-controls="list" id="control">Role 4</button><ul role="listbox" id="list"></ul></div>
+<script>
+for (let i = 0; i < 10; i++) list.insertAdjacentHTML('beforeend', `<li role="option" aria-selected="${i === 4}" id="option-${i}">Role ${i}</li>`);
+list.scrollTop = 200;
+window.events = [];
+for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) document.addEventListener(type, e => events.push({ type, target: e.target.id, option: e.target.closest('[role=option]')?.id }), true);
+list.addEventListener('click', e => { const option = e.target.closest('[role=option]'); if (!option) return; list.querySelectorAll('[role=option]').forEach(el => el.setAttribute('aria-selected', String(el === option))); control.textContent = option.textContent; });
+</script>

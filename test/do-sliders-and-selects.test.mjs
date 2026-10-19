@@ -158,3 +158,63 @@ t('select uses a transparent native select laid over a styled button', async () 
   assert.equal(await js(id, 'document.getElementById("state").textContent'), 'sort=Price - Low to High');
   await ops.closeTab(conn, id);
 });
+
+for (const mode of ['ignored', 'aria', 'value', 'listitem', 'native']) {
+  t(`an option click ${mode === 'ignored' ? 'that only closes the list stops before a commit' : `verified by ${mode} succeeds`}`, async () => {
+    const id = await open(`option-selection.html?mode=${mode}`);
+    try {
+      const r = await run(id, ['click "#developer"', 'click! "#submit"']);
+      const events = await js(id, 'window.events');
+      assert.deepEqual(events.slice(0, 4).map(e => [e.type, e.target, e.trusted]),
+        ['pointerdown', 'mousedown', 'mouseup', 'click'].map(type => [type, 'developer', true]));
+      assert.equal(r.done, mode !== 'ignored', JSON.stringify(r.stopped));
+      assert.equal(await js(id, 'window.submits'), mode === 'ignored' ? 0 : 1);
+      if (mode === 'ignored') assert.match(r.stopped.reason, /selection|selected|did not take/i);
+    } finally { await ops.closeTab(conn, id); }
+  });
+}
+
+for (const mode of ['no-signal', 'preexisting', 'elsewhere', 'siblings']) {
+  t(`option selection with ${mode} evidence`, async () => {
+    const id = await open(`option-selection.html?mode=${mode}`);
+    try {
+      const r = await run(id, ['click "#developer"', 'wait 1', 'click! "#submit"']);
+      assert.equal(r.done, mode === 'elsewhere', JSON.stringify(r.stopped));
+      assert.equal(await js(id, 'window.submits'), mode === 'elsewhere' ? 1 : 0);
+      if (mode === 'no-signal' || mode === 'preexisting') {
+        assert.equal(r.steps[0].unsure, true);
+        assert.match(formatSteps(r), /⚠.*selection not verified/);
+        assert.equal(r.stopped.step, 3);
+        assert.match(r.stopped.reason, /selection not verified/);
+      }
+      if (mode === 'siblings') assert.equal(r.stopped.step, 1);
+    } finally { await ops.closeTab(conn, id); }
+  });
+}
+
+for (const commit of ['click "#submit"', 'select! "#role" = "Developer"', 'click! "#continue"']) {
+  t(`unverified selection blocks ${commit}`, async () => {
+    const id = await open('option-selection.html?mode=no-signal');
+    try {
+      await js(id, `document.getElementById('submit').textContent = 'Send';
+        document.body.insertAdjacentHTML('beforeend', '<button id="continue">Continue</button><select id="role"><option>Guest</option><option>Developer</option></select>');
+        document.getElementById('continue').onclick = () => submits++`);
+      const r = await run(id, ['click "#developer"', commit]);
+      assert.equal(r.stopped.step, 2);
+      assert.match(r.stopped.reason, /selection not verified/);
+      assert.equal(await js(id, 'window.submits'), 0);
+      assert.equal(await js(id, 'document.getElementById("role").value'), 'Guest');
+    } finally { await ops.closeTab(conn, id); }
+  });
+}
+
+t('an unverified option allows a noncommitting plan to finish with a warning', async () => {
+  const id = await open('option-selection.html?mode=no-signal');
+  try {
+    const r = await run(id, ['click "#developer"', 'wait 1']);
+    assert.equal(r.done, true, JSON.stringify(r.stopped));
+    assert.equal(r.steps.length, 2);
+    assert.equal(r.steps[0].unsure, true);
+    assert.match(formatSteps(r), /⚠.*selection not verified/);
+  } finally { await ops.closeTab(conn, id); }
+});

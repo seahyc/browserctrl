@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Option selection</title>
+<button role="combobox" aria-controls="roles" aria-expanded="true" id="role">Guest</button>
+<ul role="listbox" id="roles"><li role="option" aria-selected="false" id="developer">Developer</li></ul>
+<button id="submit">Invite</button>
+<script>
+const mode = new URLSearchParams(location.search).get('mode');
+if (mode === 'no-signal' || mode === 'elsewhere' || mode === 'preexisting') {
+  role.remove();
+  developer.removeAttribute('aria-selected');
+}
+if (mode === 'preexisting') document.body.insertAdjacentHTML('beforeend', '<p>Picked Developer</p>');
+if (mode === 'siblings') {
+  role.remove();
+  roles.insertAdjacentHTML('beforeend', '<li role=option aria-selected=true>Guest</li>');
+}
+if (mode === 'listitem') developer.setAttribute('role', 'listitem');
+if (mode === 'native') {
+  roles.outerHTML = '<select id="native" size="2"><option>Guest</option><option id="developer">Developer</option></select>';
+}
+window.events = [];
+window.submits = 0;
+for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) document.addEventListener(type, e => {
+  events.push({ type, target: e.target.id, trusted: e.isTrusted });
+}, true);
+developer.onclick = () => {
+  if (mode === 'aria') developer.setAttribute('aria-selected', 'true');
+  if (mode === 'value' || mode === 'listitem') role.textContent = 'Developer';
+  if (mode === 'elsewhere') document.body.insertAdjacentHTML('beforeend', '<p>Picked Developer</p>');
+  if (!['aria', 'native', 'siblings', 'no-signal', 'preexisting'].includes(mode)) roles.remove();
+  document.getElementById('role')?.setAttribute('aria-expanded', 'false');
+};
+submit.onclick = () => submits++;
+</script>
