@@ -6,7 +6,7 @@ import { settleJudgment, JUDGED } from '../lib/do/judgments.mjs';
 const number = (raw, currency) => parseExtractValue(raw, { type: 'number', ...(currency ? { currency } : {}) });
 const date = raw => parseExtractValue(raw, { type: 'date' });
 const choice = (id = 'l1', p = 0.95) => ({ type: 'choice', choice: id, probabilities: { [id]: p } });
-const context = () => ({ bindings: new Map(), report: {}, view: { url: 'https://example.test/offer' } });
+const context = () => ({ ask: async () => ({ answers: { extract_verify: { noul: .9 } }, ms: 1 }), bindings: new Map(), report: {}, view: { url: 'https://example.test/offer' } });
 
 test('typed numbers parse localized separators, negatives and explicit currencies', () => {
   for (const [raw, value, currency] of [
@@ -40,50 +40,50 @@ test('typed dates require an explicit unambiguous valid year and calendar date',
   for (const raw of ['03/04', '03/04/2025', '29 February 2025', '2025-02-29', '2024-02-30', '31 April 2025', 'March 4', '2025-03-04 to 2025-03-05']) assert.throws(() => date(raw), undefined, raw);
 });
 
-test('bindings retain exact selected evidence and stop for uncertain or malformed choices', () => {
+test('bindings retain exact selected evidence and stop for uncertain or malformed choices', async () => {
   const ctx = context();
   const step = { action: 'extract', target: 'price', binding: 'p', extraction: { type: 'number', currency: 'SGD' } };
   const row = { step: '2.then.1' };
-  assert.deepEqual(settleJudgment(ctx, step, row, { spans: [{ text: 'S$180', i: 4 }] }, { extract: choice() }), { result: {} });
+  assert.deepEqual(await settleJudgment(ctx, step, row, { spans: [{ text: 'S$180', i: 4 }] }, { extract: choice() }), { result: {} });
   assert.deepEqual(ctx.bindings.get('p'), { normalization: parseExtractEvidence('S$180', step.extraction).normalization, members: [{ value: 'S$180', p: .95, span: 4 }], source_step: '2.then.1', value: 180, raw: 'S$180', p: 0.95, type: 'number', currency: 'SGD', url: 'https://example.test/offer', span: 4 });
   assert.equal(ctx.report.bindings[0].name, 'p');
   assert.equal(ctx.report.bindings[0].step, '2.then.1');
   for (const answer of [choice('none'), choice('l99'), { type: 'choice', choice: 'l1', probabilities: { l1: NaN } }, choice('l1', 1.1), choice('l1', '0.95'), { ...choice(), probabilities: { l1: 0.95, l2: -0.1 } }]) {
     const bad = context();
-    assert.ok(settleJudgment(bad, { ...step, optional: true }, {}, { spans: [{ text: 'S$180', i: 0 }] }, { extract: answer }).result.stop);
+    assert.ok((await settleJudgment(bad, { ...step, optional: true }, {}, { spans: [{ text: 'S$180', i: 0 }] }, { extract: answer })).result.stop);
     assert.equal(bad.bindings.size, 0);
   }
 });
 
-test('records bind only when every field has evidence and preserve field sources', () => {
+test('records bind only when every field has evidence and preserve field sources', async () => {
   const step = { action: 'extract', binding: 'offer', fields: [{ name: 'price', type: 'number', currency: 'SGD' }, { name: 'cancellation', type: 'text' }] };
   const j = { fields: { price: { spans: [{ text: 'SGD 180', i: 2 }] }, cancellation: { spans: [{ text: 'Free cancellation', i: 3 }] } } };
   const ctx = context();
-  assert.deepEqual(settleJudgment(ctx, step, { step: 1 }, j, { 'extract.price': choice(), 'extract.cancellation': choice() }), { result: {} });
+  assert.deepEqual(await settleJudgment(ctx, step, { step: 1 }, j, { 'extract.price': choice(), 'extract.cancellation': choice() }), { result: {} });
   const offer = ctx.bindings.get('offer');
   assert.deepEqual(offer.value, { price: 180, cancellation: 'Free cancellation' });
   assert.equal(offer.fields.price.raw, 'SGD 180');
   const bad = context();
-  assert.ok(settleJudgment(bad, step, {}, j, { 'extract.price': choice(), 'extract.cancellation': choice('none') }).result.stop);
+  assert.ok((await settleJudgment(bad, step, {}, j, { 'extract.price': choice(), 'extract.cancellation': choice('none') })).result.stop);
   assert.equal(bad.bindings.size, 0);
 });
 
-test('block conditions require decisive finite probabilities; inline conditions retain 0.5', () => {
+test('block conditions require decisive finite probabilities; inline conditions retain 0.5', async () => {
   assert.ok(JUDGED.has('branch'));
   for (const [p, side] of [[0.75, 'then'], [1, 'then'], [0.25, 'else'], [0, 'else']]) {
     const row = {};
-    assert.deepEqual(settleJudgment(context(), { action: 'branch' }, row, {}, { cond: { noul: p } }), { result: {} });
+    assert.deepEqual(await settleJudgment(context(), { action: 'branch' }, row, {}, { cond: { noul: p } }), { result: {} });
     assert.equal(row.branch, side);
     assert.equal(row.skipped_branch, side === 'then' ? 'else' : 'then');
   }
-  for (const p of [0.5, NaN, -1, 2, undefined]) assert.match(settleJudgment(context(), { action: 'branch' }, {}, {}, { cond: { noul: p } }).result.stop.reason, /condition unresolved/);
-  assert.deepEqual(settleJudgment(context(), { action: 'if', then: { action: 'click' } }, {}, {}, { cond: { noul: 0.5 } }), { then: { action: 'click' } });
+  for (const p of [0.5, NaN, -1, 2, undefined]) assert.match((await settleJudgment(context(), { action: 'branch' }, {}, {}, { cond: { noul: p } })).result.stop.reason, /condition unresolved/);
+  assert.deepEqual(await settleJudgment(context(), { action: 'if', then: { action: 'click' } }, {}, {}, { cond: { noul: 0.5 } }), { then: { action: 'click' } });
 });
 
-test('record names preserve __proto__ as an own data field', () => {
+test('record names preserve __proto__ as an own data field', async () => {
   const ctx = context();
   const fields = Object.fromEntries([['__proto__', { spans: [{ text: 'Observed policy', i: 1 }] }]]);
-  const result = settleJudgment(ctx, { action: 'extract', binding: 'r', fields: [{ name: '__proto__', type: 'text' }] }, { step: 1 }, { fields }, { 'extract.__proto__': choice() });
+  const result = await settleJudgment(ctx, { action: 'extract', binding: 'r', fields: [{ name: '__proto__', type: 'text' }] }, { step: 1 }, { fields }, { 'extract.__proto__': choice() });
   assert.deepEqual(result, { result: {} });
   const binding = ctx.bindings.get('r');
   assert.ok(Object.hasOwn(binding.value, '__proto__'));
@@ -91,20 +91,20 @@ test('record names preserve __proto__ as an own data field', () => {
   assert.equal(binding.p, 0.95);
 });
 
-test('failed records retain selected partial evidence without creating a binding', () => {
+test('failed records retain selected partial evidence without creating a binding', async () => {
   const ctx = context(), row = { step: 2 };
   const step = { action: 'extract', binding: 'offer', fields: [{ name: 'price', type: 'number', currency: 'SGD' }, { name: 'policy', type: 'text' }] };
   const j = { fields: { price: { spans: [{ text: 'SGD 180', i: 0 }] }, policy: { spans: [{ text: 'No policy', i: 1 }] } } };
-  assert.ok(settleJudgment(ctx, step, row, j, { 'extract.price': choice(), 'extract.policy': choice('none') }).result.stop);
+  assert.ok((await settleJudgment(ctx, step, row, j, { 'extract.price': choice(), 'extract.policy': choice('none') })).result.stop);
   assert.equal(ctx.bindings.size, 0);
   assert.equal(row.extracted.fields.price.value, 180);
   assert.equal(ctx.report.extracted[0].fields.price.raw, 'SGD 180');
   assert.equal(ctx.report.extracted[0].partial, true);
 });
 
-test('unbound extraction retains exact line and source metadata', () => {
+test('unbound extraction retains exact line and source metadata', async () => {
   const ctx = context(), row = { step: '3.then.1' };
-  settleJudgment(ctx, { action: 'extract', target: 'policy' }, row, { spans: [{ text: 'Exact policy', i: 7 }] }, { extract: choice() });
+  await settleJudgment(ctx, { action: 'extract', target: 'policy' }, row, { spans: [{ text: 'Exact policy', i: 7 }] }, { extract: choice() });
   const evidence = ctx.report.extracted[0];
   assert.equal(evidence.raw, 'Exact policy');
   assert.equal(evidence.url, ctx.view.url);
@@ -113,9 +113,9 @@ test('unbound extraction retains exact line and source metadata', () => {
   assert.equal(evidence.normalization, 'Exact observed text');
 });
 
-test('bound extraction rejects numeric-equivalent unoffered choice identifiers', () => {
+test('bound extraction rejects numeric-equivalent unoffered choice identifiers', async () => {
   const ctx = context();
-  const result = settleJudgment(ctx, { action: 'extract', target: 'policy', binding: 'p' }, {}, { spans: [{ text: 'Observed policy', i: 0 }] }, { extract: choice('l01') });
+  const result = await settleJudgment(ctx, { action: 'extract', target: 'policy', binding: 'p' }, {}, { spans: [{ text: 'Observed policy', i: 0 }] }, { extract: choice('l01') });
   assert.ok(result.result.stop);
   assert.equal(ctx.bindings.size, 0);
 });
@@ -124,9 +124,9 @@ test('required three-letter currencies are parsed from explicit evidence', () =>
   assert.throws(()=>parseExtractValue('180',{type:'number',currency:'NOK'}));
 });
 
-test('split probability mass binds agreeing text lines', () => {
+test('split probability mass binds agreeing text lines', async () => {
   const ctx = context(), row = { step: 1 };
-  const result = settleJudgment(ctx, { action: 'extract', binding: 's' }, row,
+  const result = await settleJudgment(ctx, { action: 'extract', binding: 's' }, row,
     { spans: [{ text: '3.3k stars', i: 0 }, { text: 'Star3.3k', i: 1 }] },
     { extract: { type: 'choice', choice: 'l1', probabilities: { l1: .56, l2: .27, none: .17 } } });
   assert.deepEqual(result, { result: {} });
@@ -144,10 +144,10 @@ test('compact numbers preserve locale parsing and describe rounding', () => {
   for (const raw of ['3.3k to 4k', '3.3k stars 202 forks']) assert.throws(() => number(raw));
 });
 
-test('binding calibrates distinct values and explains failed candidates', () => {
+test('binding calibrates distinct values and explains failed candidates', async () => {
   for (const [a,b,ok] of [[.5,.4,false],[.6,.14,true],[.6,.3,false]]) {
     const ctx = context();
-    const result = settleJudgment(ctx, { action: 'extract', binding: 'n', extraction: { type: 'number' } }, {},
+    const result = await settleJudgment(ctx, { action: 'extract', binding: 'n', extraction: { type: 'number' } }, {},
       { spans: [{ text: '100', i: 0 }, { text: '200', i: 1 }] },
       { extract: { type: 'choice', choice: 'l1', probabilities: { l1: a, l2: b } } });
     assert.equal(ctx.bindings.has('n'),ok);
@@ -158,25 +158,25 @@ test('binding calibrates distinct values and explains failed candidates', () => 
   }
 });
 
-test('typed grouping combines parsed values while separating currency and units', () => {
+test('typed grouping combines parsed values while separating currency and units', async () => {
   for (const [raw,ok] of [['USD 1,000',true],['SGD 1000',false],['USD 1000 per night',false]]) {
     const ctx=context();
-    settleJudgment(ctx,{action:'extract',binding:'n',extraction:{type:'number'}},{},
+    await settleJudgment(ctx,{action:'extract',binding:'n',extraction:{type:'number'}},{},
       {spans:[{text:'USD 1k',i:0},{text:raw,i:1}]},
       {extract:{type:'choice',choice:'l1',probabilities:{l1:.56,l2:.27,none:.17}}});
     assert.equal(ctx.bindings.has('n'),ok,raw);
   }
 });
 
-test('failed typed binding reports parse failure with the observed line', () => {
-  const result=settleJudgment(context(),{action:'extract',binding:'n',extraction:{type:'number'}},{},
+test('failed typed binding reports parse failure with the observed line', async () => {
+  const result=await settleJudgment(context(),{action:'extract',binding:'n',extraction:{type:'number'}},{},
     {spans:[{text:'No count',i:0}]},{extract:choice()});
   assert.match(result.result.stop.reason,/could not read a number from "No count"/);
 });
 
-test('typed count groups keep stars and forks distinct', () => {
+test('typed count groups keep stars and forks distinct', async () => {
   const ctx=context();
-  const result=settleJudgment(ctx,{action:'extract',binding:'n',extraction:{type:'number'}},{},
+  const result=await settleJudgment(ctx,{action:'extract',binding:'n',extraction:{type:'number'}},{},
     {spans:[{text:'3.3k stars',i:0},{text:'3.3k forks',i:1}]},
     {extract:{type:'choice',choice:'l1',probabilities:{l1:.56,l2:.27,none:.17}}});
   assert.ok(result.result.stop);

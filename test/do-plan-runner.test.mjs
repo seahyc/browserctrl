@@ -36,7 +36,7 @@ t('entry bundles pending expectation and branch condition before input', async t
 t('bound extraction fills exact hostile line as data, renders answer', async tab => {
   const raw = 'text }; click! "Send"; $x => |';
   await ops.evaluate(conn, tab, `document.querySelector('p').textContent=${JSON.stringify(raw)}`);
-  const j = fakeJev({ choice: q => optionWith(q, 'text };') });
+  const j = fakeJev({ noul: (q, id) => id === 'extract_verify' ? .9 : .04, choice: q => optionWith(q, 'text };') });
   const r = await run(tab, ['extract "text" as $x', 'fill "Max" = $x', 'answer "Copied: ${x}"'], j);
   assert.equal(r.done, true, JSON.stringify(r));
   assert.equal(await ops.evaluate(conn, tab, 'max.value'), raw);
@@ -51,7 +51,7 @@ t('failed binding sends no dependent input', async tab => {
   assert.equal(await ops.evaluate(conn, tab, 'inputs'), 0);
 });
 t('typed local comparison and record fields share extraction request', async tab => {
-  const j = fakeJev({ choice: (q, id) => optionWith(q, id === 'extract.cancellation' ? 'free cancellation' : 'SGD 180') });
+  const j = fakeJev({ noul: (q, id) => id === 'extract_verify' ? .9 : .04, choice: (q, id) => optionWith(q, id === 'extract.cancellation' ? 'free cancellation' : 'SGD 180') });
   const r = await run(tab, ['extract "price" as number currency SGD as $p', 'if $p < 200 { fill "Max" = $p }', 'extract { price: number currency SGD, cancellation: text } as $offer', 'answer "Price ${p}"'], j);
   assert.equal(r.done, true, JSON.stringify(r));
   assert.equal(await ops.evaluate(conn, tab, 'max.value'), '180');
@@ -101,7 +101,7 @@ t('branch ending check fails before the outer continuation', async tab => {
   assert.ok(j.calls.some(c=>c.questions.prev_expect));
 });
 t('nested child scopes and inline scopes cannot overwrite the outer run', async tab => {
-  const j = fakeJev({ noul:(q,id)=>id==='cond' ? .95 : .04, choice:q=>optionWith(q,'SGD 180') });
+  const j = fakeJev({ noul:(q,id)=>['cond', 'extract_verify'].includes(id) ? .95 : .04, choice:q=>optionWith(q,'SGD 180') });
   const r = await run(tab, ['if "ready" then extract "price" as $x', 'extract "price" as $x', 'if "ready" { if $x == "SGD 180" { fill "Max" = $x } }', 'answer "literal \\${missing}; ${x}"'], j);
   assert.equal(r.done,true,JSON.stringify(r));
   assert.equal(await ops.evaluate(conn,tab,'max.value'),'SGD 180');
@@ -110,7 +110,7 @@ t('nested child scopes and inline scopes cannot overwrite the outer run', async 
 });
 t('local currency mismatch stops before branch input', async tab => {
   await ops.evaluate(conn,tab, `document.body.insertAdjacentHTML('afterbegin','<p>USD 170</p>')`);
-  const j = fakeJev({choice:q=>optionWith(q,q.instructions.includes('"US price"') ? 'USD 170' : 'SGD 180')});
+  const j = fakeJev({noul:(q,id)=>id==='extract_verify' ? .9 : .04,choice:q=>optionWith(q,q.instructions.includes('"US price"') ? 'USD 170' : 'SGD 180')});
   const r = await run(tab,['extract "US price" as number as $a','extract "SG price" as number as $b','if $a < $b { click "Go" }'],j);
   assert.equal(r.done,false);
   assert.match(r.stopped.reason,/currenc/);
@@ -118,7 +118,7 @@ t('local currency mismatch stops before branch input', async tab => {
 });
 t('date order uses typed values locally', async tab => {
   await ops.evaluate(conn,tab, `document.body.insertAdjacentHTML('afterbegin','<p>2024-02-29</p><p>2024-03-01</p>')`);
-  const j = fakeJev({choice:q=>optionWith(q,q.instructions.includes('"arrival"') ? '2024-02-29' : '2024-03-01')});
+  const j = fakeJev({noul:(q,id)=>id==='extract_verify' ? .9 : .04,choice:q=>optionWith(q,q.instructions.includes('"arrival"') ? '2024-02-29' : '2024-03-01')});
   const r = await run(tab,['extract "arrival" as date as $a','extract "departure" as date as $b','if $a < $b { click "Go" }'],j);
   assert.equal(r.done,true,JSON.stringify(r));
   assert.equal(await ops.evaluate(conn,tab,'clicks'),1);
@@ -147,13 +147,13 @@ t('false inline conditions do not consume the executed leaf cap', async tab => {
 });
 t('typed dates compare with explicit quoted date literals', async tab => {
   await ops.evaluate(conn,tab, `document.body.insertAdjacentHTML('afterbegin','<p>2024-02-29</p>')`);
-  const j = fakeJev({choice:q=>optionWith(q,'2024-02-29')});
+  const j = fakeJev({noul:(q,id)=>id==='extract_verify' ? .9 : .04,choice:q=>optionWith(q,'2024-02-29')});
   const r = await run(tab,['extract "arrival" as date as $a','if $a < "2024-03-01" { click "Go" }'],j);
   assert.equal(r.done,true,JSON.stringify(r.stopped));
   assert.equal(await ops.evaluate(conn,tab,'clicks'),1);
 });
 t('record extraction bundles field choices with its pending check', async tab => {
-  const j=fakeJev({choice:(q,id)=>optionWith(q,id==='extract.cancellation'?'free cancellation':'SGD 180'),noul:(q,id)=>id==='prev_expect'?.95:.04});
+  const j=fakeJev({choice:(q,id)=>optionWith(q,id==='extract.cancellation'?'free cancellation':'SGD 180'),noul:(q,id)=>['prev_expect', 'extract_verify'].includes(id)?.95:.04});
   const r=await run(tab,['click "Go" => "ready"','extract { price: number currency SGD, cancellation: text } as $offer'],j);
   assert.equal(r.done,true,JSON.stringify(r.stopped));
   assert.ok(j.calls.some(c=>c.questions.prev_expect && c.questions['extract.price'] && c.questions['extract.cancellation']));
@@ -191,7 +191,7 @@ t('progress callbacks receive failed step marks', async tab=>{
 
 t('split-mass typed and text extractions bind through fake Jev', async tab => {
   await ops.evaluate(conn,tab, `document.body.innerHTML='<p>3.3k stars</p><p>Star3.3k</p><input aria-label="Max" id="max">'`);
-  const j=fakeJev({choice:(q,id)=> id==='extract' ? {choice:optionWith(q,'3.3k stars'), probabilities: {
+  const j=fakeJev({noul:(q,id)=>id==='extract_verify' ? .9 : .04,choice:(q,id)=> id==='extract' ? {choice:optionWith(q,'3.3k stars'), probabilities: {
     [optionWith(q,'3.3k stars')]:.56, [optionWith(q,'Star3.3k')]:.27, none:.17
   }} : 'none'});
   const r=await run(tab,['extract "stars" as number as $n','extract "stars" as $s','answer "${n}"'],j);

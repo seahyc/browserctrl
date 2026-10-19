@@ -194,3 +194,54 @@ t('pick retries a young empty list after none', async () => {
   assert.equal(asks, 2);
   assert.ok(r.steps[0].content_wait_ms >= 1500);
 });
+
+t('GitHub language markup offers joined inline text and accessible progress text', async () => {
+  const { targetId: tab } = await ops.newTab(conn, `${fixture.url}fixtures/github-languages.html`);
+  await ops.waitForReady(conn, tab);
+  const jev = fakeJev({ choice: q => {
+    assert.ok(optionWith(q, 'Languages: JavaScript: 100%') !== 'none');
+    return optionWith(q, 'Languages: JavaScript 100.0%');
+  }});
+  const r = await run(tab, ['extract "the primary language" as $lang'], jev);
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].raw, 'JavaScript 100.0%');
+});
+
+for (const [label, line, p, verify, binds] of [
+  ['weak numeric fragment', '100%', .71, .12, false],
+  ['strong numeric fragment', '100%', .9, .12, false],
+  ['short text', 'JavaScript', .9, .7, true],
+  ['rounded weak full answer', 'JavaScript 100.0%', .7499, .8, true],
+  ['weak full answer', 'JavaScript 100.0%', .71, .8, true],
+  ['strong full answer', 'JavaScript 100.0%', .9, null, true],
+]) t(`binding verification: ${label}`, async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<h2>Languages</h2><p>${line}</p>'`);
+  const jev = fakeJev({
+    choice: q => ({ choice: optionWith(q, `Languages: ${line}`), probabilities: { [optionWith(q, `Languages: ${line}`)]: p, none: .1 } }),
+    noul: (q, id) => id === 'extract_verify' ? verify : undefined,
+  });
+  const r = await run(tab, ['extract "the primary language" as $lang'], jev);
+  assert.equal(r.done, binds);
+  const calls = jev.calls.filter(c => c.questions.extract_verify);
+  assert.equal(calls.length, verify === null ? 0 : 1);
+  if (verify !== null) {
+    assert.equal(calls[0].assets, undefined);
+    assert.match(calls[0].questions.extract_verify.instructions, /state the primary language itself/);
+    assert.match(calls[0].questions.extract_verify.instructions, new RegExp(`Languages: ${line.replace('.', '\\.')}`));
+    assert.equal(r.steps[0].extract_verify.p, verify);
+    assert.equal(typeof r.steps[0].extract_verify.ms, 'number');
+  }
+  if (!binds) {
+    assert.equal(r.bindings?.length || 0, 0);
+    assert.match(r.stopped.reason, new RegExp(`group p=${p.toFixed(2)}.*verify p=0.12`));
+  }
+});
+
+for (const display of ['inline-flex', 'flex']) t(`extract joins short ${display} rows`, async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<h2>Languages</h2><div style="display:${display}"><div>JavaScript</div><div>100.0%</div></div>'`);
+  const r = await run(tab, ['extract "the primary language" as $lang'], fakeJev({ choice: q => optionWith(q, 'Languages: JavaScript 100.0%') }));
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].raw, 'JavaScript 100.0%');
+});
