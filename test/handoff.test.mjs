@@ -97,7 +97,7 @@ test('marks expire so a forgotten one cannot steer a later session', () => {
 
 t('the overlay captures an element the way an agent can act on it', async () => {
   await ops.installOverlay(conn, tabId, {});
-  const identity = await ops.evaluate(conn, tabId, "JSON.stringify(window.__cdpOverlay.identity('#go'))");
+  const identity = await ops.evaluateInWorld(conn, tabId, "JSON.stringify(window.__cdpOverlay.identity('#go'))");
   const parsed = JSON.parse(identity);
   assert.equal(parsed.role, 'button');
   assert.equal(parsed.name, 'Run it');
@@ -110,7 +110,7 @@ t('the overlay captures an element the way an agent can act on it', async () => 
 t('a captured annotation reaches the queue with tab identity and a screenshot', async () => {
   annotations.clear();
   await conn.browser('Target.activateTarget', { targetId: tabId });
-  await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#go', 'this button should say Start')");
+  await ops.evaluateInWorld(conn, tabId, "window.__cdpOverlay.capture('#go', 'this button should say Start')");
   // The daemon receives it over the binding, then screenshots it.
   await new Promise(r => setTimeout(r, 1500));
   const rows = annotations.pending();
@@ -236,13 +236,13 @@ test('the agent picker supports finding a task by name', () => {
 t('past annotations show as pins anchored to their elements', async () => {
   annotations.clear();
   await ops.installOverlay(conn, tabId, { force: true });
-  await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#go', 'first note')");
-  await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#name', 'second note')");
+  await ops.evaluateInWorld(conn, tabId, "window.__cdpOverlay.capture('#go', 'first note')");
+  await ops.evaluateInWorld(conn, tabId, "window.__cdpOverlay.capture('#name', 'second note')");
   await new Promise(r => setTimeout(r, 1200));
 
   const rows = annotations.pending();
   assert.equal(rows.length, 2);
-  const shown = await ops.evaluate(
+  const shown = await ops.evaluateInWorld(
     conn,
     tabId,
     `window.__cdpOverlay.setPins(${JSON.stringify(rows)}, [])`,
@@ -265,11 +265,11 @@ t('past annotations show as pins anchored to their elements', async () => {
 t('a pin for an element that no longer exists still shows, flagged', async () => {
   annotations.clear();
   await conn.browser('Target.activateTarget', { targetId: tabId });
-  await ops.evaluate(conn, tabId, "window.__cdpOverlay.capture('#go', 'about to vanish')");
+  await ops.evaluateInWorld(conn, tabId, "window.__cdpOverlay.capture('#go', 'about to vanish')");
   await new Promise(r => setTimeout(r, 1000));
   const rows = annotations.pending();
   await ops.evaluate(conn, tabId, "document.getElementById('go').remove(), true");
-  await ops.evaluate(conn, tabId, `window.__cdpOverlay.setPins(${JSON.stringify(rows)}, [])`);
+  await ops.evaluateInWorld(conn, tabId, `window.__cdpOverlay.setPins(${JSON.stringify(rows)}, [])`);
   const moved = await ops.evaluate(
     conn,
     tabId,

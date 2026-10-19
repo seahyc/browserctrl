@@ -10,10 +10,12 @@
  * enriches the annotation with a cropped screenshot, which a page cannot take
  * of itself.
  */
-(function () {
+(function start() {
   if (window.__cdpOverlay) return;
-  /* The extension's copy runs in an isolated world and the injected copy in the
-   * page world, so neither can see the other's globals. Without a shared
+  /* Registered for every new document, so this can run before <html> exists. */
+  if (!document.documentElement) { document.addEventListener('DOMContentLoaded', start, { once: true }); return; }
+  /* The extension's copy and the daemon's injected copy both run in isolated
+   * worlds (different ones), so neither can see the other's globals. Without a shared
    * marker on the DOM they would both bind option+A and you would get two
    * overlays. First one in wins; the other stays dormant. */
   var root = document.documentElement;
@@ -143,6 +145,7 @@
       borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.18)', padding: '10px', display: 'none', width: '300px',
     });
     els.pinCard.addEventListener('click', function (e) {
+      if (!e.isTrusted) return;
       var what = e.target.getAttribute && e.target.getAttribute('data-cdp');
       if (what === 'close') els.pinCard.style.display = 'none';
       if (what === 'resolve') {
@@ -202,6 +205,7 @@
   }
 
   function onClick(e) {
+    if (!e.isTrusted) return; /* the page shares our DOM and could synthesise clicks; only the human's count */
     if (!state.on || els.noteWrap.style.display === 'block') return;
     e.preventDefault();
     e.stopPropagation();
@@ -383,6 +387,7 @@
   }
 
   function onForMouseDown(e) {
+    if (!e.isTrusted) return;
     var hit = e.target.closest ? e.target.closest('[data-cdp="for-btn"],[data-cdp="for-option"]') : null;
     if (!hit) {
       if (forMenuOpen()) closeForMenu();
@@ -415,6 +420,7 @@
   // The picker owns these keys only while it is open, so the note textarea keeps
   // its own arrow keys and ⌘⏎ the rest of the time.
   function onForKeyDown(e) {
+    if (!e.isTrusted) return;
     var onBtn = e.target && e.target.getAttribute && e.target.getAttribute('data-cdp') === 'for-btn';
     var onSearch = e.target && e.target.getAttribute && e.target.getAttribute('data-cdp') === 'for-search';
     if (!forMenuOpen()) {
@@ -572,6 +578,7 @@
   document.addEventListener('mousemove', onMove, true);
   document.addEventListener('click', onClick, true);
   document.addEventListener('keydown', function (e) {
+    if (!e.isTrusted) return;
     // Option+A toggles. Chosen because it is free in every app we care about.
     if (e.altKey && (e.key === 'a' || e.key === 'å')) {
       e.preventDefault();
@@ -594,6 +601,7 @@
   setTimeout(refreshPins, 400);
 
   els.noteWrap.addEventListener('click', function (e) {
+    if (!e.isTrusted) return;
     var what = e.target.getAttribute && e.target.getAttribute('data-cdp');
     if (what === 'save') save();
     if (what === 'cancel') closeNote();
@@ -690,6 +698,7 @@
       node.__pin = pin;
       node.__anchor = anchorFor(pin);
       node.addEventListener('click', function (e) {
+        if (!e.isTrusted) return;
         e.preventDefault();
         e.stopPropagation();
         openPin(node);
