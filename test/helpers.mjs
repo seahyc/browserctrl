@@ -12,27 +12,19 @@ import crypto from 'crypto';
 if (process.env.BROWSERCTRL_PREFETCH === undefined) process.env.BROWSERCTRL_PREFETCH = '0';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-// Test daemons inherit the environment of whichever test file started them, so
-// keep their capture store and recipe tab registry out of the real home dir.
-process.env.BROWSERCTRL_EXEMPLARS ||= path.join(os.tmpdir(), 'browserctrl-test-exemplars');
-process.env.BROWSERCTRL_RECIPE_TABS ||= path.join(os.tmpdir(), 'browserctrl-test-recipe-tabs.json');
-process.env.BROWSERCTRL_RECIPES ||= path.join(os.tmpdir(), 'browserctrl-test-recipes');
-process.env.BROWSERCTRL_TAPS ||= path.join(os.tmpdir(), 'browserctrl-test-taps');
-process.env.BROWSERCTRL_NOTES_DIR ||= path.join(os.tmpdir(), `browserctrl-test-notes-${process.pid}`);
-// Challenges on the fixture host would otherwise cool 127.0.0.1 down for other
-// test files, and the solver config must never come from the real home dir.
-process.env.BROWSERCTRL_COOLDOWN ||= path.join(os.tmpdir(), `browserctrl-test-cooldown-${process.pid}.json`);
-process.env.BROWSERCTRL_CAPTCHA_CONFIG ||= path.join(os.tmpdir(), `browserctrl-test-captcha-${process.pid}.json`);
-// Site trouble (timeouts, pages that never finish) is remembered per site; 127.0.0.1 collects
-// it from every test file, which then adds a "site is slowing" note to later reads.
+// Every test process gets its own throwaway home for notes, recordings, state, sockets and
+// claims, so tests never touch (or migrate) the real one. It is under /tmp, not os.tmpdir(),
+// because a unix socket path may hold only about 100 bytes. Import this file before any lib/ file.
+if (!process.env.BROWSERCTRL_HOME) {
+  process.env.BROWSERCTRL_HOME = fs.mkdtempSync(path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', 'bc-test-'));
+  process.on('exit', () => { try { fs.rmSync(process.env.BROWSERCTRL_HOME, { recursive: true, force: true }); } catch {} });
+}
+// Tests read these two back from the environment, so name them (they are the defaults under the home).
+process.env.BROWSERCTRL_EXEMPLARS ||= path.join(process.env.BROWSERCTRL_HOME, 'exemplars');
+process.env.BROWSERCTRL_RECIPES ||= path.join(process.env.BROWSERCTRL_HOME, 'recipes');
 // Capture and traces are off by default; the suite turns them on, since tests exercise both.
-process.env.BROWSERCTRL_RECORDING ||= path.join(os.tmpdir(), `browserctrl-test-recording-${process.pid}.json`);
 process.env.BROWSERCTRL_CAPTURE ??= '1';
 process.env.BROWSERCTRL_TRACE ??= '1';
-process.env.BROWSERCTRL_SITE_TROUBLE ||= path.join(os.tmpdir(), `browserctrl-test-site-trouble-${process.pid}.json`);
-// One path for every test process: the daemon that writes a recording may have been
-// started by an earlier test file.
-process.env.BROWSERCTRL_REC_STATE ||= path.join(os.tmpdir(), 'browserctrl-test-rec-tabs.json');
 export const TEST_PORT = Number(process.env.BROWSERCTRL_TEST_PORT || 9333); // override to run suites side by side
 
 const CHROME_CANDIDATES = [

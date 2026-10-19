@@ -6,9 +6,9 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 
-// Set isolation before importing state/recstore; never touch the user's ~/.cdp.
+// Set isolation before importing state/recstore; never touch the real home.
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-recording-owner-'));
-process.env.CDP_HOME = home;
+process.env.BROWSERCTRL_HOME = home;
 const store = await import('../lib/recstore.mjs');
 test.after(() => fs.rmSync(home, {recursive:true, force:true}));
 

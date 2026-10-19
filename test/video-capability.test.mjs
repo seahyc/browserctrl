@@ -5,7 +5,7 @@ import path from 'node:path';
 import { after, test } from 'node:test';
 
 const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-video-capability-'));
-process.env.CDP_HOME = testHome;
+process.env.BROWSERCTRL_HOME = testHome;
 const recorder = await import('../lib/recorder.mjs');
 const recstore = await import('../lib/recstore.mjs');
 after(() => fs.rmSync(testHome, { recursive: true, force: true }));

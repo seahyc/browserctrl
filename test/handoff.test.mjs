@@ -7,9 +7,9 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-// Every test in this file writes state, so give it a throwaway CDP_HOME before
+// Every test in this file writes state, so give it a throwaway BROWSERCTRL_HOME before
 // anything imports the modules that read it.
-process.env.CDP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-home-'));
+process.env.BROWSERCTRL_HOME = fs.mkdtempSync(path.join('/tmp', 'bc-handoff-'));
 
 const { connect } = await import('../lib/daemon.mjs');
 const ops = await import('../lib/ops.mjs');
@@ -41,7 +41,7 @@ after(async () => {
   } catch {}
   browser?.close();
   await fixture?.close();
-  fs.rmSync(process.env.CDP_HOME, { recursive: true, force: true });
+  fs.rmSync(process.env.BROWSERCTRL_HOME, { recursive: true, force: true });
 });
 
 const t = (name, fn) => test(name, { skip: haveBrowser ? false : 'no Chromium-family browser installed' }, fn);
@@ -84,7 +84,7 @@ t('a marked tab resolves as "marked", and two marked tabs make it ask', async ()
 });
 
 test('marks expire so a forgotten one cannot steer a later session', () => {
-  const file = path.join(process.env.CDP_HOME, 'state.json');
+  const file = path.join(process.env.BROWSERCTRL_HOME, 'state.json');
   state.mark(4242, 'stale-target', { note: 'old' });
   const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
   const key = Object.keys(raw.marks).find(k => k.includes('stale-target'));

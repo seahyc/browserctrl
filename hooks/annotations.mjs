@@ -32,7 +32,7 @@ try {
       id: sessionId,
       // Codex desktop also runs this hook. Its session id is definitive, even
       // though its hook payload is compatible with Claude Code's format.
-      client: process.env.CDP_CLIENT || (process.env.CODEX_SESSION_ID ? 'codex' : 'claude-code'),
+      client: process.env.BROWSERCTRL_CLIENT || process.env.CDP_CLIENT || (process.env.CODEX_SESSION_ID ? 'codex' : 'claude-code'),
       cwd: input.cwd || process.cwd(),
       title: promptTitle,
       // System notifications also traverse this hook. They keep the session
