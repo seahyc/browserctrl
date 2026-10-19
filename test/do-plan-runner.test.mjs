@@ -80,12 +80,17 @@ t('final page flags make an answer provisional', async tab => {
 t('set can use a visual slider pin when text cannot identify it', async tab => {
   await ops.evaluate(conn, tab, `document.body.innerHTML='<input type="range" id="a" aria-label="Alpha" min="0" max="100"><input type="range" id="b" aria-label="Beta" min="0" max="100">'`);
   const box = await ops.evaluate(conn, tab, `(()=>{const r=b.getBoundingClientRect(); return {left:r.left/innerWidth,right:r.right/innerWidth,top:r.top/innerHeight,bottom:r.bottom/innerHeight}})()`);
-  const j = fakeJev({ noul: (q,id)=>id==='visible' ? .96 : .04, box: ()=>({box,confidence:.94}) });
+  const j = fakeJev({ noul: (q,id,state)=>id==='visible' ? .96 : id==='match' && state.element?.name==='Beta' ? .95 : .04, box: ()=>({box,confidence:.94}) });
   const r = await run(tab, ['set "the right slider" = 37'], j);
   assert.equal(r.done, true, JSON.stringify(r));
   assert.equal(await ops.evaluate(conn, tab, 'b.value'), '37');
   assert.equal(await ops.evaluate(conn, tab, 'a.value'), '50');
   assert.equal(j.calls.filter(c=>c.questions.where).length,1);
+  const matches = j.calls.filter(c=>c.questions.match);
+  assert.equal(matches.length,1);
+  assert.equal(matches[0].state.element.name,'Beta');
+  assert.equal(matches[0].assets,undefined);
+  assert.equal(r.steps[0].vision.match_p,.95);
 });
 t('branch ending check fails before the outer continuation', async tab => {
   const j = fakeJev({ noul: (q,id)=>id==='cond' ? .95 : .04 });
@@ -156,7 +161,7 @@ t('record extraction bundles field choices with its pending check', async tab =>
 t('deadline after late visual grounding sends no input', async tab => {
   await ops.evaluate(conn,tab, `document.body.innerHTML='<p>Volume controls</p><input type="range" id="a" aria-label="Alpha" min="0" max="100"><input type="range" id="b" aria-label="Beta" min="0" max="100">'`);
   const box=await ops.evaluate(conn,tab, `(()=>{const r=b.getBoundingClientRect();return {left:r.left/innerWidth,right:r.right/innerWidth,top:r.top/innerHeight,bottom:r.bottom/innerHeight}})()`);
-  const j=fakeJev({noul:(q,id)=>id==='visible'?.96:.04,box:()=>({box,confidence:.94})});
+  const j=fakeJev({noul:(q,id,state)=>id==='visible'?.96:id==='match' && state.element?.name==='Beta'?.95:.04,box:()=>({box,confidence:.94})});
   const fetch=j.fetchImpl;
   j.fetchImpl=async(url,init)=>{
     if(JSON.parse(init.body).questions.where) await new Promise(resolve=>setTimeout(resolve,4100));
@@ -165,6 +170,8 @@ t('deadline after late visual grounding sends no input', async tab => {
   const r=await run(tab,['set "the right slider" = 37'],j,{deadlineMs:4000});
   assert.equal(r.done,false);
   assert.match(r.stopped.reason,/deadline/);
+  assert.equal(r.steps[0].vision.match_p,.95);
+  assert.equal(await ops.evaluate(conn,tab,'a.value'),'50');
   assert.equal(await ops.evaluate(conn,tab,'b.value'),'50');
 });
 test('human handoff is bounded by the remaining run deadline', async()=>{
