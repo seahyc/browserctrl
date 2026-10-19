@@ -62,8 +62,10 @@ Defaults per OS (`<data>`, `<config>`, `<state>`, `<runtime>`):
 
 The runtime folder holds sockets, claims and the bridge token. It is private to your user
 (mode 700); a folder someone else made is refused. Folders from earlier versions
-(`~/.cdp`, `~/.local/share/browserctrl`, `~/.config/browserctrl`) are moved once into the
-new places on first run, unless `BROWSERCTRL_HOME` is set.
+(`~/.cdp`, `~/.local/share/browserctrl`, `~/.config/browserctrl`) keep being used where they
+are; nothing is moved on its own. `browserctrl migrate` shows what would move to this OS's
+folders, and `browserctrl migrate --apply` moves it once you have stopped any older
+browserctrl (its agents and daemons). `browserctrl where` shows which folders are in use.
 
 ## Jev (TypeSafe)
 
