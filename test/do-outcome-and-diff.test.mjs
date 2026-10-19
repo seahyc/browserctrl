@@ -115,7 +115,7 @@ t('a non-blocking toast is recorded as an event and not acted on', async () => {
 });
 
 t('an alert tied to a field by aria-errormessage is an error in any language', async () => {
-  const id = await open('?guards=1');
+  const id = await open('steps-general.html?guards=1');
   const r = await run(id, ['click "Valider"']);
   assert.equal(r.done, false);
   assert.match(r.stopped.reason, /error.*obligatoire/s);

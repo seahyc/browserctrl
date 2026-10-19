@@ -101,7 +101,7 @@ t('a date step reopens a date picker the previous click closed', async () => {
 
 for (const mode of ['aria', 'class', 'closes', 'hidden', 'numbers']) {
   t(`a date pick is confirmed when the calendar shows it (${mode})`, async () => {
-    const id = await open(`?cal=${mode}`);
+    const id = await open(`steps-general.html?cal=${mode}`);
     const steps = mode === 'closes' ? ['click "Arrival"', 'date 2026-10-17'] : ['date 2026-10-17'];
     const r = await run(id, steps);
     assert.equal(r.done, true, JSON.stringify(r.stopped));
@@ -111,7 +111,7 @@ for (const mode of ['aria', 'class', 'closes', 'hidden', 'numbers']) {
 }
 
 t('a date click the calendar ignores stops instead of passing as done', async () => {
-  const id = await open('?cal=dead');
+  const id = await open('steps-general.html?cal=dead');
   const r = await run(id, ['date 2026-10-17']);
   assert.equal(r.done, false);
   assert.match(r.stopped.reason, /doesn't show it selected/);
@@ -119,7 +119,7 @@ t('a date click the calendar ignores stops instead of passing as done', async ()
 });
 
 t('a collapsed control that opens a dialog with a grid is opened for a date step, whatever its words', async () => {
-  const id = await open('?cal=opener');
+  const id = await open('steps-general.html?cal=opener');
   const r = await run(id, ['date 2026-10-17']);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.match(r.steps[0].how, /opened/);

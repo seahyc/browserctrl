@@ -142,14 +142,14 @@ t('a step marked ! clicks a committing control named exactly', async () => {
 });
 
 t('entry buttons that only start an order or booking run until the page asks for payment', async () => {
-  let id = await open('?guards=1');
+  let id = await open('steps-general.html?guards=1');
   let r = await run(id, ['click "Reserve now"', 'click "Start a booking"']);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.match(r.steps[0].how, /starts an order/);
   r = await run(id, ['click "Complete purchase"']);
   assert.equal(r.done, false, 'a purchase still needs click!');
   await ops.closeTab(conn, id);
-  id = await open('?guards=1&checkout=1');
+  id = await open('steps-general.html?guards=1&checkout=1');
   r = await run(id, ['click "Reserve now"']);
   assert.equal(r.done, false, 'with a card field on the page, Reserve now commits');
   await ops.closeTab(conn, id);

@@ -59,7 +59,7 @@ test('set steps parse a value or a range in any currency or separator', () => {
 });
 
 t('a native range input is set by value and reports where it ended', async () => {
-  const id = await open('?sliders=1');
+  const id = await open('steps-general.html?sliders=1');
   const r = await run(id, ['set "Distance" = 40']);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.equal((await outState(id)).dist, '40');
@@ -68,7 +68,7 @@ t('a native range input is set by value and reports where it ended', async () =>
 });
 
 t('an ARIA slider named by aria-labelledby is moved with keys to the value', async () => {
-  const id = await open('?sliders=1');
+  const id = await open('steps-general.html?sliders=1');
   const r = await run(id, ['set "Speaker volume" = 37']);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.equal((await outState(id)).vol, '37');
@@ -76,7 +76,7 @@ t('an ARIA slider named by aria-labelledby is moved with keys to the value', asy
 });
 
 t('a two-thumb range under a group heading takes both ends, in an order the thumbs allow', async () => {
-  const id = await open('?sliders=1');
+  const id = await open('steps-general.html?sliders=1');
   // 600 is above the current maximum (400): the maximum must move first.
   const r = await run(id, ['set "Nightly budget" = $600-$900']);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
@@ -86,7 +86,7 @@ t('a two-thumb range under a group heading takes both ends, in an order the thum
 });
 
 t('a pair of native ranges forming one range is set end by end', async () => {
-  const id = await open('?sliders=1');
+  const id = await open('steps-general.html?sliders=1');
   const r = await run(id, ['set "Model year" = 2018-2023']);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.equal((await outState(id)).year, '2018-2023');
@@ -94,7 +94,7 @@ t('a pair of native ranges forming one range is set end by end', async () => {
 });
 
 t('ends that bound each other move in an order their live limits allow, both ways', async () => {
-  const id = await open('?sliders=1');
+  const id = await open('steps-general.html?sliders=1');
   let r = await run(id, ['set "Room rate" = 300-350']);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.equal((await outState(id)).rate, '300-350');
@@ -106,7 +106,7 @@ t('ends that bound each other move in an order their live limits allow, both way
 });
 
 t('fill on a slider sets it', async () => {
-  const id = await open('?sliders=1');
+  const id = await open('steps-general.html?sliders=1');
   const r = await run(id, ['fill "Distance" = 65']);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.equal((await outState(id)).dist, '65');
@@ -114,7 +114,7 @@ t('fill on a slider sets it', async () => {
 });
 
 t('a slider that will not move stops the plan with where it is', async () => {
-  const id = await open('?sliders=1');
+  const id = await open('steps-general.html?sliders=1');
   const r = await run(id, ['set "Locked dial" = 8']);
   assert.equal(r.done, false);
   assert.match(r.stopped.reason, /Locked dial.*3/s);

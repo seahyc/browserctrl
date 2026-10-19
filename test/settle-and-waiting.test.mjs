@@ -166,7 +166,7 @@ t('a short page that has finished loading is not waited on as a loading shell', 
 });
 
 t('a <progress> element holds a read until it goes', async () => {
-  const id = await open('?progress=1');
+  const id = await open('steps-general.html?progress=1');
   // What matters is that the read waited for the bar, not how long: a slow runner may
   // already be most of the way through the page's load when the wait starts.
   const before = await ops.evaluate(conn, id, '!!document.querySelector("progress")');
