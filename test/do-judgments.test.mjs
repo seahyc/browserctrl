@@ -245,3 +245,73 @@ for (const display of ['inline-flex', 'flex']) t(`extract joins short ${display}
   assert.equal(r.done, true);
   assert.equal(r.bindings[0].raw, 'JavaScript 100.0%');
 });
+
+t('joined repository header also offers its precise descendant lines once', async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<div style="display:flex"><span>Public</span><a>Watch <b>11</b></a><a>Fork <b>202</b></a><a>Star <b>3.3k</b></a></div><p>3.3k stars</p>'`);
+  const jev = fakeJev({
+    choice: (q, id) => {
+      if (id !== 'extract') return;
+      const texts = Object.values(q.criteria);
+      assert.ok(texts.some(s => s === 'Public Watch 11 Fork 202 Star 3.3k'));
+      assert.equal(texts.filter(s => s === 'Star 3.3k').length, 1);
+      assert.equal(texts.filter(s => s === '3.3k stars').length, 1);
+      assert.ok(texts.length <= 255);
+      return { choice: optionWith(q, '3.3k stars'), probabilities: {
+        [optionWith(q, '3.3k stars')]: .56,
+        [Object.entries(q.criteria).find(([, text]) => text === 'Star 3.3k')[0]]: .27,
+        none: .17,
+      } };
+    },
+    noul: (q, id) => id === 'extract_verify' ? .9 : undefined,
+  });
+  const r = await run(tab, ['extract "the number of stars" as number as $stars'], jev);
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].value, 3300);
+  assert.equal(jev.calls.filter(c => c.questions.extract_value).length, 0);
+});
+
+t('chosen joined multi-number header resolves through one fake Jev follow-up', async () => {
+  const tab = await open();
+  const header = 'Public Watch 11 Fork 202 Star 3.3k';
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<p>${header}</p><p>3.3k stars</p>'`);
+  const jev = fakeJev({
+    choice: (q, id) => id === 'extract' ? { choice: optionWith(q, header), probabilities: {
+      [optionWith(q, header)]: .6, [optionWith(q, '3.3k stars')]: .27, none: .13,
+    } } : id === 'extract_value' ? { choice: optionWith(q, 'Star 3.3k'), probabilities: {
+      [optionWith(q, 'Star 3.3k')]: .95, none: .05,
+    } } : undefined,
+    noul: (q, id) => id === 'extract_verify' ? .9 : undefined,
+  });
+  const r = await run(tab, ['extract "the number of stars" as number as $stars'], jev);
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].value, 3300);
+  assert.equal(r.bindings[0].raw, header);
+  assert.equal(r.bindings[0].p, .84);
+  assert.equal(jev.calls.filter(c => c.questions.extract_value).length, 1);
+  assert.equal(jev.calls.filter(c => c.questions.extract).length, 1);
+  assert.equal(jev.calls.filter(c => c.questions.extract_verify).length, 1);
+});
+
+t('rendered counter line survives a hidden duplicate in its joined DOM block', async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<a>Star<span>3.3k</span><span style="display:block"> (3.3k)</span></a><p>3.3k stars</p>'`);
+  const jev = fakeJev({
+    choice: (q, id) => {
+      if (id !== 'extract') return;
+      const texts = Object.values(q.criteria);
+      assert.ok(texts.some(text => text === 'Star 3.3k (3.3k)'));
+      assert.equal(texts.filter(text => text === 'Star3.3k').length, 1);
+      return { choice: optionWith(q, '3.3k stars'), probabilities: {
+        [optionWith(q, '3.3k stars')]: .56,
+        [Object.entries(q.criteria).find(([, text]) => text === 'Star3.3k')[0]]: .27,
+        none: .17,
+      } };
+    },
+    noul: (q, id) => id === 'extract_verify' ? .9 : undefined,
+  });
+  const r = await run(tab, ['extract "the number of stars" as number as $stars'], jev);
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].value, 3300);
+  assert.equal(r.bindings[0].p, .83);
+});

@@ -1,0 +1,252 @@
+[
+  {
+    "id": "chrome-cdp-skill-stars",
+    "url": "https://github.com/pasky/chrome-cdp-skill",
+    "step": "extract \"the number of stars\" as number as $value",
+    "expect": {
+      "selector": "span[class*=\"socialStat\"]:has(svg.octicon-star) strong",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "chrome-cdp-skill-forks",
+    "url": "https://github.com/pasky/chrome-cdp-skill",
+    "step": "extract \"the number of forks\" as number as $value",
+    "expect": {
+      "selector": "a[href=\"/pasky/chrome-cdp-skill/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "chrome-cdp-skill-language",
+    "url": "https://github.com/pasky/chrome-cdp-skill",
+    "step": "extract \"the primary language\" as $value",
+    "expect": {
+      "selector": "ul[class*=\"languageList\"] [itemprop=\"keywords\"]",
+      "capture": "^([^\\d\\n]+)",
+      "kind": "language"
+    }
+  },
+  {
+    "id": "chrome-cdp-skill-license",
+    "url": "https://github.com/pasky/chrome-cdp-skill",
+    "step": "extract \"the repository license\"",
+    "expect": {
+      "regex": "^(?:MIT(?: license)?|License: MIT)$"
+    }
+  },
+  {
+    "id": "playwright-stars",
+    "url": "https://github.com/microsoft/playwright",
+    "step": "extract \"the number of stars\" as number as $value",
+    "expect": {
+      "selector": "span[class*=\"socialStat\"]:has(svg.octicon-star) strong",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "playwright-forks",
+    "url": "https://github.com/microsoft/playwright",
+    "step": "extract \"the number of forks\" as number as $value",
+    "expect": {
+      "selector": "a[href=\"/microsoft/playwright/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "playwright-language",
+    "url": "https://github.com/microsoft/playwright",
+    "step": "extract \"the primary language\" as $value",
+    "expect": {
+      "selector": "ul[class*=\"languageList\"] [itemprop=\"keywords\"]",
+      "capture": "^([^\\d\\n]+)",
+      "kind": "language"
+    }
+  },
+  {
+    "id": "playwright-license",
+    "url": "https://github.com/microsoft/playwright",
+    "step": "extract \"the repository license\"",
+    "expect": {
+      "regex": "^(?:Apache-2.0(?: license)?|License: Apache-2.0)$"
+    }
+  },
+  {
+    "id": "browserctrl-stars",
+    "url": "https://github.com/seahyc/browserctrl",
+    "step": "extract \"the number of stars\" as number as $value",
+    "expect": {
+      "selector": "span[class*=\"socialStat\"]:has(svg.octicon-star) strong",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "browserctrl-forks",
+    "url": "https://github.com/seahyc/browserctrl",
+    "step": "extract \"the number of forks\" as number as $value",
+    "expect": {
+      "selector": "a[href=\"/seahyc/browserctrl/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "browserctrl-language",
+    "url": "https://github.com/seahyc/browserctrl",
+    "step": "extract \"the primary language\" as $value",
+    "expect": {
+      "selector": "ul[class*=\"languageList\"] [itemprop=\"keywords\"]",
+      "capture": "^([^\\d\\n]+)",
+      "kind": "language"
+    }
+  },
+  {
+    "id": "browserctrl-license",
+    "url": "https://github.com/seahyc/browserctrl",
+    "step": "extract \"the repository license\"",
+    "expect": {
+      "regex": "^(?:MIT(?: license)?|License: MIT)$"
+    }
+  },
+  {
+    "id": "node-stars",
+    "url": "https://github.com/nodejs/node",
+    "step": "extract \"the number of stars\" as number as $value",
+    "expect": {
+      "selector": "span[class*=\"socialStat\"]:has(svg.octicon-star) strong",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "node-forks",
+    "url": "https://github.com/nodejs/node",
+    "step": "extract \"the number of forks\" as number as $value",
+    "expect": {
+      "selector": "a[href=\"/nodejs/node/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "node-language",
+    "url": "https://github.com/nodejs/node",
+    "step": "extract \"the primary language\" as $value",
+    "expect": {
+      "selector": "ul[class*=\"languageList\"] [itemprop=\"keywords\"]",
+      "capture": "^([^\\d\\n]+)",
+      "kind": "language"
+    }
+  },
+  {
+    "id": "node-license",
+    "url": "https://github.com/nodejs/node",
+    "step": "extract \"the repository license\"",
+    "expect": {
+      "regex": "^(?:MIT(?: license)?|License: MIT|Node\\.js is licensed under the MIT License\\s*\\.)$"
+    }
+  },
+  {
+    "id": "playwright-release",
+    "url": "https://github.com/microsoft/playwright",
+    "step": "extract \"the latest release tag\" as $value",
+    "expect": {
+      "selector": "a[href*=\"/releases/tag/\"]",
+      "capture": "^(v?[\\d]+\\.[\\d]+\\.[\\d]+(?:-[\\w.]+)?)",
+      "kind": "release"
+    }
+  },
+  {
+    "id": "node-release",
+    "url": "https://github.com/nodejs/node",
+    "step": "extract \"the latest release tag\" as $value",
+    "expect": {
+      "selector": "a[href*=\"/releases/tag/\"]",
+      "capture": "/releases/tag/(v[\\d]+\\.[\\d]+\\.[\\d]+)$",
+      "kind": "release",
+      "attribute": "href"
+    }
+  },
+  {
+    "id": "france-capital",
+    "url": "https://en.wikipedia.org/wiki/France",
+    "step": "extract \"the capital city\"",
+    "expect": {
+      "regex": "^(?:(?:Capital(?: and largest city)?[: ]*)?Paris(?:\\s*\\[[\\d]+\\])?|Its capital, largest city and main cultural and economic centre is Paris, with a metropolitan population of over 13 million\\.)$"
+    }
+  },
+  {
+    "id": "singapore-population",
+    "url": "https://en.wikipedia.org/wiki/Singapore",
+    "step": "extract \"the total population in the infobox\" as number as $value",
+    "expect": {
+      "selector": ".infobox",
+      "capture": "Population[\\s\\S]*?([\\d,]{7,})",
+      "number": true
+    }
+  },
+  {
+    "id": "singapore-independence",
+    "url": "https://en.wikipedia.org/wiki/Singapore",
+    "step": "extract \"the independence date from Malaysia\" as date as $value",
+    "expect": {
+      "exact": "1965-08-09"
+    }
+  },
+  {
+    "id": "singapore-founded",
+    "url": "https://en.wikipedia.org/wiki/Singapore",
+    "step": "extract \"the founding date of the British settlement of Singapore\" as date as $value",
+    "expect": {
+      "exact": "1819-02-06"
+    }
+  },
+  {
+    "id": "python-version",
+    "url": "https://www.python.org/downloads/",
+    "step": "extract \"the latest Python version\" as $value",
+    "expect": {
+      "selector": "a[href*=\"/ftp/python/\"][href$=\".tar.xz\"]",
+      "capture": "(Python [\\d]+\\.[\\d]+\\.[\\d]+)",
+      "kind": "python"
+    }
+  },
+  {
+    "id": "npm-version",
+    "url": "https://www.npmjs.com/package/lodash",
+    "step": "extract \"the current lodash version\" as $value",
+    "expect": {
+      "selector": "body",
+      "capture": "Version\\s*([\\d]+\\.[\\d]+\\.[\\d]+)"
+    }
+  },
+  {
+    "id": "npm-downloads",
+    "url": "https://www.npmjs.com/package/lodash",
+    "step": "extract \"weekly downloads\" as number as $value",
+    "expect": {
+      "selector": "body",
+      "capture": "Weekly Downloads\\s*([\\d,]+)",
+      "number": true
+    }
+  },
+  {
+    "id": "github-free-price",
+    "url": "https://github.com/pricing",
+    "step": "extract \"the monthly per user price of the Free plan\" as number as $value",
+    "expect": {
+      "exact": 0
+    }
+  },
+  {
+    "id": "absent-founding-date",
+    "url": "https://example.com/",
+    "step": "extract \"the founding date of Example Domain\" as date as $value",
+    "expect": "stop"
+  }
+]
