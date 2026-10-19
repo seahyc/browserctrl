@@ -9,6 +9,7 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { page, pageNames, source, helperSource } from '../lib/page/index.mjs';
 import * as shared from '../lib/page/shared.mjs';
+import { recorderScript } from '../lib/recorder.mjs';
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'page');
 
@@ -63,6 +64,28 @@ test('the loader output parses for sample args, with the helpers each script use
 
 test('shared helpers stand alone: each one parses as page source', () => {
   for (const name of Object.keys(shared)) assert.doesNotThrow(() => new vm.Script(helperSource(name)), `${name}`);
+});
+
+test('recorder identities preserve the shared accessible name and role', () => {
+  const rows = [];
+  const context = {
+    window: { __cdpRecording: 'identity', addEventListener() {}, __cdpSend: text => rows.push(...JSON.parse(text).rows) },
+    document: { title: 'identity', readyState: 'complete', addEventListener() {} },
+    location: { href: 'https://example.test/' },
+    setInterval() {},
+  };
+  vm.runInNewContext(recorderScript(), context);
+  for (const [tagName, attrs] of [
+    ['INPUT', { type: 'range', 'aria-label': 'Volume  '.repeat(25) }],
+    ['DIV', { role: 'combobox', 'aria-label': 'Choose   an option' }],
+  ]) {
+    const el = { tagName, ownerDocument: context.document, getAttribute: name => attrs[name] || null };
+    context.window.__cdpRecorder.push('click', el);
+    context.window.__cdpRecorder.flush();
+    const identity = rows.at(-1).element;
+    assert.equal(identity.name, shared.accName(el));
+    assert.equal(identity.role, shared.accRole(el));
+  }
 });
 
 test('no double escaping is left in page scripts', () => {

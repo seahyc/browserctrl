@@ -35,7 +35,11 @@
     return null;
   }
 
+  // The daemon prepends the page snapshot's accName and accRole, so recordings, annotations and
+  // the snapshot name an element alike. The extension loads this file alone: its own
+  // versions below stand in.
   function roleOf(el) {
+    if (typeof accRole === 'function') return accRole(el);
     var explicit = el.getAttribute && el.getAttribute('role');
     if (explicit) return explicit;
     var tag = el.tagName.toLowerCase();
@@ -51,6 +55,7 @@
   }
 
   function nameOf(el) {
+    if (typeof accName === 'function') return accName(el);
     var t = (el.getAttribute && el.getAttribute('aria-label')) || '';
     if (t.trim()) return t.trim();
     var own = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');

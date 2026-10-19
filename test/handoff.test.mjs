@@ -7,9 +7,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-// Every test in this file writes state, so give it a throwaway BROWSERCTRL_HOME before
-// anything imports the modules that read it.
-process.env.BROWSERCTRL_HOME = fs.mkdtempSync(path.join('/tmp', 'bc-handoff-'));
+// Keep the preloaded helper's home so the client and its daemon share cached paths.
+process.env.BROWSERCTRL_HOME ??= fs.mkdtempSync(path.join('/tmp', 'bc-handoff-'));
 
 const { connect } = await import('../lib/daemon.mjs');
 const ops = await import('../lib/ops.mjs');
