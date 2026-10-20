@@ -415,9 +415,48 @@ exchange rate is inferred.
 including `--json`; it sends no message and asks no model question. It drains
 pending checks first. A later failed final check marks the answer provisional.
 The run stops with partial results after 100 executed leaf steps or its
-120-second deadline. A limit stop never reports overall success. Loops,
-candidate retries, ranked top-k reads and same-page action batching remain
-proposals in [dsl-next.md](dsl-next.md).
+120-second deadline. A limit stop never reports overall success.
+
+```bash
+browserctrl do <tab> 'for top 3 {
+  extract "price" as number currency SGD as $price;
+  extract "cancellation" as $policy
+}'
+browserctrl do <tab> 'each "rated at least 4 with free cancellation" up to 3 {
+  extract "price", "cancellation"
+}'
+browserctrl do <tab> 'pick "lowest listed price with free cancellation" top 3 as $choices'
+```
+
+`for top N` visits the first N organic linked items in the current main list's
+page order. `each "<criterion>" up to N` selects matching items from that list
+using listing evidence. Bounds must be literals from 1 to 10; loops cannot
+nest or contain `click!` or `select!`. The runner freezes the source list once,
+excludes ads using the same rules as `--open`, and deduplicates identical links
+while preserving query strings. Ambiguous groups or missing detail links stop.
+It opens each item in its own background tab, runs the body sequentially and
+closes only tabs it opened. The source tab stays unchanged. There is no implicit
+pagination or scrolling for more items.
+
+`each` asks one membership question per item in the loop-entry request, with
+pending checks and blocker questions. It accepts p >= 0.75, rejects p <= 0.25
+and stops when an undecided item affects the selected prefix. Input is capped at
+200 items; a selection that requires unseen items stops with truncation reported.
+Consecutive extraction steps on the same detail page share one Jev request,
+with separate `extract.<name>` choices and any pending check. Each iteration has
+a fresh child scope; its bindings appear in its item record and do not escape.
+Reports show stable paths such as `2.item[1].3`, an item table and completed/requested
+counts. Fewer available items reports `source exhausted`; a body failure preserves
+completed rows and the failing item, then stops.
+
+`pick "<criterion>" top K as $choices` returns item records without opening pages.
+It asks for each item's eligibility and an observable numeric or date sort key in
+one request, then sorts locally. Equal keys keep page order. Vague rankings and
+missing keys stop; records include key, evidence, eligibility probability and
+shortlist coverage. Ordinary `pick` still opens one item.
+
+Candidate retries and same-page action batching remain proposals in
+[dsl-next.md](dsl-next.md).
 
 ### Single actions
 

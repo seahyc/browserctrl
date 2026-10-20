@@ -2,8 +2,9 @@
 
 Phase A is implemented: plan blocks, `if` / `else`, variables and local
 comparisons, typed extraction, and `answer`. Existing one-step and inline `if`
-plans remain supported. Loops, candidate retries, ranked top-k reads and
-same-page batching below are proposals, not supported syntax.
+plans remain supported. Phase B, part 1 implements item loops, ranked top-k
+reads and batching of consecutive detail-page extractions in loop bodies. Candidate retries and
+same-page action batching remain proposals, not supported syntax.
 
 ## Aim
 
@@ -51,7 +52,7 @@ nesting before execution where possible.
 Phase A allows at most two nested conditional blocks. It caps executed leaf
 steps at 100 and gives the run a 120-second deadline. Reaching a cap returns
 partial results and a stop, never success. Existing per-step recovery limits
-still apply. Proposed loops allow one level and at most 10 items; proposed
+still apply. Item loops allow one level and at most 10 items; proposed
 candidate retries allow at most 3 attempts. Their bounds must be literal.
 
 Questions about the current snapshot go in the existing `askJev` request under
@@ -70,7 +71,7 @@ action after a timeout or uncertain delivery. Challenges, login walls, errors,
 unhandled dialogs and failed checks stop the plan. Never guess a missing value,
 target, unit, branch or recovery path.
 
-## 1. Loop over items with extraction (proposed)
+## 1. Loop over items with extraction (implemented)
 
 ```text
 for top 3 {
@@ -246,7 +247,7 @@ prices, ambiguous `03/04`, missing currency or unsupported units. Do not infer
 a year or exchange rate. Test localized separators, negative numbers, ranges,
 currency symbols, leap days, ambiguous dates and partly missing records.
 
-### Return ranked top-k from `pick` (proposed)
+### Return ranked top-k from `pick` (implemented)
 
 ```text
 pick "lowest listed price with free cancellation" top 3 as $choices
@@ -284,8 +285,9 @@ same page {
 }
 ```
 
-Keep this explicit and last in priority. Batch independent extraction choices
-first. For actions, initially allow only independent fills on a stable form.
+Batching consecutive detail-page extraction choices in loop bodies is implemented. The action
+block above remains proposed. Keep it explicit and last in priority. For actions,
+initially allow only independent fills on a stable form.
 Add `target.1`, `target.2` to one request, with the pending check and blocker.
 Exact targets still need no model. Before each input, verify its pinned identity,
 role, visibility and form context. A redraw, navigation, overlay, new validation
@@ -312,9 +314,9 @@ retry or an unresolved required value is. No green overall result while a requir
 check remains pending. Preserve partial evidence without presenting it as a
 complete comparison.
 
-Phase A uses the plan parser and recursive block runner without an opt-in
-flag. Future additions below remain proposals. Extend `runSteps` recursively rather than flattening loops before the page
-exists. Traverse blocks for cooldown checks and ref validation. Keep `runOne`
+Phase A and item loops use the plan parser and recursive block runner without an
+opt-in flag. Candidate retries and same-page action batching remain proposals.
+Extend `runSteps` recursively rather than flattening loops before the page exists. Traverse blocks for cooldown checks and ref validation. Keep `runOne`
 responsible for leaf actions. Put question builders/readers in `judge.mjs`,
 judgment dispatch in `judgments.mjs`, and bindings/frames in run context.
 Give pending expectations an owning frame so a candidate failure cannot consume
