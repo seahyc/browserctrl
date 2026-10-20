@@ -248,5 +248,114 @@
     "url": "https://example.com/",
     "step": "extract \"the founding date of Example Domain\" as date as $value",
     "expect": "stop"
+  },
+  {
+    "id": "de-population",
+    "url": "https://de.wikipedia.org/wiki/Singapur",
+    "step": "extract \"the population of Singapore\" as number as $pop",
+    "expect": {
+      "selector": "table tr",
+      "labelSelector": "th, td:first-child",
+      "label": "^Einwohner(?:zahl)?$",
+      "valueSelector": "td:last-child",
+      "capture": "([\\d.\\s\\u00a0\\u202f]+)",
+      "number": true,
+      "numberLocale": "de"
+    }
+  },
+  {
+    "id": "fr-capital",
+    "url": "https://fr.wikipedia.org/wiki/France",
+    "step": "extract \"the capital city\" as $cap",
+    "expect": {
+      "selector": ".infobox tr",
+      "labelSelector": "th",
+      "label": "^Capitale$",
+      "valueSelector": "td",
+      "capture": "^(Paris)",
+      "kind": "capital"
+    }
+  },
+  {
+    "id": "ja-population",
+    "url": "https://ja.wikipedia.org/wiki/東京都",
+    "step": "extract \"the population of Tokyo\" as number as $pop",
+    "expect": {
+      "selector": "table.infobox tr",
+      "labelSelector": "th",
+      "label": "^総人口$",
+      "valueSelector": "td",
+      "capture": "([\\d,]+)",
+      "number": true
+    }
+  },
+  {
+    "id": "zh-founded",
+    "url": "https://zh.wikipedia.org/wiki/新加坡",
+    "step": "extract \"the date Singapore became independent\" as date as $d",
+    "expect": {
+      "selector": ".infobox tr",
+      "labelSelector": "th",
+      "label": "獨立建國|独立建国",
+      "valueSelector": "td",
+      "capture": "(\\d{4}年\\d{1,2}月\\d{1,2}日)",
+      "date": true
+    }
+  },
+  {
+    "id": "zh-question-en-page",
+    "url": "https://www.python.org/downloads/",
+    "step": "extract \"最新的Python版本是什么\" as $v",
+    "expect": {
+      "selector": "a[href*=\"/ftp/python/\"][href$=\".tar.xz\"]",
+      "capture": "(Python [\\d]+\\.[\\d]+\\.[\\d]+)",
+      "kind": "python"
+    }
+  },
+  {
+    "id": "es-question-en-page",
+    "url": "https://github.com/nodejs/node",
+    "step": "extract \"cuántas veces se ha bifurcado el repositorio\" as number as $f",
+    "expect": {
+      "selector": "a[href=\"/nodejs/node/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "paraphrase-forks",
+    "url": "https://github.com/nodejs/node",
+    "step": "extract \"how many times people have copied this repo to their own account\" as number as $f",
+    "expect": {
+      "selector": "a[href=\"/nodejs/node/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "paraphrase-python",
+    "url": "https://www.python.org/downloads/",
+    "step": "extract \"which version should a new user grab today\" as $v",
+    "expect": {
+      "selector": "a[href*=\"/ftp/python/\"][href$=\".tar.xz\"]",
+      "capture": "(Python [\\d]+\\.[\\d]+\\.[\\d]+)",
+      "kind": "python"
+    }
+  },
+  {
+    "id": "absent-xlang",
+    "url": "https://de.wikipedia.org/wiki/Singapur",
+    "step": "extract \"the name of Singapore's national football coach in 1950\" as $x",
+    "expect": "stop"
+  },
+  {
+    "id": "pypi-license",
+    "url": "https://pypi.org/project/chrome-devtools-protocol/",
+    "step": "extract \"the license\"",
+    "expect": {
+      "selector": "img[alt$=\" License\"]",
+      "attribute": "alt",
+      "kind": "license"
+    }
   }
 ]

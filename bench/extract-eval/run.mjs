@@ -44,26 +44,29 @@ installCleanupSignals(cleanup, { onSignal: () => { stopping = true; } });
 const cases = JSON.parse(fs.readFileSync(new URL('./cases.json', import.meta.url)));
 const results = [];
 const normalize = s => String(s).replace(/\s+/g, ' ').trim();
-function number(s) { const m = String(s).replace(/,/g, '').match(/^\s*([\d.]+)\s*([kmb])?\s*$/i); return m ? Number(m[1]) * ({ k: 1e3, m: 1e6, b: 1e9 }[m[2]?.toLowerCase()] || 1) : null; }
+function number(s, locale) { const m = String(s).replace(locale === 'de' ? /[.\s\u00a0\u202f]/g : /,/g, '').match(/^\s*([\d.]+)\s*([kmb])?\s*$/i); return m ? Number(m[1]) * ({ k: 1e3, m: 1e6, b: 1e9 }[m[2]?.toLowerCase()] || 1) : null; }
 async function oracle(tab, c) {
   if (c.expect === 'stop' || c.expect.exact !== undefined || c.expect.regex) return c.expect;
   const o = c.expect;
   let text;
   for (let attempt = 0; attempt < 12; attempt++) {
-    text = await ops.evaluate(conn, tab, `(() => { const e = document.querySelector(${JSON.stringify(o.selector)}); return e ? (${JSON.stringify(o.attribute || null)} ? e.getAttribute(${JSON.stringify(o.attribute || null)}) : (e.innerText || e.textContent || '')).trim() : null; })()`);
+    text = await ops.evaluate(conn, tab, `(() => { const e = [...document.querySelectorAll(${JSON.stringify(o.selector)})].find(e => !${JSON.stringify(o.label || null)} || new RegExp(${JSON.stringify(o.label || '')}, 'i').test((${JSON.stringify(o.labelSelector || null)} ? e.querySelector(${JSON.stringify(o.labelSelector || '*')})?.textContent : e.textContent)?.replace(/\\s+/g, ' ').trim() || '')); const v = e && (${JSON.stringify(o.valueSelector || null)} ? e.querySelector(${JSON.stringify(o.valueSelector || '*')}) : e); return v ? (${JSON.stringify(o.attribute || null)} ? v.getAttribute(${JSON.stringify(o.attribute || null)}) : (v.innerText || v.textContent || '')).trim() : null; })()`);
     if (text) break;
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   if (!text) throw Error(`oracle selector absent: ${o.selector}`);
   const value = o.capture ? String(text).match(new RegExp(o.capture, 'i'))?.[1] : text;
   if (!value) throw Error('oracle capture absent');
-  if (o.number) { const n = number(value); if (n === null) throw Error(`oracle not numeric: ${value}`); return { exact: n, observed: text }; }
+  if (o.number) { const n = number(value, o.numberLocale); if (n === null) throw Error(`oracle not numeric: ${value}`); return { exact: n, observed: text }; }
+  if (o.date) { const m = String(value).match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/); if (!m) throw Error('oracle date absent'); return { exact: `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`, observed: text }; }
   return { exactText: normalize(value), observed: text, kind: o.kind };
 }
 function matches(value, expected) {
   if (expected.exact !== undefined) return value === expected.exact;
   if (expected.regex) return new RegExp(expected.regex, 'i').test(String(value));
   const actual = normalize(value), wanted = expected.exactText;
+  if (expected.kind === 'license') { const license = s => normalize(s).replace(/^License:\s*/i, '').replace(/\s*\(MIT\)$/, '').replace(/^PyCDP:\s*/i, ''); return license(actual) === license(wanted) || license(actual) + ' License' === license(wanted); }
+  if (expected.kind === 'capital') return actual === wanted || actual === 'Capitale: ' + wanted;
   if (expected.kind === 'python') return actual === wanted || actual === 'Download ' + wanted || actual === wanted.replace(/^Python /, '');
   if (expected.kind === 'language') return new RegExp(`^(?:Languages?:? )?${wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?::? \\d+(?:\\.\\d+)?\\s*%)?$`, 'i').test(actual);
   return expected.kind === 'release' ? actual === wanted || actual === wanted + ' Latest' : actual === wanted;

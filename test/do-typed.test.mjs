@@ -32,7 +32,7 @@ test('typed evidence preserves observed currency and normalization without conve
   assert.equal(sgd.currency, 'SGD');
   assert.notEqual(usd.currency, sgd.currency);
   assert.equal(parseExtractEvidence('$180', { type: 'number' }).currency, 'dollar');
-  assert.match(parseExtractEvidence('1.234', { type: 'number' }).normalization, /three digits.*group/i);
+  assert.throws(() => parseExtractEvidence('1.234', { type: 'number' }), /ambiguous/i);
 });
 
 test('typed dates require an explicit unambiguous valid year and calendar date', () => {
@@ -139,8 +139,10 @@ test('compact numbers preserve locale parsing and describe rounding', () => {
     assert.equal(number(raw), value, raw);
     assert.match(parseExtractEvidence(raw, { type: 'number' }).normalization, /rounded by the page/);
   }
-  assert.equal(number('1,234'),1234);
-  assert.equal(number('1.234'),1234);
+  assert.throws(() => number('1,234'), /ambiguous/i);
+  assert.equal(parseExtractValue('1,234', { type: 'number', lang: 'en' }), 1234);
+  assert.throws(() => number('1.234'), /ambiguous/i);
+  assert.equal(parseExtractValue('1.234', { type: 'number', lang: 'de' }), 1234);
   for (const raw of ['3.3k to 4k', '3.3k stars 202 forks']) assert.throws(() => number(raw));
 });
 
@@ -162,7 +164,7 @@ test('typed grouping combines parsed values while separating currency and units'
   for (const [raw,ok] of [['USD 1,000',true],['SGD 1000',false],['USD 1000 per night',false]]) {
     const ctx=context();
     await settleJudgment(ctx,{action:'extract',binding:'n',extraction:{type:'number'}},{},
-      {spans:[{text:'USD 1k',i:0},{text:raw,i:1}]},
+      {lang:'en',spans:[{text:'USD 1k',i:0},{text:raw,i:1}]},
       {extract:{type:'choice',choice:'l1',probabilities:{l1:.56,l2:.27,none:.17}}});
     assert.equal(ctx.bindings.has('n'),ok,raw);
   }
