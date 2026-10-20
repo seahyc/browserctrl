@@ -330,13 +330,15 @@ t('table row evidence keeps the label with its value and excludes hidden cells',
 t('footnote markers are not part of a table value or a joined line', async () => {
   const tab = await open();
   // Wikipedia's infobox markup: the reference <sup> sits right after the value.
-  await ops.evaluate(conn, tab, `document.body.innerHTML='<table><tr><th>Hauptstadt</th><td><a href="/wiki/S">Singapur</a><sup id="r3" class="reference"><a href="#cite_note-3">[3]</a></sup></td></tr><tr><th>Einwohnerzahl</th><td>5.640.000 (2025)<sup class="reference"><a href="#cite_note-4">[4]</a></sup></td></tr></table><p><span>Note</span><sup role="doc-noteref"><a href="#fn1">1</a></sup></p>'`);
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<table><tr><th>Hauptstadt</th><td><a href="/wiki/S">Singapur</a><sup id="r3" class="reference"><a href="#cite_note-3">[3]</a></sup></td></tr><tr><th>Einwohnerzahl</th><td>5.640.000 (2025)<sup class="reference"><a href="#cite_note-4">[4]</a></sup></td></tr></table><p><span>Note</span><sup role="doc-noteref"><a href="#fn1">1</a></sup></p><table><tr><td>Amtssprache</td><td>Englisch<span class="fussnoten-etui reference"><sup class="fussnoten-marke">5</sup></span></td></tr><tr><td>Fläche</td><td>736 km<sup>2</sup></td></tr></table>'`);
   let offered = [];
   const jev = fakeJev({ choice: (q, id) => { if (id === 'extract') { offered = Object.values(q.criteria); return optionWith(q, 'Hauptstadt: Singapur'); } return undefined; },
     noul: (q, id) => id === 'extract_verify' ? .95 : undefined });
   const r = await run(tab, ['extract "the capital" as $cap'], jev);
   assert.ok(offered.includes('Hauptstadt: Singapur'), JSON.stringify(offered));
   assert.ok(offered.includes('Einwohnerzahl: 5.640.000 (2025)'), JSON.stringify(offered));
+  assert.ok(offered.includes('Amtssprache: Englisch'), JSON.stringify(offered));
+  assert.ok(offered.some(text => typeof text === 'string' && /Fläche: 736 km ?2/.test(text)), 'a unit exponent stays');
   assert.ok(!offered.some(text => typeof text === 'string' && /\[\s*[34]\s*\]|Singapur 3/.test(text)), JSON.stringify(offered));
   assert.equal(r.done, true);
   assert.match(r.bindings[0].value, /Singapur$/);
