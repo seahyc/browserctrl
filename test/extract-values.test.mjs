@@ -72,3 +72,54 @@ test('short lines leave relevance slots and deduplicate within the option cap', 
   assert.ok(offered.length <= 254);
   assert.ok(JSON.stringify(extractQuestion('the number of stars', offered)).length <= 24000);
 });
+
+test('embedded single values still require a value judgment', async () => {
+  assert.deepEqual(extractValues('Star 3.3k (3.3k)', schema), ['Star 3.3k']);
+  assert.deepEqual(extractValues('Population estimate 6,110,200', schema), ['6,110,200']);
+  assert.deepEqual(extractValues('Free plan costs $0 USD per user/month', schema), ['$0']);
+  assert.deepEqual(extractValues('Independence on 9 August 1965', { type: 'date' }), ['9 August 1965']);
+  assert.deepEqual(extractValues('100%', schema), []);
+  const { ctx, calls } = setup({ v1: .96, none: .04 });
+  const part = { spans: [{ text: 'Star 3.3k (3.3k)', i: 0 }] };
+  const selected = { type: 'choice', choice: 'l1', probabilities: { l1: .95, none: .05 } };
+  await resolveExtractValues(ctx, step, {}, part, { extract: selected });
+  assert.equal(calls.length, 1);
+  const result = await settleJudgment(ctx, step, {}, part, { extract: selected });
+  assert.deepEqual(result, { result: {} });
+  assert.equal(ctx.bindings.get('stars').value, 3300);
+});
+
+test('competing embedded lines need independent follow-ups before their masses agree', async () => {
+  const { ctx, calls } = setup({ v1: .96, none: .04 });
+  const part = { spans: [{ text: 'Star 3.3k (3.3k)', i: 0 }, { text: '3.3k stars', i: 1 }] };
+  const selected = { type: 'choice', choice: 'l2', probabilities: { l1: .3, l2: .6, none: .1 } };
+  let result = await settleJudgment(ctx, step, {}, part, { extract: selected });
+  assert.ok(result.result.stop);
+  await resolveExtractValues(ctx, step, {}, part, { extract: selected });
+  assert.equal(calls.length, 1);
+  result = await settleJudgment(ctx, step, {}, part, { extract: selected });
+  assert.deepEqual(result, { result: {} });
+  assert.equal(ctx.bindings.get('stars').p, .888);
+});
+
+test('different rounded counts with the same label must stop', async () => {
+  const { ctx } = setup();
+  const part = { spans: [{ text: '123k stars', i: 0 }, { text: '122.5k stars', i: 1 }] };
+  const selected = { type: 'choice', choice: 'l1', probabilities: { l1: .8, l2: .1, none: .1 } };
+  const result = await settleJudgment(ctx, step, {}, part, { extract: selected });
+  assert.match(result.result.stop.reason, /conflicting labelled counts/);
+  assert.equal(ctx.bindings.size, 0);
+});
+
+test('a named percentage can resolve to its observed name, but a bare percentage cannot', async () => {
+  assert.deepEqual(extractValues('JavaScript: 66.6%', { type: 'text' }), ['JavaScript']);
+  assert.deepEqual(extractValues('100%', { type: 'text' }), []);
+  const { ctx } = setup({ v1: .98, none: .02 });
+  const textStep = { ...step, target: 'primary language', extraction: { type: 'text' } };
+  const part = { spans: [{ text: 'JavaScript: 66.6%', i: 0 }, { text: 'JavaScript', i: 1 }] };
+  const selected = { type: 'choice', choice: 'l1', probabilities: { l1: .49, l2: .3, none: .1 } };
+  await resolveExtractValues(ctx, textStep, {}, part, { extract: selected });
+  const result = await settleJudgment(ctx, textStep, {}, part, { extract: selected });
+  assert.deepEqual(result, { result: {} });
+  assert.equal(ctx.bindings.get('stars').value, 'JavaScript');
+});

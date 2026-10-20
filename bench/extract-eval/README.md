@@ -9,7 +9,7 @@ env -u BROWSERCTRL_AGENT_ID \
   /opt/homebrew/bin/node bench/extract-eval/run.mjs
 ```
 
-The runner launches headless Chrome with a temporary profile and a free loopback port. It sets a private `BROWSERCTRL_HOME` before importing browserctrl. It never connects to Dia or an existing browser. The maintained test Chrome launcher handles the private process group. Normal completion, errors, SIGINT and SIGTERM stop the private daemon and browser and remove the temporary home. SIGKILL cannot run cleanup handlers.
+By default, the runner launches headless Chrome with a temporary profile and a free loopback port. It sets a private `BROWSERCTRL_HOME` before importing browserctrl. Headless mode never connects to Dia or an existing browser. The maintained test Chrome launcher handles the private process group. Normal completion, errors, SIGINT and SIGTERM stop the private daemon and browser and remove the temporary home. SIGKILL cannot run cleanup handlers.
 
 The 27 cases cover four GitHub repositories, repository statistics, language, license, release tags, Wikipedia population, capital and founding dates, Python downloads, npm package metadata, public pricing, and an absent answer. Each step is a single real `runSteps` extraction. No fake model or cached extraction result is used. Authentication comes from the real Jev env file; the key is never logged.
 
@@ -20,3 +20,16 @@ A **correct binding** matches the case expectation. A **false binding** supplies
 The table reports total wall latency per case, actual Jev HTTP requests, and API-reported input/output tokens. Missing token fields are marked incomplete. `EXTRACT_EVAL_RESULTS` saves full reports and oracle evidence as JSON. Exit status is 1 for any false binding, otherwise 2 for unavailable cases, otherwise 0. Wrong stops remain visible without changing the exit status. Calls depend on extraction retries and verification, so a run may exceed the intended 25–60 request budget; inspect the actual total before repeating.
 
 Public pages change and headless access may be blocked, particularly npm. Review unavailable cases and saved oracle evidence before comparing two runs. These cases measure current rendered page facts, not historical counts or API-only data. The Node release oracle reads the tag from its release link href because the displayed title includes a date and prose. The Playwright release oracle reads its displayed tag. Both use the first release tag link shown on the repository page; it does not infer the highest semantic version from README examples. Set `EXTRACT_EVAL_INSPECT=1` for a page diagnostics pass without Jev calls. `EXTRACT_EVAL_FILTER` accepts a case ID regular expression for focused diagnosis; use the unfiltered run for comparisons.
+
+## Dia mode
+
+`EXTRACT_EVAL_BROWSER=dia` or `--browser dia` selects the installed `browserctrl` on PATH, which must support `do --json`. This measures the installed checkout, not this worktree. For an authorized Dia evaluation:
+
+```sh
+EXTRACT_EVAL_BROWSER=dia EXTRACT_EVAL_RESULTS=/tmp/codex-bc/extract-eval-dia.json \
+  /opt/homebrew/bin/node bench/extract-eval/run.mjs
+```
+
+The adapter sets `BROWSERCTRL_BROWSER=dia` and `BROWSERCTRL_AGENT_ID=extract-eval` on child processes. It opens one background tab per case, waits for load with `ready`, reads the same oracle through `eval`, and runs the extraction with `do --json`. It closes only IDs returned by its own `open` commands, including on errors, SIGINT, and SIGTERM. It never stops or restarts the daemon or navigates existing tabs. SIGKILL cannot run cleanup. A failed close is reported by final cleanup.
+
+Cases with `"dia": false` are skipped and excluded from totals. Mark any case requiring login or involving risky pages this way before running it. The current cases are public read-only pages and require no login. Dia uses the same scoring and table, with the selected browser printed above the header. Jev call counts come from the installed CLI report; token usage is unavailable through that report and is marked incomplete. Inspection in Dia uses only the installed CLI's page reads; headless inspection also includes extraction candidates and shortlisted spans. Dia mode was implemented with mocked child-process tests only; do not run it without authorization.

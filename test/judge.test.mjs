@@ -61,3 +61,11 @@ test('an extract question never offers more lines than a Jev choice allows', () 
   assert.ok(offered.length <= 254, `offered ${offered.length}`);
   assert.ok(Object.keys(extractQuestion('the number of stars', offered).criteria).length <= 255);
 });
+
+test('section headings rank their values, including singular query words', () => {
+  const lines = Array.from({ length: 1000 }, (_, i) => ({ text: `irrelevant ${i}` }));
+  lines[811] = { text: 'JavaScript 72%', heading: 'Languages' };
+  lines[812] = { text: 'v4.2.1 Latest', heading: 'Releases 12 (12)' };
+  assert.ok(shortlistSpans(lines, 'primary language').some(s => s.i === 811));
+  assert.ok(shortlistSpans(lines, 'latest release tag').some(s => s.i === 812));
+});

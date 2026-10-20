@@ -3,22 +3,33 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-const home = fs.mkdtempSync(path.join('/tmp', 'bc-extract-eval-'));
-for (const key of Object.keys(process.env)) if (/^(?:BROWSERCTRL|CDP)_/.test(key) && !['BROWSERCTRL_JEV_ENV', 'BROWSERCTRL_JEV_ENDPOINT'].includes(key)) delete process.env[key];
-process.env.BROWSERCTRL_HOME = home;
-process.env.BROWSERCTRL_AGENT_ID = `extract-eval-${process.pid}`;
-delete process.env.CDP_AGENT_ID;
-process.env.BROWSERCTRL_NOTIFY = '0';
-process.env.BROWSERCTRL_NOTES = 'off';
-process.env.BROWSERCTRL_JEV_ENV ||= path.join(os.homedir(), 'Code/jev-ultrafast/.env');
-const [{ startHeadlessBrowser }, { connect }, ops, { runSteps }] = await Promise.all([
-  import('../../test/helpers.mjs'), import('../../lib/daemon.mjs'), import('../../lib/ops.mjs'), import('../../lib/steps.mjs'),
-]);
-const port = await new Promise(resolve => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); });
+import { createDiaAdapter, installCleanupSignals } from './dia.mjs';
+const browserName = process.argv.includes('--browser') ? process.argv[process.argv.indexOf('--browser') + 1] : process.env.EXTRACT_EVAL_BROWSER || 'headless';
+if (!['headless', 'dia'].includes(browserName)) throw Error('Expected --browser headless|dia');
+const dia = browserName === 'dia' ? createDiaAdapter() : null;
+let home, startHeadlessBrowser, connect, ops, runSteps, port;
+if (dia) {
+  ops = dia;
+  runSteps = dia.runSteps;
+} else {
+  home = fs.mkdtempSync(path.join('/tmp', 'bc-extract-eval-'));
+  for (const key of Object.keys(process.env)) if (/^(?:BROWSERCTRL|CDP)_/.test(key) && !['BROWSERCTRL_JEV_ENV', 'BROWSERCTRL_JEV_ENDPOINT'].includes(key)) delete process.env[key];
+  process.env.BROWSERCTRL_HOME = home;
+  process.env.BROWSERCTRL_AGENT_ID = `extract-eval-${process.pid}`;
+  delete process.env.CDP_AGENT_ID;
+  process.env.BROWSERCTRL_NOTIFY = '0';
+  process.env.BROWSERCTRL_NOTES = 'off';
+  process.env.BROWSERCTRL_JEV_ENV ||= path.join(os.homedir(), 'Code/jev-ultrafast/.env');
+  [{ startHeadlessBrowser }, { connect }, ops, { runSteps }] = await Promise.all([
+    import('../../test/helpers.mjs'), import('../../lib/daemon.mjs'), import('../../lib/ops.mjs'), import('../../lib/steps.mjs'),
+  ]);
+  port = await new Promise(resolve => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); });
+}
 let browser, browserStarting, conn, cleaning, stopping = false;
 async function cleanup() {
   if (cleaning) return cleaning;
   cleaning = (async () => {
+    if (dia) return dia.cleanup();
     if (browserStarting) browser = await browserStarting.catch(() => null);
     try { await conn?.stop(); } catch {}
     try { conn?.close(); } catch {}
@@ -27,7 +38,7 @@ async function cleanup() {
   })();
   return cleaning;
 }
-for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => { stopping = true; await cleanup(); process.exit(130); });
+installCleanupSignals(cleanup, { onSignal: () => { stopping = true; } });
 const cases = JSON.parse(fs.readFileSync(new URL('./cases.json', import.meta.url)));
 const results = [];
 const normalize = s => String(s).replace(/\s+/g, ' ').trim();
@@ -56,14 +67,18 @@ function matches(value, expected) {
   return expected.kind === 'release' ? actual === wanted || actual === wanted + ' Latest' : actual === wanted;
 }
 try {
-  browserStarting = startHeadlessBrowser(port);
-  browser = await browserStarting;
-  if (stopping) throw Error('Interrupted during browser startup');
-  if (!browser) throw Error('Chrome unavailable');
-  conn = await connect(port);
+  if (!dia) {
+    browserStarting = startHeadlessBrowser(port);
+    browser = await browserStarting;
+    if (stopping) throw Error('Interrupted during browser startup');
+    if (!browser) throw Error('Chrome unavailable');
+    conn = await connect(port);
+  }
+  console.log(`Browser: ${browserName}${dia ? " (installed browserctrl on PATH)" : ""}`);
   console.log('| case | classification | value | expected | ms | calls | input/output tokens |');
   console.log('| --- | --- | --- | --- | ---: | ---: | ---: |');
   for (const c of cases.filter(c => !process.env.EXTRACT_EVAL_FILTER || new RegExp(process.env.EXTRACT_EVAL_FILTER).test(c.id))) {
+    if (dia && c.dia === false) { console.log(`| ${c.id} | skipped (dia: false) | | | | | |`); continue; }
     let tab, expected, report, error, tokens = { input: 0, output: 0, complete: true }, calls = 0;
     const started = Date.now();
     try {
@@ -75,17 +90,25 @@ try {
       const diagnostics = await ops.evaluate(conn, tab, `({title:document.title,text:document.body?.innerText.slice(0,1200),tail:document.body?.innerText.slice(-1800),languageHTML:[...document.querySelectorAll('h2')].find(e=>e.textContent.trim()==='Languages')?.parentElement.outerHTML,links:[...document.querySelectorAll('a')].filter(e=>/release|language|download/i.test(e.href)).slice(-35).map(e=>({text:e.innerText,href:e.getAttribute('href')}))})`);
       if (process.env.EXTRACT_EVAL_INSPECT) {
         const expected = await oracle(tab, c).catch(error => ({ unavailable: error.message }));
-        console.log(JSON.stringify({ id: c.id, diagnostics, expected }));
+        let extraction;
+        if (!dia) {
+          const [{ judgment }, { parseStep }] = await Promise.all([import('../../lib/do/judgments.mjs'), import('../../lib/do/parse.mjs')]);
+          const j = await judgment({ conn, tab }, parseStep(c.step));
+          extraction = { spans: j.spans, all: j.all, fields: j.fields };
+        }
+        console.log(JSON.stringify({ id: c.id, diagnostics, expected, extraction }));
         continue;
       }
       if (/just a moment|access denied|security check|captcha/i.test(diagnostics.title) || /Bad Gateway|upstream connect error/.test(diagnostics.text || '')) throw Error('public page blocked: ' + diagnostics.title);
       expected = await oracle(tab, c);
+      if (dia) tokens.complete = false;
       report = await runSteps(conn, tab, [c.step], { handoff: false, noNotes: true, traceRun: false, diff: false, jev: { fetchImpl: async (...args) => {
         calls++;
         const response = await fetch(...args);
         try { const body = await response.clone().json(); if (body.usage?.input_tokens == null || body.usage?.output_tokens == null) tokens.complete = false; tokens.input += body.usage?.input_tokens || 0; tokens.output += body.usage?.output_tokens || 0; } catch { tokens.complete = false; }
         return response;
       } } });
+      if (dia) calls = report.jev_calls || 0;
     } catch (e) { error = e.message; }
     finally { if (tab) await ops.closeTab(conn, tab).catch(() => {}); }
     const value = report?.bindings?.[0]?.value ?? report?.extracted?.[0]?.value;
