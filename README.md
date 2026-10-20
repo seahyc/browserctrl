@@ -124,6 +124,25 @@ Then I flipped it around. The agent plans and reads, and Jev only picks the cont
 
 My takeaway: a small fast model is very good at a narrow question where every possible answer is listed, like "which of these 57 controls is 'Sort by'?". It's poor at open questions like "what should happen next, and are we done?". So each model gets the question it's good at.
 
+### Reading answers off a page
+
+A plan can also read. `extract "the latest Python version" as $py` asks Jev which line of the page answers the question, and binds that line exactly as the page shows it. `answer "${py}"` fills a template from what was bound. Here is the same five-step plan with the code from before this round (left) and now (right):
+
+![The same plan run twice on one clock: on the left the old code stops at step 2 on python.org because no line clearly answered; on the right the new code reads "Download Python 3.15.0", reads 40300 from "40.3k forks" on GitHub, and answers in 7 seconds](docs/media/extract-before-after.webp)
+
+*Real time. The left run stopped because Jev's vote split between "Python 3.15.0" and "Download Python 3.15.0", the same version said two ways. Lines that say the same value now pool their vote. [Video](https://seahyingcong.com/browserctrl/media/extract-before-after.mp4).*
+
+A wrong answer is worse than no answer, so extraction stops whenever it isn't sure, and a stop says which lines it saw and how close they came. To measure that, [bench/extract-eval](bench/extract-eval/README.md) asks 27 questions on public pages: GitHub stars, forks, languages, licenses and release tags, Wikipedia facts, the current Python and npm versions, a price, and one question whose answer isn't on the page. Each expected answer is read independently from the page before Jev runs, and any wrong binding fails the whole run.
+
+| Browser | Correct | Wrong answer | Stopped though the answer was there | Couldn't load |
+| --- | ---: | ---: | ---: | ---: |
+| Headless Chrome, before this round | 9 | 0 | 15 | 2 |
+| Headless Chrome, now | 14 | 0 | 10 | 2 |
+| Chrome 155, normal window, fresh profile | 17 | 0 | 9 | 0 |
+| Dia, signed in | 19 | 0 | 6 | 1 |
+
+It never bound a wrong answer in any of these runs. One experiment during the work did (123000 for Node's 122,500 stars, from the rounded "123k" on a button), and it was dropped. Runs vary by about two answers either way, because Jev's votes shift a little between runs. Headless Chrome scores lowest mostly because sites treat it as a bot: npm shows it a "Just a moment..." check. A normal Chrome window and Dia score within that noise of each other, so nothing here depends on Dia. What still stops most often: GitHub star counts, release tags, and a price written as "$0 USD per user/month".
+
 ## Keeping it fair
 
 The tasks come from [Online-Mind2Web](https://github.com/OSU-NLP-Group/Online-Mind2Web), a public test of AI agents on real, live websites. I used only its hard tasks, the ones most published agents (OpenAI Operator, Claude Computer Use, Browser Use and others) get wrong.
@@ -282,7 +301,7 @@ browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 
   'click "Increase Pets"' 'click "Search"' --then items --browser chrome
 ```
 
-Each step names an element in words (or by ref or CSS selector). `do` matches exact names itself and asks Jev for the rest, waits for each result, and stops at the first step it can't do with confidence: a missing element, an unsure pick (marked ⚠), a checkbox that didn't change, an error on the page, or anything that would commit a purchase (`click!` marks a step you mean to commit). `date YYYY-MM-DD` picks a day in any calendar, and `set "<slider>" = 30-65` moves sliders, including ones inside web components. `=> "<expected>"` checks a result, `--dismiss` closes cookie banners, and `--repeat … --until …` pages through lists. Each report ends with `changed on the page:` (states that flipped, result counts, notices, controls that appeared or went); `--no-diff` drops it.
+Each step names an element in words (or by ref or CSS selector). `do` matches exact names itself and asks Jev for the rest, waits for each result, and stops at the first step it can't do with confidence: a missing element, an unsure pick (marked ⚠), a checkbox that didn't change, an error on the page, or anything that would commit a purchase (`click!` marks a step you mean to commit). `date YYYY-MM-DD` picks a day in any calendar, and `set "<slider>" = 30-65` moves sliders, including ones inside web components. `=> "<expected>"` checks a result, `--dismiss` closes cookie banners, and `--repeat … --until …` pages through lists. Each report shows `changed on the page:` (states that flipped, result counts, notices, controls that appeared or went; `--no-diff` drops it), and its last line is the outcome, `✓ done: 5/5 steps` or `✗ stopped at step 2/5: <why>`, so an agent that only reads the tail of the output still sees whether the plan worked.
 
 `find <tab> "<words>"` searches the whole page, hidden sections and web components included, and says what hides a match and which control opens it; `fields <tab>` lists every form field and its current value. `BROWSERCTRL_JEV_LOG=<file>` records each Jev call's exact input and answer, which is how the Jev card above was made ([make_jev_card.mjs](docs/media/make_jev_card.mjs)).
 
