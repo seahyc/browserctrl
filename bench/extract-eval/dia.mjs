@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 
 // Only IDs returned by this adapter's open command may be used or closed.
-export function createDiaAdapter({ execute = execFile, env = process.env } = {}) {
+export function createDiaAdapter({ execute = execFile, env = process.env, browser = 'dia', port = null } = {}) {
   const owned = new Set();
   const opening = new Set();
   const closing = new Map();
@@ -9,7 +9,7 @@ export function createDiaAdapter({ execute = execFile, env = process.env } = {})
   function command(args, { stoppedReport = false, raw = false } = {}) {
     return new Promise((resolve, reject) => {
       execute('browserctrl', args, {
-        env: { ...env, BROWSERCTRL_BROWSER: 'dia', BROWSERCTRL_AGENT_ID: 'extract-eval' },
+        env: { ...env, ...(port ? { BROWSERCTRL_PORT: String(port), BROWSERCTRL_BROWSER: '' } : { BROWSERCTRL_BROWSER: browser }), BROWSERCTRL_AGENT_ID: 'extract-eval' },
         encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 120000,
       }, (error, stdout, stderr) => {
         if (error && !(stoppedReport && error.code === 3)) return reject(new Error(stderr?.trim() || error.message));
@@ -19,7 +19,7 @@ export function createDiaAdapter({ execute = execFile, env = process.env } = {})
     });
   }
   function assertOwned(tab) {
-    if (!owned.has(tab) || stopped) throw new Error('Dia tab is not owned by this evaluation');
+    if (!owned.has(tab) || stopped) throw new Error('Tab is not owned by this evaluation');
   }
   async function closeTab(_conn, tab) {
     if (closing.has(tab)) return closing.get(tab);

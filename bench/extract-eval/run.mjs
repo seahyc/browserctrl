@@ -5,8 +5,10 @@ import path from 'node:path';
 import net from 'node:net';
 import { createDiaAdapter, installCleanupSignals } from './dia.mjs';
 const browserName = process.argv.includes('--browser') ? process.argv[process.argv.indexOf('--browser') + 1] : process.env.EXTRACT_EVAL_BROWSER || 'headless';
-if (!['headless', 'dia'].includes(browserName)) throw Error('Expected --browser headless|dia');
-const dia = browserName === 'dia' ? createDiaAdapter() : null;
+// Any browser the installed CLI can reach: a name (dia, chrome, brave, edge, arc) or port:NNNN.
+if (!/^(headless|dia|chrome|brave|edge|chromium|arc|port:\d+)$/.test(browserName)) throw Error('Expected --browser headless|dia|chrome|brave|edge|chromium|arc|port:NNNN');
+const dia = browserName === 'headless' ? null
+  : createDiaAdapter(browserName.startsWith('port:') ? { port: Number(browserName.slice(5)) } : { browser: browserName });
 let home, startHeadlessBrowser, connect, ops, runSteps, port;
 if (dia) {
   ops = dia;
