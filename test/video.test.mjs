@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { plainCaption, captionTrack, renderVideo } from '../lib/video.mjs';
+import { plainCaption, captionTrack, renderVideo, endBadge, withTraceResults } from '../lib/video.mjs';
 import { chromeBinary } from './helpers.mjs';
 
 const haveTools = chromeBinary() && spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0;
@@ -112,4 +112,64 @@ test('side by side: the shorter run freezes under a Done badge, and a GIF previe
   assert.ok(fs.statSync(gif).size > 0 && fs.statSync(gif).size < 8e6);
   for (const f of [out, gif]) fs.rmSync(f, { force: true });
   for (const d of [a, b]) fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('extract captions show the question before completion and the value afterward', () => {
+  const track = captionTrack([{ at: 3000, action: 'do: extract "latest Python version" as $py', result: 'Python 3.15.0' }], 1000, 4000);
+  assert.deepEqual(track.captions.map(c => [c.from, c.to, c.text]), [
+    [500, 2000, 'Reading: latest Python version'], [2000, 4500, 'Read “Python 3.15.0”'],
+  ]);
+  assert.equal(plainCaption('do: answer "All done"'), 'Answer: All done');
+  assert.equal(captionTrack([{ at: 3000, action: 'do: answer "${py}"', result: 'Python 3.15.0' }], 1000, 4000).captions[0].text, 'Answer: Python 3.15.0');
+});
+
+test('failures display a red stopped reason without inventing missing outcomes', () => {
+  const captions = captionTrack([{ at: 3000, action: 'do: extract "version"', status: 'FAILED', result: 'No line clearly answers it' }], 1000, 4000).captions;
+  assert.equal(captions.at(-1).text, 'Stopped: No line clearly answers it');
+  assert.equal(captions.at(-1).stopped, true);
+  assert.equal(captionTrack([{ at: 3000, action: 'do: extract "version"' }], 1000, 4000).captions[0].text, 'Reading: version');
+});
+
+test('end badges use the last do outcome, ignoring recording and read bookkeeping', () => {
+  assert.deepEqual(endBadge([{ step: 2, action: 'do: extract "version"', status: 'FAILED' }, { action: 'read', status: 'SUCCESS' }, { action: 'stop recording' }], 8284), { stopped: true, text: 'Stopped at step 2 · 0:08' });
+  assert.deepEqual(endBadge([{ step: 1, action: 'do: click "retry"', status: 'FAILED' }, { step: 2, action: 'do: click "continue"', status: 'SUCCESS' }], 61000), { stopped: false, text: 'Done in 1:01' });
+  assert.equal(endBadge([], 2000).text, 'Done in 0:02');
+});
+
+test('recording-local trace outcomes fill missing results within the recorded run', () => {
+  const steps = [{ at: 2000, action: 'do: extract "version"' }, { at: 3000, action: 'do: answer "done"', result: 'saved answer' }];
+  const results = withTraceResults(steps, [
+    { at: 500, do: 'extract "version"', extracted: { value: 'stale' } },
+    { at: 2500, do: 'extract "version"', extracted: { value: 'Python 3.15.0' } },
+    { at: 3000, do: 'answer "done"', answer: 'trace answer' },
+  ], 1000, 4000);
+  assert.equal(results[0].result, 'Python 3.15.0');
+  assert.equal(results[1].result, 'saved answer');
+  assert.equal(withTraceResults(steps, [], 1000, 4000)[0].result, undefined);
+});
+
+test('rapid extract then answer retains the read outcome in the answer caption', () => {
+  const { captions } = captionTrack([
+    { at: 2000, action: 'do: extract "forks" as number as $forks', result: '40300 from “40.3k forks”' },
+    { at: 2053, action: 'do: answer "${forks}"', result: '40300 forks' },
+  ], 0, 2200);
+  assert.equal(captions.at(-1).text, 'Read 40300 from “40.3k forks” · Answer: 40300 forks');
+  assert.ok(captions.at(-1).to - captions.at(-1).from > 1000);
+});
+
+test('ambiguous repeated trace actions do not invent an association', () => {
+  const steps = [{ at: 2000, action: 'do: extract "version"' }];
+  assert.equal(withTraceResults(steps, [
+    { at: 1500, do: 'extract "version"', extracted: { value: 'one' } },
+    { at: 2500, do: 'extract "version"', extracted: { value: 'two' } },
+  ], 1000, 4000)[0].result, undefined);
+});
+
+test('stopped badge prefers plan step numbers and supports recordings without stills', () => {
+  assert.equal(endBadge([{ step: 4, doStep: '2.1', action: 'do: extract "version"', status: 'FAILED' }], 2000).text, 'Stopped at step 2.1 · 0:02');
+  assert.equal(endBadge([{ step: null, action: 'read' }, { step: null, action: 'do: extract "version"', status: 'FAILED' }], 2000).text, 'Stopped at step 1 · 0:02');
+});
+
+test('a failure after the final do step also stops the end badge', () => {
+  assert.deepEqual(endBadge([{ step: 1, action: 'do: click "Go"', status: 'SUCCESS' }, { step: 2, action: 'read', status: 'FAILED' }, { action: 'stop recording' }], 3000), { stopped: true, text: 'Stopped at step 2 · 0:03' });
 });

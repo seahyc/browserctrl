@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
+import { stepRecordingOptions } from '../lib/step-recording.mjs';
+import * as rec from '../lib/rec.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { fakeJev, optionWith } from './fake-jev.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 let fixture, browser, conn;
@@ -187,6 +192,8 @@ t('progress callbacks receive failed step marks', async tab=>{
   assert.equal(r.done,false);
   assert.equal(seen.length,1);
   assert.equal(seen[0].stopped,true);
+  assert.equal(seen[0].stop,r.stopped.reason);
+  assert.match(stepRecordingOptions(seen[0]).extra.result,/no line clearly answers it/);
 });
 
 t('split-mass typed and text extractions bind through fake Jev', async tab => {
@@ -200,4 +207,25 @@ t('split-mass typed and text extractions bind through fake Jev', async tab => {
   assert.equal(r.bindings[0].p,.83);
   assert.equal(r.bindings[1].members.length,2);
   assert.match(formatSteps(r),/group p=0\.83/);
+});
+
+t('onStep outcomes survive still recording for extracts, answers and stops', async tab => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-outcomes-'));
+  try {
+    await rec.start(conn, tab, { out: dir });
+    const onStep = row => rec.still(conn, tab, `do: ${row.do}`, stepRecordingOptions(row));
+    const j = fakeJev({ noul: (q, id) => id === 'extract_verify' ? .9 : .04, choice: q => optionWith(q, 'SGD 180') });
+    const r = await run(tab, ['extract "price" as number currency SGD as $p', 'answer "Price ${p}"'], j, { onStep });
+    assert.equal(r.done, true, JSON.stringify(r.stopped));
+    await run(tab, ['extract "missing" as $x'], fakeJev(), { onStep });
+    await rec.stop(conn, tab);
+    const rows = rec.readJsonl(path.join(dir, 'steps.jsonl')).filter(s => s.action.startsWith('do:'));
+    assert.equal(rows[0].result, '180 from "SGD 180"');
+    assert.equal(rows[1].result, 'Price 180');
+    assert.equal(rows[2].status, 'FAILED');
+    assert.match(rows[2].result, /no line clearly answers it/);
+  } finally {
+    if (rec.get(tab)) await rec.stop(conn, tab);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
