@@ -3,8 +3,8 @@
 Phase A is implemented: plan blocks, `if` / `else`, variables and local
 comparisons, typed extraction, and `answer`. Existing one-step and inline `if`
 plans remain supported. Phase B, part 1 implements item loops, ranked top-k
-reads and batching of consecutive detail-page extractions in loop bodies. Candidate retries and
-same-page action batching remain proposals, not supported syntax.
+reads and batching of consecutive detail-page extractions in loop bodies.
+Phase B, part 2 implements bounded safe candidate search and same-page independent fills.
 
 ## Aim
 
@@ -52,8 +52,8 @@ nesting before execution where possible.
 Phase A allows at most two nested conditional blocks. It caps executed leaf
 steps at 100 and gives the run a 120-second deadline. Reaching a cap returns
 partial results and a stop, never success. Existing per-step recovery limits
-still apply. Item loops allow one level and at most 10 items; proposed
-candidate retries allow at most 3 attempts. Their bounds must be literal.
+still apply. Item loops allow one level and at most 10 items; candidate retries
+allow at most 3 attempts. Their bounds must be literal.
 
 Questions about the current snapshot go in the existing `askJev` request under
 distinct keys, beside `target`, `prev_expect` and `blocker`. A request cannot check
@@ -185,7 +185,7 @@ children by path, such as `3.then.2`. Test true, false, middle probabilities,
 missing answers, nested blocks, quoted braces, inline compatibility and failed
 pending expectations. Assert no branch action runs before the previous check.
 
-## 4. Try the next safe candidate (proposed)
+## 4. Try the next safe candidate (implemented)
 
 ```text
 try pick "a hotel under SGD 200 with free cancellation" up to 3
@@ -276,7 +276,7 @@ sources. A later final-check failure marks the answer provisional, not complete.
 Test unresolved bindings, template escapes, hostile page text and a failed final
 check. The agent still delivers the user's answer.
 
-### Ground several same-page steps in one request (proposed)
+### Ground several same-page steps in one request (implemented)
 
 ```text
 same page {
@@ -286,7 +286,7 @@ same page {
 ```
 
 Batching consecutive detail-page extraction choices in loop bodies is implemented. The action
-block above remains proposed. Keep it explicit and last in priority. For actions,
+block above is implemented. Keep it explicit. For actions,
 initially allow only independent fills on a stable form.
 Add `target.1`, `target.2` to one request, with the pending check and blocker.
 Exact targets still need no model. Before each input, verify its pinned identity,
@@ -315,7 +315,7 @@ check remains pending. Preserve partial evidence without presenting it as a
 complete comparison.
 
 Phase A and item loops use the plan parser and recursive block runner without an
-opt-in flag. Candidate retries and same-page action batching remain proposals.
+opt-in flag. Candidate retries and same-page independent fills use the same runner.
 Extend `runSteps` recursively rather than flattening loops before the page exists. Traverse blocks for cooldown checks and ref validation. Keep `runOne`
 responsible for leaf actions. Put question builders/readers in `judge.mjs`,
 judgment dispatch in `judgments.mjs`, and bindings/frames in run context.

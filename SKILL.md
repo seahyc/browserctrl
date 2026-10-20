@@ -75,6 +75,8 @@ browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 
   for scope, literal dollars and confidence rules.
 - Loop over linked details with `for top 3 { extract "price", "cancellation" }`; use
   `pick "lowest listed price" top 3 as $choices` for a ranked list without opening pages.
+- Search safe candidates with `try pick "free cancellation" up to 3 => "cancellation is free"`.
+- Ground independent form fills together with `same page { fill "First name" = "Ada"; fill "Last name" = "Lovelace" }`.
 - **Naming:** elements in words as they appear. Exact names need no model; Jev picks the rest
   and needs `TYPESAFE_API_KEY` (see [settings](references/settings.md)). A step can name
   `ref_25`, an items id `i140` or a CSS selector; those never go to Jev.

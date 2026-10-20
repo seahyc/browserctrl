@@ -455,8 +455,39 @@ one request, then sorts locally. Equal keys keep page order. Vague rankings and
 missing keys stop; records include key, evidence, eligibility probability and
 shortlist coverage. Ordinary `pick` still opens one item.
 
-Candidate retries and same-page action batching remain proposals in
-[dsl-next.md](dsl-next.md).
+`try pick "<criterion>" up to N => "<expected>"` searches at most N candidates
+from the first choice distribution. N is a literal from 1 to 3. For example:
+
+```bash
+browserctrl do <tab> 'try pick "free cancellation" up to 3 => "cancellation is free"'
+browserctrl do <tab> 'try click "Reviews tab" up to 2 => "guest reviews are shown"'
+```
+
+Linked details open in owned background tabs, preserving the source page.
+Tab-like controls require a captured previous state that can be restored and
+verified. Each candidate must meet the normal grounding minimum, with `none`
+retained in the original distribution. A settled expectation at p >= 0.75
+accepts the candidate; p <= 0.25 permits the next candidate. Uncertainty,
+exhaustion, page errors, dialogs, timeouts or failed restoration stop the plan.
+After restoration the runner re-grounds and stops if candidate identities changed.
+Retries never send commits, direct refs, item-id clicks, form submissions,
+messages, cart changes or unknown buttons. Attempt rows retain the candidate,
+check probability, restoration and rejection reason in text and JSON reports.
+
+```bash
+browserctrl do <tab> 'same page {
+  fill "First name" = "Ada";
+  fill "Last name" = "Lovelace"
+}'
+```
+
+`same page` supports independent fills on a stable form. Non-exact targets share
+one Jev request under `target.1`, `target.2` and so on, with any pending check and
+blocker. Exact targets need no model. Before each input the runner verifies the
+pinned identity, role, visibility and form. A redraw, navigation, overlay or new
+validation invalidates remaining targets. The runner re-grounds only unfinished
+fills on the current page. Completed fills are never replayed. Dependent fields,
+chips, commits and checks that depend on an earlier input cannot be batched.
 
 ### Single actions
 
