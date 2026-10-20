@@ -327,6 +327,22 @@ t('table row evidence keeps the label with its value and excludes hidden cells',
   assert.equal(r.bindings[0].raw, 'Independence: 9 August 1965');
 });
 
+t('footnote markers are not part of a table value or a joined line', async () => {
+  const tab = await open();
+  // Wikipedia's infobox markup: the reference <sup> sits right after the value.
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<table><tr><th>Hauptstadt</th><td><a href="/wiki/S">Singapur</a><sup id="r3" class="reference"><a href="#cite_note-3">[3]</a></sup></td></tr><tr><th>Einwohnerzahl</th><td>5.640.000 (2025)<sup class="reference"><a href="#cite_note-4">[4]</a></sup></td></tr></table><p><span>Note</span><sup role="doc-noteref"><a href="#fn1">1</a></sup></p>'`);
+  let offered = [];
+  const jev = fakeJev({ choice: (q, id) => { if (id === 'extract') { offered = Object.values(q.criteria); return optionWith(q, 'Hauptstadt: Singapur'); } return undefined; },
+    noul: (q, id) => id === 'extract_verify' ? .95 : undefined });
+  const r = await run(tab, ['extract "the capital" as $cap'], jev);
+  assert.ok(offered.includes('Hauptstadt: Singapur'), JSON.stringify(offered));
+  assert.ok(offered.includes('Einwohnerzahl: 5.640.000 (2025)'), JSON.stringify(offered));
+  assert.ok(!offered.some(text => typeof text === 'string' && /\[\s*[34]\s*\]|Singapur 3/.test(text)), JSON.stringify(offered));
+  assert.equal(r.done, true);
+  assert.match(r.bindings[0].value, /Singapur$/);
+  assert.doesNotMatch(r.bindings[0].value, /\[|\d/);
+});
+
 t('release links offer an observed version tag with attribute provenance', async () => {
   const tab = await open();
   await ops.evaluate(conn, tab, `document.body.innerHTML='<h2>Releases</h2><a href="/project/tags/v4.2.1">Version 4.2.1 (Current) Latest</a><a href="/project/tags/v4.2.10">Version 4.2.100</a>'`);
