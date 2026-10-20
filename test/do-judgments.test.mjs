@@ -315,3 +315,41 @@ t('rendered counter line survives a hidden duplicate in its joined DOM block', a
   assert.equal(r.bindings[0].value, 3300);
   assert.equal(r.bindings[0].p, .83);
 });
+
+t('table row evidence keeps the label with its value and excludes hidden cells', async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<table><tr><th>Independence</th><td><span>9 August</span> <b>1965</b></td><td style="display:none">1 January 2000</td></tr></table>'`);
+  const jev = fakeJev({ choice: (q, id) => id === 'extract' ? optionWith(q, 'Independence: 9 August 1965') : id === 'extract_value' ? optionWith(q, '9 August 1965') : undefined,
+    noul: (q, id) => id === 'extract_verify' ? .95 : undefined });
+  const r = await run(tab, ['extract "independence date" as date as $date'], jev);
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].value, '1965-08-09');
+  assert.equal(r.bindings[0].raw, 'Independence: 9 August 1965');
+});
+
+t('release links offer an observed version tag with attribute provenance', async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<h2>Releases</h2><a href="/project/tags/v4.2.1">Version 4.2.1 (Current) Latest</a><a href="/project/tags/v4.2.10">Version 4.2.100</a>'`);
+  const r = await run(tab, ['extract "latest release tag" as $tag'], fakeJev({ choice: q => { assert.ok(!Object.values(q.criteria).includes('Releases: v4.2.10')); return optionWith(q, 'Releases: v4.2.1'); }, noul: (q, id) => id === 'extract_verify' ? .95 : undefined }));
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].value, 'v4.2.1');
+  assert.equal(r.bindings[0].source_attribute, 'href');
+});
+
+t('table section headings rank the following labelled rows', async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<table><tr><th colspan="2">Population</th></tr><tr><th>2025 estimate</th><td>6,110,200</td></tr></table>'`);
+  const jev = fakeJev({ choice: (q, id) => id === 'extract' ? optionWith(q, 'Population: 2025 estimate: 6,110,200') : id === 'extract_value' ? optionWith(q, '6,110,200') : undefined,
+    noul: (q, id) => id === 'extract_verify' ? .95 : undefined });
+  const r = await run(tab, ['extract "total population" as number as $population'], jev);
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].value, 6110200);
+});
+
+t('numeric price headings retain their preceding plan heading', async () => {
+  const tab = await open();
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<h2>Free</h2><p>For individuals</p><h3>$<span>0</span> USD per user/month</h3>'`);
+  const r = await run(tab, ['extract "monthly per user price of the Free plan" as number as $price'], fakeJev({ choice: q => Object.entries(q.criteria).find(([, text]) => typeof text === 'string' && text.startsWith('Free:') && text.endsWith('$ 0 USD per user/month'))?.[0] || 'none', noul: (q, id) => id === 'extract_verify' ? .95 : undefined }));
+  assert.equal(r.done, true);
+  assert.equal(r.bindings[0].value, 0);
+});
