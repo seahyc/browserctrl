@@ -959,7 +959,7 @@ const main = async () => {
         const lines = positional.slice(2);
         if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text] [--open N --grep "label|label"]');
         const recording = rec.get(targetId);
-        const r = await runSteps(conn, targetId, lines, { show: show.showing(flags), noNotes: Boolean(flags['no-notes']),
+        const r = await runSteps(conn, targetId, lines, { onWarning: warning => console.error(`⚠ ${warning}`), show: show.showing(flags), noNotes: Boolean(flags['no-notes']),
           onStep: recording ? row => rec.still(conn, targetId, `do: ${row.do}`, { status: row.stopped ? 'FAILED' : row.skipped ? 'SKIPPED' : 'SUCCESS',
             // A step Jev resolved: what it picked and how sure it was, for the video's captions.
             extra: /jev p=([\d.]+)/.test(row.how || '') && row.target ? { jev: { target: row.target, p: Number(row.how.match(/jev p=([\d.]+)/)[1]) } } : null }) : undefined,
@@ -971,7 +971,7 @@ const main = async () => {
         });
         if (r.refsToken) readtokens.remember(port, targetId, r.refsToken);
         if (!r.done) process.exitCode = 3;
-        return out(flags.json ? r : formatSteps(r));
+        return out(flags.json ? r : formatSteps({ ...r, warnings: [] }));
       }
       case 'items': {
         await waitToRead(conn, targetId, flags);

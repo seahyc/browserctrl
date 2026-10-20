@@ -46,7 +46,7 @@ route is the one with the fewest calls. Choose by what the task needs:
 
 Fewer, cheaper turns:
 
-- Every `do` and `read` report ends with `url params`: the address parameters this page
+- `do` and `read` reports include `url params`: the address parameters this page
   uses (its own query, GET forms, sort/filter/page links), and each step shows how it
   changed the address (`url: +state=closed`). Use them to jump straight to a filtered view
   with a `nav` step instead of clicking through filters again.

@@ -39,6 +39,17 @@ First `browserctrl site <site or URL>`: its recipes (the site's own API) and flo
 - Options that change after each pick (chips, counts): one pick per `do`.
 - "Find one that...": look for a filter or sort first.
 
+## Use do well
+
+- Send the whole foreseeable sequence in one multi-step `do`.
+- Read the full report and its last line: `✓ done: 3/3 steps` or
+  `✗ stopped at step 2/3: <reason>`. Do not hide the report with `tail`.
+- No sleep or re-read after `do`: it settles and reports changes.
+- Target visible names in the plan instead of grepping refs from `read`.
+  Refs are for single commands.
+- Without a TypeSafe key, an acted step's expectation is marked unchecked and
+  the plan continues with `unsure=true`. Non-exact targets still stop before acting.
+
 ## Plan with `do`
 
 ```bash
@@ -47,7 +58,7 @@ browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 
   --dismiss "cookie banner" --then items
 ```
 
-- **Steps:** `click`, `fill <el> = <value>`, `select <el> = <option>`, `hover`, `key Enter`,
+- **Steps:** `click`, `check <el>` (ensure a checkbox is on), `fill <el> = <value>`, `select <el> = <option>`, `hover`, `key Enter`,
   `type "<text>"`, `scroll down|up`, `nav <url>`, `wait <ms>`, `expect <what shows>`,
   `date YYYY-MM-DD` (any calendar; opens the picker if needed, pages months, confirms the
   pick), `set <slider> = <value>` or `= <min>-<max>`. `optional click "Close"` skips when
