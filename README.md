@@ -132,16 +132,23 @@ A plan can also read. `extract "the latest Python version" as $py` asks Jev whic
 
 *Real time. The left run stopped because Jev's vote split between "Python 3.15.0" and "Download Python 3.15.0", the same version said two ways. Lines that say the same value now pool their vote. [Video](https://seahyingcong.com/browserctrl/media/extract-before-after.mp4).*
 
-A wrong answer is worse than no answer, so extraction stops whenever it isn't sure, and a stop says which lines it saw and how close they came. To measure that, [bench/extract-eval](bench/extract-eval/README.md) asks 27 questions on public pages: GitHub stars, forks, languages, licenses and release tags, Wikipedia facts, the current Python and npm versions, a price, and one question whose answer isn't on the page. Each expected answer is read independently from the page before Jev runs, and any wrong binding fails the whole run.
+A wrong answer is worse than no answer, so extraction stops whenever it isn't sure, and a stop says which lines it saw and how close they came. To measure that, [bench/extract-eval](bench/extract-eval/README.md) asks 37 questions on public pages: GitHub stars, forks, languages, licenses and release tags, Wikipedia facts in English, German, French, Japanese and Chinese, the current Python and npm versions, a price, questions asked in Chinese and Spanish, paraphrases, and two questions whose answer isn't on the page. Each expected answer is read independently from the page before Jev runs, and any wrong binding fails the whole run.
 
-| Browser | Correct | Wrong answer | Stopped though the answer was there | Couldn't load |
+The page doesn't have to be in the question's language. Here the question is in English and the page is German Wikipedia:
+
+![The same plan on German Wikipedia's Singapore page, run twice on one clock: on the left the older code reads the population with the footnote marker still attached and then stops on the currency; on the right the current code reads "Einwohnerzahl: 5.640.000 (2025)" and "Singapur-Dollar" and answers in 5 seconds](docs/media/xlang-before-after.webp)
+
+*Real time. Table and infobox rows now get a share of the lines offered to Jev whatever the question's language, numbers and dates are read in the page's own format (5.640.000, 1965年8月9日, 9. August 1965), and footnote markers stay out of values. [Video](https://seahyingcong.com/browserctrl/media/xlang-before-after.mp4).*
+
+| 37 cases | Correct | Wrong answer | Stopped though the answer was there | Couldn't load |
 | --- | ---: | ---: | ---: | ---: |
-| Headless Chrome, before this round | 9 | 0 | 15 | 2 |
-| Headless Chrome, now | 14 | 0 | 10 | 2 |
-| Chrome 155, normal window, fresh profile | 17 | 0 | 9 | 0 |
-| Dia, signed in | 19 | 0 | 6 | 1 |
+| Headless Chrome, before the cross-language work | 17 | 0 | 15 | 3 |
+| Headless Chrome, now | 27 | 0 | 6 | 2 |
+| Dia, signed in, now | 27 | 0 | 7 | 1 |
 
-It never bound a wrong answer in any of these runs. One experiment during the work did (123000 for Node's 122,500 stars, from the rounded "123k" on a button), and it was dropped. Runs vary by about two answers either way, because Jev's votes shift a little between runs. Headless Chrome scores lowest mostly because sites treat it as a bot: npm shows it a "Just a moment..." check. A normal Chrome window and Dia score within that noise of each other, so nothing here depends on Dia. What still stops most often: GitHub star counts, release tags, and a price written as "$0 USD per user/month".
+Earlier, on the first 27 of these cases, a normal Chrome window with a fresh profile scored 17 against Dia's 19, within the run-to-run noise of about two answers, so nothing here depends on Dia. Headless Chrome is treated as a bot by some sites: npm shows it a "Just a moment..." check.
+
+None of the reported runs bound a wrong answer. Experiments during the work bound four, and were changed before they shipped: Node's 122,500 stars read as 123000 from the rounded "123k" on a button, and three answers that carried extra text along with the right value ("Capitale: Paris 48° 52′ N…", "v1.64.1 Latest Oct 14", and a Node release title with its date). What still stops most often: some GitHub star counts, Singapore's founding and independence dates, and a price written as "$0 USD per user/month".
 
 ## Keeping it fair
 
@@ -301,7 +308,7 @@ browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 
   'click "Increase Pets"' 'click "Search"' --then items --browser chrome
 ```
 
-Each step names an element in words (or by ref or CSS selector). `do` matches exact names itself and asks Jev for the rest, waits for each result, and stops at the first step it can't do with confidence: a missing element, an unsure pick (marked ⚠), a checkbox that didn't change, an error on the page, or anything that would commit a purchase (`click!` marks a step you mean to commit). `date YYYY-MM-DD` picks a day in any calendar, and `set "<slider>" = 30-65` moves sliders, including ones inside web components. `=> "<expected>"` checks a result, `--dismiss` closes cookie banners, and `--repeat … --until …` pages through lists. Each report shows `changed on the page:` (states that flipped, result counts, notices, controls that appeared or went; `--no-diff` drops it), and its last line is the outcome, `✓ done: 5/5 steps` or `✗ stopped at step 2/5: <why>`, so an agent that only reads the tail of the output still sees whether the plan worked.
+Each step names an element in words (or by ref or CSS selector). `do` matches exact names itself and asks Jev for the rest, waits for each result, and stops at the first step it can't do with confidence: a missing element, an unsure pick (marked ⚠), a checkbox that didn't change, an error on the page, or anything that would commit a purchase (`click!` marks a step you mean to commit). `date YYYY-MM-DD` picks a day in any calendar, and `set "<slider>" = 30-65` moves sliders, including ones inside web components. `=> "<expected>"` checks a result, `--dismiss` closes cookie banners, and `--repeat … --until …` pages through lists. Plans can also branch and loop: `if "<page shows…>" { … } else { … }`, `for top 3 { extract "price"; extract "cancellation" }` and `each "rated 4 or more" up to 3 { … }` open each list item in their own background tab and close it after, `pick "lowest price" top 3 as $choices` ranks without opening, `try pick "<criterion>" up to 3 => "<expected>"` moves to the next candidate when the check fails (never for a commit, a cart change or a message), and `same page { fill …; fill … }` grounds a form's fills in one request. Each report shows `changed on the page:` (states that flipped, result counts, notices, controls that appeared or went; `--no-diff` drops it), and its last line is the outcome, `✓ done: 5/5 steps` or `✗ stopped at step 2/5: <why>`, so an agent that only reads the tail of the output still sees whether the plan worked.
 
 `find <tab> "<words>"` searches the whole page, hidden sections and web components included, and says what hides a match and which control opens it; `fields <tab>` lists every form field and its current value. `BROWSERCTRL_JEV_LOG=<file>` records each Jev call's exact input and answer, which is how the Jev card above was made ([make_jev_card.mjs](docs/media/make_jev_card.mjs)).
 
