@@ -4,6 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { createDiaAdapter, installCleanupSignals } from './dia.mjs';
+const setName = process.argv.includes('--set') ? process.argv[process.argv.indexOf('--set') + 1] : 'dev';
+if (!['dev', 'heldout', 'all'].includes(setName)) throw Error('Expected --set heldout|dev|all');
+const cases = (setName === 'all' ? ['cases', 'heldout'] : [setName === 'dev' ? 'cases' : 'heldout'])
+  .flatMap(name => JSON.parse(fs.readFileSync(new URL(`./${name}.json`, import.meta.url))));
 const browserName = process.argv.includes('--browser') ? process.argv[process.argv.indexOf('--browser') + 1] : process.env.EXTRACT_EVAL_BROWSER || 'headless';
 // Any browser the installed CLI can reach: a name (dia, chrome, brave, edge, arc) or port:NNNN.
 if (!/^(headless|dia|chrome|brave|edge|chromium|arc|port:\d+)$/.test(browserName)) throw Error('Expected --browser headless|dia|chrome|brave|edge|chromium|arc|port:NNNN');
@@ -41,7 +45,6 @@ async function cleanup() {
   return cleaning;
 }
 installCleanupSignals(cleanup, { onSignal: () => { stopping = true; } });
-const cases = JSON.parse(fs.readFileSync(new URL('./cases.json', import.meta.url)));
 const results = [];
 const normalize = s => String(s).replace(/\s+/g, ' ').trim();
 function number(s, locale) { const m = String(s).replace(locale === 'de' ? /[.\s\u00a0\u202f]/g : /,/g, '').match(/^\s*([\d.]+)\s*([kmb])?\s*$/i); return m ? Number(m[1]) * ({ k: 1e3, m: 1e6, b: 1e9 }[m[2]?.toLowerCase()] || 1) : null; }

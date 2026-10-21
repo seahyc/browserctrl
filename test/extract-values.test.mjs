@@ -104,7 +104,7 @@ test('competing embedded lines need independent follow-ups before their masses a
 
 test('different rounded counts with the same label must stop', async () => {
   const { ctx } = setup();
-  const part = { spans: [{ text: '123k stars', i: 0 }, { text: '122.5k stars', i: 1 }] };
+  const part = { spans: [{ text: '123k stars', i: 0 }, { text: '122.4k stars', i: 1 }] };
   const selected = { type: 'choice', choice: 'l1', probabilities: { l1: .8, l2: .1, none: .1 } };
   const result = await settleJudgment(ctx, step, {}, part, { extract: selected });
   assert.match(result.result.stop.reason, /conflicting labelled counts/);

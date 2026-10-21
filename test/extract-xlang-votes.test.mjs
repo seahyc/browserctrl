@@ -114,3 +114,30 @@ test('precision never upgrades from a differently labelled quantity with the sam
   assert.equal((await settle(s)).result.stop, undefined);
   assert.equal(s.ctx.bindings.get('x').value, 40000);
 });
+
+test('version titles pool with the observed href identifier and emit only that identifier', async () => {
+  const s = setup(['v7.8.9', 'June 12, 2031, Version 7.8.9 (Stable) Latest'], { l1: .35, l2: .25, none: .4 });
+  s.part.spans[0].source_attribute = 'href';
+  s.step.target = 'the latest release tag';
+  assert.equal((await settle(s)).result.stop, undefined);
+  assert.equal(s.ctx.bindings.get('x').value, 'v7.8.9');
+  assert.equal(s.ctx.bindings.get('x').source_attribute, 'href');
+  const conflict = setup(['v7.8.9', 'Version 8.0.0'], { l1: .35, l2: .25, none: .4 });
+  conflict.part.spans[0].source_attribute = 'href';
+  assert.ok((await settle(conflict)).result.stop);
+});
+
+test('a confident version title resolves to its single observed identifier', async () => {
+  const s = setup(['Version 7.8.9, published June 12, 2031'], { l1: .95, none: .05 });
+  s.step.target = 'the published version';
+  assert.equal((await settle(s)).result.stop, undefined);
+  assert.equal(s.ctx.bindings.get('x').value, '7.8.9');
+});
+
+test('a confident named percentage preserves the direct text path without extra judgments', async () => {
+  const s = setup(['JavaScript 100%'], { l1: .95, none: .05 });
+  s.step.target = 'the primary language';
+  assert.equal((await settle(s)).result.stop, undefined);
+  assert.equal(s.ctx.bindings.get('x').value, 'JavaScript 100%');
+  assert.equal(s.calls.length, 0);
+});

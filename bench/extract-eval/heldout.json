@@ -1,0 +1,240 @@
+[
+  {
+    "id": "is-relative-stars",
+    "url": "https://github.com/sindresorhus/is-relative",
+    "family": "stars",
+    "step": "extract \"the number of stars\" as number as $value",
+    "expect": {
+      "selector": "span[class*=\"socialStat\"]:has(svg.octicon-star) strong",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "is-relative-forks",
+    "url": "https://github.com/sindresorhus/is-relative",
+    "family": "forks",
+    "step": "extract \"the number of forks\" as number as $value",
+    "expect": {
+      "selector": "a[href=\"/sindresorhus/is-relative/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "p-limit-stars",
+    "url": "https://github.com/sindresorhus/p-limit",
+    "family": "stars",
+    "step": "extract \"the number of stars\" as number as $value",
+    "expect": {
+      "selector": "span[class*=\"socialStat\"]:has(svg.octicon-star) strong",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "p-limit-forks",
+    "url": "https://github.com/sindresorhus/p-limit",
+    "family": "forks",
+    "step": "extract \"the number of forks\" as number as $value",
+    "expect": {
+      "selector": "a[href=\"/sindresorhus/p-limit/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "react-stars",
+    "url": "https://github.com/facebook/react",
+    "family": "stars",
+    "step": "extract \"the number of stars\" as number as $value",
+    "expect": {
+      "selector": "span[class*=\"socialStat\"]:has(svg.octicon-star) strong",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "react-forks",
+    "url": "https://github.com/facebook/react",
+    "family": "forks",
+    "step": "extract \"the number of forks\" as number as $value",
+    "expect": {
+      "selector": "a[href=\"/facebook/react/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "forgejo-stars",
+    "url": "https://codeberg.org/forgejo/forgejo",
+    "family": "stars",
+    "step": "extract \"the number of stars\" as number as $value",
+    "expect": {
+      "selector": "a[href$=\"/stars\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "forgejo-forks",
+    "url": "https://codeberg.org/forgejo/forgejo",
+    "family": "forks",
+    "step": "extract \"the number of forks\" as number as $value",
+    "expect": {
+      "selector": "a[href$=\"/forks\"]",
+      "capture": "([\\d,.]+\\s*[kKmM]?)",
+      "number": true
+    }
+  },
+  {
+    "id": "india-independence",
+    "url": "https://en.wikipedia.org/wiki/India",
+    "family": "date",
+    "step": "extract \"the independence date from the United Kingdom\" as date as $value",
+    "expect": {
+      "exact": "1947-08-15"
+    }
+  },
+  {
+    "id": "pakistan-independence",
+    "url": "https://en.wikipedia.org/wiki/Pakistan",
+    "family": "date",
+    "step": "extract \"the independence date from the United Kingdom\" as date as $value",
+    "expect": {
+      "exact": "1947-08-14"
+    }
+  },
+  {
+    "id": "canada-confederation",
+    "url": "https://en.wikipedia.org/wiki/Canada",
+    "family": "date",
+    "step": "extract \"the date of Confederation\" as date as $value",
+    "expect": {
+      "exact": "1867-07-01"
+    }
+  },
+  {
+    "id": "australia-federation",
+    "url": "https://en.wikipedia.org/wiki/Australia",
+    "family": "date",
+    "step": "extract \"the date of Federation\" as date as $value",
+    "expect": {
+      "exact": "1901-01-01"
+    }
+  },
+  {
+    "id": "fr-india-independence",
+    "url": "https://fr.wikipedia.org/wiki/Inde",
+    "family": "date",
+    "step": "extract \"la date de l'indépendance de l'Inde\" as date as $value",
+    "expect": {
+      "exact": "1947-08-15"
+    }
+  },
+  {
+    "id": "de-australia-federation",
+    "url": "https://de.wikipedia.org/wiki/Australien",
+    "family": "date",
+    "step": "extract \"das Datum der Staatsgründung\" as date as $value",
+    "expect": {
+      "exact": "1901-01-01"
+    }
+  },
+  {
+    "id": "vercel-free",
+    "url": "https://vercel.com/pricing",
+    "family": "price",
+    "step": "extract \"the monthly price of the Hobby plan\" as number as $value",
+    "expect": {
+      "exact": 0
+    }
+  },
+  {
+    "id": "supabase-free",
+    "url": "https://supabase.com/pricing",
+    "family": "price",
+    "step": "extract \"the monthly price of the Free plan\" as number as $value",
+    "expect": {
+      "exact": 0
+    }
+  },
+  {
+    "id": "netlify-free",
+    "url": "https://www.netlify.com/pricing/",
+    "family": "price",
+    "step": "extract \"the monthly price of the Free plan\" as number as $value",
+    "expect": {
+      "exact": 0
+    }
+  },
+  {
+    "id": "cli-release",
+    "url": "https://github.com/cli/cli",
+    "family": "release",
+    "step": "extract \"the latest release tag\" as $value",
+    "expect": {
+      "selector": "a[href*=\"/releases/tag/\"]",
+      "attribute": "href",
+      "capture": "/releases/tag/([^/]+)$",
+      "kind": "release"
+    }
+  },
+  {
+    "id": "uv-release",
+    "url": "https://github.com/astral-sh/uv",
+    "family": "release",
+    "step": "extract \"the latest release tag\" as $value",
+    "expect": {
+      "selector": "a[href*=\"/releases/tag/\"]",
+      "attribute": "href",
+      "capture": "/releases/tag/([^/]+)$",
+      "kind": "release"
+    }
+  },
+  {
+    "id": "requests-license",
+    "url": "https://pypi.org/project/requests/",
+    "family": "license",
+    "step": "extract \"the license\" as $value",
+    "expect": {
+      "selector": ".sidebar-section p",
+      "label": "^License:",
+      "capture": "^License:\\s*(.+)$",
+      "kind": "license"
+    }
+  },
+  {
+    "id": "flask-license",
+    "url": "https://pypi.org/project/flask/",
+    "family": "license",
+    "step": "extract \"the license\" as $value",
+    "expect": {
+      "selector": ".sidebar-section p",
+      "label": "^License:",
+      "capture": "^License:\\s*(.+)$",
+      "kind": "license"
+    }
+  },
+  {
+    "id": "absent-iana",
+    "url": "https://www.iana.org/domains/reserved",
+    "family": "absent",
+    "step": "extract \"the monthly price of the Enterprise plan\" as number as $value",
+    "expect": "stop"
+  },
+  {
+    "id": "absent-rfc",
+    "url": "https://www.rfc-editor.org/rfc/rfc8259",
+    "family": "absent",
+    "step": "extract \"the number of repository stars\" as number as $value",
+    "expect": "stop"
+  },
+  {
+    "id": "absent-httpbin",
+    "url": "https://httpbin.org/",
+    "family": "absent",
+    "step": "extract \"the independence date from the United Kingdom\" as date as $value",
+    "expect": "stop"
+  }
+]

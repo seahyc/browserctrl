@@ -80,7 +80,7 @@
     "url": "https://github.com/seahyc/browserctrl",
     "step": "extract \"the number of stars\" as number as $value",
     "expect": {
-      "selector": "span[class*=\"socialStat\"]:has(svg.octicon-star) strong",
+      "selector": "span[class*=\"socialStat\"]:has(svg.octicon-star) strong, a[href=\"/seahyc/browserctrl/stargazers\"]",
       "capture": "([\\d,.]+\\s*[kKmM]?)",
       "number": true
     }

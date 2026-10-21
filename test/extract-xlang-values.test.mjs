@@ -39,8 +39,9 @@ test('structured and heading facts survive a different question language within 
 test('typed digit boost works independently of question words', () => {
   const spans = Array.from({ length: 1000 }, (_, i) => `unrelated prose ${String.fromCharCode(0x4e00 + i)}`);
   spans[811] = '1405万';
+  spans[812] = '2007-03-14';
   assert.ok(shortlistSpans(spans, '東京都の人口', 24000, new Set(), { type: 'number' }).some(s => s.i === 811));
-  assert.ok(shortlistSpans(spans, '独立日', 24000, new Set(), { type: 'date' }).some(s => s.i === 811));
+  assert.ok(shortlistSpans(spans, '独立日', 24000, new Set(), { type: 'date' }).some(s => s.i === 812));
 });
 
 test('embedded CJK facts retain typed value boundaries without spaces', () => {
