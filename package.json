@@ -14,7 +14,8 @@
     "cli"
   ],
   "bin": {
-    "browserctrl": "bin/browserctrl.mjs"
+    "browserctrl": "bin/browserctrl.mjs",
+    "browserctrl-vault": "bin/browserctrl-vault.mjs"
   },
   "scripts": {
     "test": "node --import ./test/helpers.mjs --test --test-concurrency=1 test/*.test.mjs",

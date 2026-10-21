@@ -207,7 +207,7 @@ test('a browser paused longer than the former health deadline keeps its pooled c
 });
 
 
-test('a live legacy daemon is upgraded using its IPC status without a browser probe', posixOptions, async t => {
+test('a live legacy daemon is left running until an owner coordinates safe upgrade', posixOptions, async t => {
   const { port } = await fixture(t);
   const socketPath = SOCK(port);
   const legacy = spawn(process.execPath, ['--input-type=module', '-e', `
@@ -235,8 +235,8 @@ test('a live legacy daemon is upgraded using its IPC status without a browser pr
   t.after(()=>legacy.kill('SIGTERM'));
   let output=''; legacy.stdout.on('data',data=>output+=data);
   await new Promise(resolve=>legacy.stdout.once('data',resolve));
-  const client=await connect(port,{owner:'handover-test',label:'Handover test'}); t.after(()=>client.close());
-  assert.notEqual((await client.status()).pid,legacy.pid);
-  assert.match(output,/stopped/);
+  await assert.rejects(connect(port,{owner:'handover-test',label:'Handover test'}),/does not support a safe cooperative upgrade/);
+  assert.equal(legacy.exitCode,null);
+  assert.doesNotMatch(output,/stopped/);
   assert.doesNotMatch(output,/unexpected browser health/);
 });

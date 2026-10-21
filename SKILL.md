@@ -87,6 +87,15 @@ browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 
 
 All options: [`do` reference](references/reading-and-acting.md#plan-several-steps-in-one-call-with-do).
 
+## Vault credentials
+
+For a password or authenticator code, use agent-vault's approved credential-use
+flow. Never fetch values into agent context or enter them through ordinary
+`fill`, `type`, `do` or JavaScript. Before preparing a protected login, read
+[vault entry](references/vault-entry.md) for destination binding, stable owner
+coordination, supported forms and owner recovery. A tab claim is not vault
+permission, and lease expiry does not log out the website.
+
 ## When something goes wrong
 
 - **A JavaScript dialog:** `dialog <tab> --accept` (or `--dismiss`).
@@ -114,4 +123,5 @@ All options: [`do` reference](references/reading-and-acting.md#plan-several-step
 | [connecting.md](references/connecting.md) | browsers, launching, Safari, diagnostics |
 | [activity.md](references/activity.md), [dia-native.md](references/dia-native.md) | agent activity, Dia dormant tabs |
 | [architecture.md](references/architecture.md) | CLI, daemon, Python |
+| [vault-entry.md](references/vault-entry.md) | protected password/TOTP entry through agent-vault and recovery |
 | [settings.md](references/settings.md) | every `BROWSERCTRL_*` setting, folders, Jev key |
