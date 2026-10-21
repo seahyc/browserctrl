@@ -38,7 +38,6 @@ import * as trace from '../lib/trace.mjs';
 import * as notes from '../lib/notes.mjs';
 import * as site from '../lib/site.mjs';
 import * as rec from '../lib/rec.mjs';
-import { stepRecordingOptions } from '../lib/step-recording.mjs';
 import * as readtokens from '../lib/readtokens.mjs';
 import * as finder from '../lib/find.mjs';
 import * as recording from '../lib/recording.mjs';
@@ -959,9 +958,7 @@ const main = async () => {
       case 'do': {
         const lines = positional.slice(2);
         if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text] [--open N --grep "label|label"]');
-        const recording = rec.get(targetId);
         const r = await runSteps(conn, targetId, lines, { onWarning: warning => console.error(`⚠ ${warning}`), show: show.showing(flags), noNotes: Boolean(flags['no-notes']),
-          onStep: recording ? row => rec.still(conn, targetId, `do: ${row.do}`, stepRecordingOptions(row)) : undefined,
           then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
           force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
           dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,

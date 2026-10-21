@@ -87,3 +87,5 @@ default (`--gif-speed`) and kept under 8 MB; the MP4 stays real-time. Needs ffmp
 `node bench/om2w/export.mjs <recording dir> <out dir> --task-id ID --task "…" [--answer "…"]`,
 which lives with the benchmark and is not part of the CLI. Recordings go to the data folder
 (`browserctrl where`), capped at 1 GB in total. The bench harness records every run into `bench/runs/<run>/rec/`.
+
+When a recorded `do` plan opens its own background tabs for item loops or candidate attempts, their DOM events and stills are saved as child tracks in the same recording. Replay and video follow the active tab, with an item or attempt label and host in the header, then return to the source. Child recording stops before a tab closes and when the plan ends; unrelated tabs are never recorded.
