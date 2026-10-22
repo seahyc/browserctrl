@@ -152,3 +152,20 @@ t('a closed details link with phantom geometry is revealed before grounding', as
  assert.match(r.steps[0].how,/opened "Education" first/);
  await ops.closeTab(conn,id);
 });
+t('a screen-reader-only copy of a link is not the target; the visible link with that text is clicked', async () => {
+  const id = await open('sr-only-link.html');
+  const r = await runSteps(conn, id, ['click "Alley Creek Camp"'], { jev: noJev, noNotes: true });
+  console.log(formatSteps(r));
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.equal(await ops.evaluate(conn, id, 'document.title'), 'card clicked');
+  assert.doesNotMatch(r.steps[0].how, /jev p=/);
+  await ops.closeTab(conn, id);
+});
+t('a body with overflow-x hidden does not clip what the viewport shows', async () => {
+  const id = await open('body-overflow.html');
+  const r = await runSteps(conn, id, ['click "SHOW RATES"'], { jev: noJev, noNotes: true });
+  console.log(formatSteps(r));
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.equal(await ops.evaluate(conn, id, 'document.title'), 'rates shown');
+  await ops.closeTab(conn, id);
+});

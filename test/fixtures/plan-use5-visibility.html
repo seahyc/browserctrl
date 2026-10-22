@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><title>Visibility patterns</title>
+<style>
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.inset{position:absolute;clip-path:inset(50%)}
+.legacy{position:absolute;clip:rect(0px,0px,0px,0px)}
+.thin{width:1.5px;height:24px;overflow:hidden}
+.icon{width:16px;height:16px;overflow:hidden}
+</style>
+<div class="sr"><a id="sr" href="#">Hidden sr link</a></div>
+<a class="inset" id="inset" href="#">Hidden inset link</a>
+<a class="legacy" id="legacy" href="#">Hidden legacy link</a>
+<div class="thin"><a id="thin" href="#">Visible thin link</a></div>
+<div class="icon"><a id="icon" href="#">Visible icon link</a></div>
+<a id="visible" href="#">Visible ordinary link</a>
+<div style="position:absolute;width:1px;height:1px;overflow:hidden"><a id="overflow-sr" href="#">Hidden overflow sr link</a></div>
+<div aria-label="Collapsed destinations" style="width:0;height:0;overflow:hidden"><button id="collapsed">Collapsed choice</button></div>
+<div id="many"></div>
+<script>
+if(location.search.includes('benchmark')) {
+ document.body.innerHTML='<main><section><div id="many"></div></section></main>';
+ const root=document.querySelector('#many');
+ root.innerHTML=Array.from({length:5000},(_,i)=>'<div><span><a href="#'+i+'">Link '+i+'</a></span></div>').join('');
+}
+</script>

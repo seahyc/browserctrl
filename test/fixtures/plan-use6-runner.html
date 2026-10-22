@@ -1,0 +1,11 @@
+<!doctype html><title>Runner races</title><body>
+<button id="next">Next Available</button>
+<div id="grid" hidden><button aria-label="2 Mar 2027 - Site E101 is available">2</button></div>
+<script>
+next.onclick=()=>{grid.hidden=false};
+if(location.search.includes('blocked')){document.title='Access denied';document.body.innerHTML='<h1>Access denied</h1>'}
+if(location.search.includes('consent')) setTimeout(()=>{
+ const host=document.createElement('div');document.body.append(host);
+ host.attachShadow({mode:'open'}).innerHTML='<div role="dialog" aria-modal="true" style="position:fixed;inset:0;background:white;z-index:100"><button onclick="this.parentNode.remove()">Accept all cookies</button></div>';
+},1000);
+</script>

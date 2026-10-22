@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>Address selection</title>
+<label>From address <input id="from" role="textbox" aria-controls="addresses" value="10019"></label>
+<label>To address <input id="to" value="90028"></label>
+<ul role="listbox" id="addresses"><li role="option" id="address" aria-selected="false">New York, NY 10019, USA</li></ul>
+<button id="submit">Continue</button>
+<script>
+const mode = new URLSearchParams(location.search).get('mode');
+if (mode === 'combobox') from.setAttribute('role', 'combobox');
+if (mode === 'renamed-city') { from.value='90028'; address.textContent='Hollywood, CA 90028, USA'; }
+if (mode === 'words' || mode === 'wrong-words') { from.value='New'; address.textContent='New York, NY, USA'; }
+address.onclick=()=>{
+  if(mode === 'wrong-owner') to.value='New York, 10019, United States';
+  else from.value=mode === 'unrelated'?'New Delhi, 110001, India':mode === 'wrong-number'?'New York, 10020, United States':mode === 'partial-number'?'New York, 100190, United States':mode === 'renamed-city'?'Los Angeles, 90028, United States':mode === 'wrong-words'?'New Delhi, USA':mode === 'words'?'New York, United States':'New York, 10019, United States';
+  addresses.remove();
+};
+window.submits=0; submit.onclick=()=>submits++;
+</script>

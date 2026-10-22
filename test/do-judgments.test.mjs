@@ -121,7 +121,7 @@ t('none diagnostics show probability and coverage without zero candidates', asyn
   const jev = fakeJev({choice: () => ({choice:'none', probabilities:{none:.97}})});
   const r = await run(tab, ['extract "primary language" as $lang'], jev);
   assert.match(r.stopped.reason, /Jev: no offered line answers \(none p=0\.97\); \d+ of 500 lines offered/);
-  assert.equal(jev.calls.filter(c => c.questions.extract).length, 3, 'two evidence passes plus one young-page retry');
+  assert.equal(jev.calls.filter(c => c.questions.extract).length, 2, 'two evidence passes, with no retry on unchanged loaded content');
 });
 
 t('extraction diagnostics print two decimal probabilities', async () => {
@@ -154,7 +154,7 @@ t('extract asks once more for late content after an initial none', async () => {
     asks++;
     if (asks === 1) {
       // Schedule from the first ask so initial plan readiness cannot consume the delay.
-      void ops.evaluate(conn, tab, `setTimeout(() => { document.body.innerHTML='<h2>Languages</h2><p>JavaScript 100%</p>'; }, 1500)`);
+      void ops.evaluate(conn, tab, `Object.defineProperty(document, 'readyState', { configurable: true, value: 'loading' }); setTimeout(() => { document.body.innerHTML='<h2>Languages</h2><p>JavaScript 100%</p>'; delete document.readyState; }, 1500)`);
       return 'none';
     }
     return optionWith(q, 'JavaScript 100%');
@@ -177,14 +177,14 @@ t('old quiet page with no answer does not wait or ask again', async () => {
   assert.ok(Date.now() - start < 3000);
 });
 
-t('pick retries a young empty list after none', async () => {
+t('pick retries a loading empty list after none', async () => {
   const tab = await open();
   await ops.evaluate(conn, tab, `document.body.innerHTML='<h1>Loading hotels</h1>'`);
   let asks = 0;
   const jev = fakeJev({choice: (q, id) => {
     if (id !== 'pick') return;
     if (++asks === 1) {
-      void ops.evaluate(conn, tab, `setTimeout(() => { document.body.innerHTML='<main><ul><li><a href="/fixtures/page.html">Hotel A</a></li><li><a href="/fixtures/page.html">Hotel B</a></li><li><a href="/fixtures/page.html">Hotel C</a></li></ul></main>'; }, 1500)`);
+      void ops.evaluate(conn, tab, `Object.defineProperty(document, 'readyState', { configurable: true, value: 'loading' }); setTimeout(() => { document.body.innerHTML='<main><ul><li><a href="/fixtures/page.html">Hotel A</a></li><li><a href="/fixtures/page.html">Hotel B</a></li><li><a href="/fixtures/page.html">Hotel C</a></li></ul></main>'; delete document.readyState; }, 1500)`);
       return 'none';
     }
     return optionWith(q, 'Hotel B');

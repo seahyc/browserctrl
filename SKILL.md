@@ -53,6 +53,9 @@ Most tasks take two `do` calls: one to reach the page, one plan to the answer.
    `'click "4 stars & up" => "4 stars"'`. A wrong pick then stops the plan instead of carrying on.
 
 - A guess is fine as the last step, where nothing builds on it.
+- A field that suggests as you type: pick the suggestion by the value you typed plus a word
+  that makes it unique, `'fill "To" = "90028"' 'click "CA 90028"'`, not by how you expect the
+  site to write it ("Los Angeles" was "Hollywood, CA 90028, USA").
 - Open a menu, pick its options and apply in one plan: `do` re-reads the page before every
   step, even when chips reorder or counts change after each pick.
 - `optional click "Accept all"` clears a banner if there is one; `--dismiss "cookie banner"`
