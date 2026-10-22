@@ -96,6 +96,9 @@ browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 
   for scope, literal dollars and confidence rules.
 - Loop over linked details with `for top 3 { extract "price", "cancellation" }`; use
   `pick "lowest listed price" top 3 as $choices` for a ranked list without opening pages.
+- "Earliest", "cheapest", "first" across many lines (an availability grid, a rates table) is a
+  ranking, not an `extract`: `pick "earliest available date" top 1 as $d` ranks list items or,
+  without a list, the page lines that match. `first`/`last` use page order.
 - Search safe candidates with `try pick "free cancellation" up to 3 => "cancellation is free"`.
 - Ground independent form fills together with `same page { fill "First name" = "Ada"; fill "Last name" = "Lovelace" }`.
 - **Naming:** elements in words as they appear. Exact names need no model; Jev picks the rest

@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>Plan use seven</title>
+<main>
+<form onsubmit="return false"><label>Package weight <input id="weight"></label><button id="rates">SHOW RATES</button></form>
+<form onsubmit="return false"><label>Destination <input id="destination" role="searchbox"></label><button id="search">Search</button></form>
+<label>From address <input id="from"></label><label>Other address <input id="other"></label>
+<div id="suggestions"></div><button id="continue">Continue</button><section id="results"></section>
+</main>
+<script>
+from.oninput=()=>{ suggestions.innerHTML='<ul role="listbox"><li role="option" id="address">New York, NY 10019, USA</li></ul>'; address.onclick=()=>{(location.search.includes('wrong')?other:from).value='New York, 10019, United States'; suggestions.replaceChildren();}; };
+if (location.search.includes('hidden')) { from.oninput(); suggestions.hidden=true; from.oninput=()=>suggestions.hidden=false; }
+if (location.search.includes('preexisting')) from.oninput();
+rates.onclick=()=>results.innerHTML='<h1>Shipping rates</h1><p>Ground $50.59</p>';
+search.onclick=()=>results.innerHTML='<h1>Results for Tokyo</h1>';
+window.submits=0; document.getElementById('continue').onclick=()=>submits++;
+</script>
