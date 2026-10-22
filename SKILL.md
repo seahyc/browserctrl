@@ -38,6 +38,23 @@ First `browserctrl site <site or URL>`: its recipes (the site's own API) and flo
 - Only the last step commits. Adding to a cart or filling a form is not a commit.
 - "Find one that...": look for a filter or sort first.
 
+### When the task compares, ranks or checks several things
+
+Put the whole comparison in the plan, after the steps that reach the list. One call then
+answers what would otherwise take a read and a decision per item.
+
+| The task asks for | Plan form |
+| --- | --- |
+| The cheapest, newest, highest-rated… when the site cannot sort by it | `'pick "lowest nightly price" top 1 as $h' 'answer "${h}"'` |
+| Details of the first few results | `'for top 3 { extract "price"; extract "cancellation policy" }'` |
+| The first result that meets a condition you can only see on its page | `'try pick "free cancellation" up to 3 => "free cancellation"'` |
+| Every result that meets a condition | `'each "nonstop and under 6 hours" up to 10 { extract "price" }'` |
+| Something only if the page shows it | `'if "the page lists refurbished models" { pick "largest discount" top 1 as $m } else { answer "none listed" }'` |
+| A value compared with a limit | `'extract "total price" as number as $p' 'if $p < 200 { answer "under: ${p}" } else { answer "over: ${p}" }'` |
+
+These run after the filter and sort steps in the same `do`. Each item opens in a background
+tab and closes after; nothing in a loop commits.
+
 ## Use do well
 
 Most tasks take two `do` calls: one to reach the page, one plan to the answer.
