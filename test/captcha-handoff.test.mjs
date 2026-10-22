@@ -13,7 +13,7 @@ import * as cooldown from '../lib/cooldown.mjs';
 import { solve, handoff, ping } from '../lib/captcha.mjs';
 import { runSteps } from '../lib/steps.mjs';
 import { runRecipe } from '../lib/recipes.mjs';
-import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, clearAfterFocus } from './helpers.mjs';
 
 process.env.BROWSERCTRL_NOTIFY = '0';
 delete process.env.BROWSERCTRL_SOLVER_HOSTS;
@@ -25,7 +25,7 @@ const script = path.join(dir, 'notify.sh');
 const sent = path.join(dir, 'sent.txt');
 fs.writeFileSync(script, `#!/bin/sh\nprintf '%s|' "$@" >> "${sent}"\nprintf '\\n' >> "${sent}"\n`, { mode: 0o755 });
 const pings = () => (fs.existsSync(sent) ? fs.readFileSync(sent, 'utf8').trim().split('\n').filter(Boolean) : []);
-const waitFor = async (fn, ms = 3000) => { for (const end = Date.now() + ms; Date.now() < end; await new Promise(r => setTimeout(r, 50))) if (fn()) return true; return false; };
+const clearPuzzle = "document.getElementById('box').remove(); document.getElementById('msg').textContent = 'Verified'";
 
 // The handoff is built for macOS (notifications, Dia); these tests use a POSIX script.
 const onWindows = process.platform === 'win32';
@@ -64,9 +64,9 @@ t('a handoff brings the tab to the front, pings, and resumes when the challenge 
   process.env.BROWSERCTRL_NOTIFY_CMD = script;
   const other = await open('fixtures/page.html');
   await ops.focus(conn, other);
-  const tab = await open('fixtures/jigsaw.html?seed=2&autoclear=1500');
+  const tab = await open('fixtures/jigsaw.html?seed=2');
   const started = Date.now();
-  const r = await solve(conn, tab, { timeoutMs: 10000, pollMs: 250 });
+  const r = await clearAfterFocus(conn, () => solve(conn, tab, { timeoutMs: 10000, pollMs: 250 }), clearPuzzle, 1500);
   assert.equal(r.captcha, 'unknown-challenge'); // the puzzle page, with no solver plugin installed
   assert.equal(r.solvedBy, 'human');
   assert.ok(r.waitedMs >= 900 && r.waitedMs <= 3500, `waited ${r.waitedMs}`);
@@ -100,7 +100,7 @@ t('do hands a challenge that appears mid-plan to the human and carries on', asyn
   fs.rmSync(cooldown.file(), { force: true });
   delete process.env.BROWSERCTRL_NOTIFY_CMD;
   const tab = await open('fixtures/page.html');
-  const r = await runSteps(conn, tab, [`nav ${fixture.url}fixtures/jigsaw.html?seed=4&autoclear=1500`, 'wait 10'], { handoffMs: 10000 });
+  const r = await clearAfterFocus(conn, () => runSteps(conn, tab, [`nav ${fixture.url}fixtures/jigsaw.html?seed=4`, 'wait 10'], { handoffMs: 10000 }), clearPuzzle, 1500);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.equal(r.steps[0].challenge.solvedBy, 'human');
   assert.ok(r.steps[0].challenge.waitedMs > 500);
@@ -122,8 +122,8 @@ t('do stops at the challenge when handoff is off, and the next plan to that site
 
 t('a recipe hands its challenge to the human, then runs; with handoff off it fails at once', async () => {
   fs.rmSync(cooldown.file(), { force: true });
-  const recipe = { name: 'fixture/handoff', origin: fixture.url, warm_path: '/fixtures/jigsaw.html?seed=6&autoclear=1500', settle_ms: 0, js: 'async () => ({ items: [{ ok: 1 }], next: null })' };
-  const r = await runRecipe(conn, recipe, {}, { handoffMs: 10000 });
+  const recipe = { name: 'fixture/handoff', origin: fixture.url, warm_path: '/fixtures/jigsaw.html?seed=6', settle_ms: 0, js: 'async () => ({ items: [{ ok: 1 }], next: null })' };
+  const r = await clearAfterFocus(conn, () => runRecipe(conn, recipe, {}, { handoffMs: 10000 }), clearPuzzle, 1500);
   assert.deepEqual(r.items, [{ ok: 1 }]);
   assert.equal(r.challenge.solvedBy, 'human');
   assert.ok(r.challenge.waitedMs > 500);

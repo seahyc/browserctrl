@@ -18,7 +18,8 @@
     "browserctrl-vault": "bin/browserctrl-vault.mjs"
   },
   "scripts": {
-    "test": "node --import ./test/helpers.mjs --test --test-concurrency=1 test/*.test.mjs",
+    "pretest": "node test/sweep-orphans.mjs",
+    "test": "node --import ./test/helpers.mjs --test --test-concurrency=1 --test-timeout=300000 test/*.test.mjs",
     "sync-extension": "node scripts/sync-extension.mjs",
     "prepack": "node scripts/sync-extension.mjs",
     "check-extension": "node scripts/sync-extension.mjs --check",

@@ -1,0 +1,9 @@
+<!doctype html><title>Plan click outcomes</title>
+<a id="new-tab-link" target="_blank" href="plan-use.html">Open catalogue</a>
+<a role="button" target="_blank" href="plan-use.html">Send message</a>
+<button onclick="window.open('plan-use.html')">Open scripted tab</button>
+<button onclick="window.open('plan-use.html', '_blank', 'noopener')">Open isolated tab</button>
+<form action="plan-use.html" target="_blank"><button>Browse catalogue</button></form>
+<button>Unchanged click</button>
+<button onclick="document.querySelector('output').textContent='Updated result'">Change result</button>
+<output>Existing result</output>

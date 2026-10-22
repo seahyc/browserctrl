@@ -36,12 +36,33 @@ First `browserctrl site <site or URL>`: its recipes (the site's own API) and flo
 - A report whose steps all show ✓ did what it says: answer from it, do not re-read. ⚠ means
   check the page. `changed on the page:` says what the plan changed.
 - Only the last step commits. Adding to a cart or filling a form is not a commit.
-- Options that change after each pick (chips, counts): one pick per `do`.
 - "Find one that...": look for a filter or sort first.
 
 ## Use do well
 
-- Send the whole foreseeable sequence in one multi-step `do`.
+Most tasks take two `do` calls: one to reach the page, one plan to the answer.
+
+1. **Reach the page and look.** `nav` to an address you can build (search, category), or use the
+   site's search, with `--then items`. The report lists the controls on screen and the
+   `url params` you can set.
+2. **Plan to the answer from real names.** Use only names from a report or `read`; a guessed
+   name ("Duration" for a "Length" filter) can make the plan click the wrong control. Set
+   filters and sort in the address when `url params` shows them. Then open the result and
+   `extract` one fact per step; for "cheapest" or "best", `pick "<criterion>"` first.
+3. **Check every step that changes the results:** `'key Enter => "results for Thailand"'`,
+   `'click "4 stars & up" => "4 stars"'`. A wrong pick then stops the plan instead of carrying on.
+
+- A guess is fine as the last step, where nothing builds on it.
+- A field that suggests as you type: pick the suggestion by the value you typed plus a word
+  that makes it unique, `'fill "To" = "90028"' 'click "CA 90028"'`, not by how you expect the
+  site to write it ("Los Angeles" was "Hollywood, CA 90028, USA").
+- Open a menu, pick its options and apply in one plan: `do` re-reads the page before every
+  step, even when chips reorder or counts change after each pick.
+- `optional click "Accept all"` clears a banner if there is one; `--dismiss "cookie banner"`
+  handles one that appears mid-plan.
+- A stopped plan prints `resume: browserctrl do …`, failed step first. Fix that step (a listed
+  candidate, a name from `On screen:`, an `i12` item) and run the line; do not split the rest
+  into single steps.
 - Read the full report and its last line: `✓ done: 3/3 steps` or
   `✗ stopped at step 2/3: <reason>`. Do not hide the report with `tail`.
 - No sleep or re-read after `do`: it settles and reports changes.
@@ -75,6 +96,9 @@ browserctrl do <tab> 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' 
   for scope, literal dollars and confidence rules.
 - Loop over linked details with `for top 3 { extract "price", "cancellation" }`; use
   `pick "lowest listed price" top 3 as $choices` for a ranked list without opening pages.
+- "Earliest", "cheapest", "first" across many lines (an availability grid, a rates table) is a
+  ranking, not an `extract`: `pick "earliest available date" top 1 as $d` ranks list items or,
+  without a list, the page lines that match. `first`/`last` use page order.
 - Search safe candidates with `try pick "free cancellation" up to 3 => "cancellation is free"`.
 - Ground independent form fills together with `same page { fill "First name" = "Ada"; fill "Last name" = "Lovelace" }`.
 - **Naming:** elements in words as they appear. Exact names need no model; Jev picks the rest

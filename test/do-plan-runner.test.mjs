@@ -17,7 +17,7 @@ after(async () => { try { await conn?.stop(); } catch {} conn?.close(); await br
 const t = (name, fn) => test(name, { skip: !haveBrowser }, async () => {
   const tab = (await ops.newTab(conn, fixture.url + 'fixtures/page.html')).targetId;
   await ops.waitForReady(conn, tab);
-  await ops.evaluate(conn, tab, `document.body.innerHTML='<p>SGD 180</p><p>free cancellation</p><label>Max<input id="max"></label><button id="go">Go</button>'; window.inputs=0; max.addEventListener('input',()=>inputs++); window.clicks=0; go.onclick=()=>clicks++`);
+  await ops.evaluate(conn, tab, `document.body.innerHTML='<p>SGD 180</p><p>free cancellation</p><label>Max<input id="max"></label><button id="go">Go</button>'; window.inputs=0; max.addEventListener('input',()=>inputs++); window.clicks=0; go.onclick=()=>{clicks++;document.body.dataset.clicks=clicks}`);
   try { await fn(tab); } finally { await ops.closeTab(conn, tab); }
 });
 const run = (tab, lines, jev, opts = {}) => runSteps(conn, tab, lines, { jev, noNotes: true, traceRun: false, prefetch: false, ...opts });

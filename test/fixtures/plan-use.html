@@ -1,0 +1,5 @@
+<!doctype html><style>
+#menu {display:none} #group:hover #menu {display:block} #cover {display:none;position:fixed;inset:0;background:white;z-index:10}
+</style><a href="#" aria-label="catalogue result" onclick="document.querySelector('#state').textContent='link';return false">A very long visible catalogue title</a>
+<div id="group"><button aria-haspopup="menu" aria-controls="menu">Review category</button><div id="menu" role="menu"><button role="menuitem" onclick="document.querySelector('#state').textContent='negative'">Negative (2,756)</button></div></div>
+<button id="under">Underlying target</button><div id="cover" role="dialog" aria-label="Important edits">Keep these edits</div><p id="state"></p>

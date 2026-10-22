@@ -128,19 +128,23 @@ t('a filter box drawn unticked while its results reload is read again once they 
   await ops.closeTab(conn, id);
 });
 
-t('an aria-pressed toggle reports pressed, and a second click by name leaves it on', async () => {
+t('an aria-pressed toggle reports pressed, check leaves it on, and plain click turns it off', async () => {
   const id = await open('steps-friction4.html?filters=open');
   const r = await runSteps(conn, id, ['click "Washer"'], { jev: planJev(), noNotes: true });
   console.log(formatSteps(r));
   assert.equal(r.steps[0].checked, true);
   assert.match(formatSteps(r), /now pressed/);
-  const again = await runSteps(conn, id, ['click "Washer"'], { jev: planJev(), noNotes: true });
+  const again = await runSteps(conn, id, ['check "Washer"'], { jev: planJev(), noNotes: true });
   console.log(formatSteps(again));
   assert.equal(again.done, true);
   assert.match(formatSteps(again), /already pressed/);
   assert.match(again.steps[0].how, /not clicked/);
   assert.equal(await text(id, '#state'), 'Washer');
-  // By ref it is deliberate: the toggle turns off.
+  const namedOff = await runSteps(conn, id, ['click "Washer"'], { jev: planJev(), noNotes: true });
+  assert.match(formatSteps(namedOff), /now not pressed/);
+  assert.equal(await text(id, '#state'), '');
+  await runSteps(conn, id, ['check "Washer"'], { jev: planJev(), noNotes: true });
+  // By ref it is deliberate too: the toggle turns off.
   const snap = await ops.readPage(conn, id, { maxText: 0, max: 1500, all: true });
   const ref = snap.elements.find(e => e.name === 'Washer').ref;
   const off = await runSteps(conn, id, [`click ${ref}`], { jev: planJev(), noNotes: true });

@@ -123,6 +123,7 @@ t('ranked choice distributions select per-item keys, never a confidence runner-u
 
 t('ranked entry bundles the pending expectation with all item questions', async tab => {
   await listing(tab, [{ name: 'First', price: 'SGD 200' }, { name: 'Second', price: 'SGD 100' }, { name: 'Third', price: 'SGD 300' }]);
+  await ops.evaluate(conn, tab, `document.querySelector('#ready').onclick = () => { document.body.dataset.ready = 'true'; }`);
   const j = rankedJev();
   const r = await run(tab, ['click "Ready" => "ready"', 'pick "lowest price" top 2 as $choices'], j);
   assert.equal(r.done, true, JSON.stringify(r.stopped));

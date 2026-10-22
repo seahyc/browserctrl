@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Changing filter choices</title>
+<button id="open" aria-expanded="false" aria-controls="filters">Filters</button>
+<section id="filters" hidden>
+  <div id="options"></div>
+  <button id="apply">Apply</button>
+</section>
+<output id="state">No filters applied</output>
+<script>
+const chosen = new Set();
+let generation = 0;
+const choices = ['Amber', 'Blue', 'Coral'];
+function render() {
+  const order = generation % 2 ? [...choices].reverse() : choices;
+  document.querySelector('#options').replaceChildren(...order.map((name, index) => {
+    const button = document.createElement('button');
+    button.textContent = `${name} (${12 - generation - index})`;
+    button.setAttribute('aria-label', name);
+    button.setAttribute('aria-pressed', String(chosen.has(name)));
+    button.onclick = () => {
+      chosen.add(name);
+      setTimeout(() => { generation++; render(); }, 80);
+    };
+    return button;
+  }));
+}
+document.querySelector('#open').onclick = () => {
+  document.querySelector('#filters').hidden = false;
+  document.querySelector('#open').setAttribute('aria-expanded', 'true');
+  render();
+};
+document.querySelector('#apply').onclick = () => {
+  document.querySelector('#state').textContent = [...chosen].join(', ');
+  document.querySelector('#filters').hidden = true;
+};
+</script>

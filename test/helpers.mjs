@@ -205,6 +205,12 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
     ],
     { stdio: ['ignore','ignore','pipe'], detached: process.platform !== 'win32' },
   );
+  // If this test process dies without closing the browser (a timeout kill, a crash, a
+  // SIGKILL), a detached watchdog kills the browser's group and removes its profile.
+  if (process.platform !== 'win32' && child.pid) {
+    spawn('/bin/sh', ['-c', 'while kill -0 "$1" 2>/dev/null; do sleep 2; done; kill -9 -"$2" 2>/dev/null; rm -rf "$3"', 'watchdog', String(process.pid), String(child.pid), userDataDir],
+      { stdio: 'ignore', detached: true }).unref();
+  }
   let startupErrors = '';
   child.stderr.on('data', chunk => { startupErrors = (startupErrors + chunk.toString()).slice(-8192); });
   let endpointReady = false;
@@ -285,4 +291,23 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
     version,
     close,
   };
+}
+
+// Arm the simulated human only after focus is delivered. A navigation-time timer
+// can expire during readiness checks, before the handoff has started waiting.
+export async function clearAfterFocus(conn, run, expression, delayMs) {
+  const original = conn.browser;
+  let clear;
+  conn.browser = async (...args) => {
+    const result = await original.apply(conn, args);
+    if (!clear && args[0] === 'Target.activateTarget') {
+      clear = new Promise(resolve => setTimeout(resolve, 0)).then(async () => {
+        const { evaluate } = await import('../lib/ops.mjs');
+        await evaluate(conn, args[1].targetId, `setTimeout(() => { ${expression} }, ${delayMs}), 1`);
+      });
+    }
+    return result;
+  };
+  try { return await run(); }
+  finally { conn.browser = original; await clear; }
 }

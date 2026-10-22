@@ -1,0 +1,16 @@
+<!doctype html><title>Find a trip</title><main>
+<label>Destination <input id="destination" role="combobox" aria-autocomplete="list" aria-controls="suggestions"></label>
+<div id="suggestions" role="listbox"></div>
+<button id="chip" aria-pressed="true" onclick="document.querySelector('#state').textContent='editor opened'">Length: 5-10 days</button>
+<button role="checkbox" aria-checked="true" onclick="this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true')">Pool</button>
+<div id="state"></div>
+<div style="overflow:hidden;width:0;height:0" aria-label="Collapsed destinations"><a id="clipped" href="#never">Hidden choice</a></div>
+</main><script>
+const field=document.querySelector('input'),list=document.querySelector('[role=listbox]');
+field.addEventListener('input',()=>{list.textContent='Old country';setTimeout(()=>{list.textContent=field.value},850)});
+field.addEventListener('keydown',e=>{if(e.key==='Enter'){
+const wrong=new URLSearchParams(location.search).has('wrong');
+const name=wrong?'Norway':list.textContent;
+document.title=name+' trips';document.querySelector('main').innerHTML='<h1>'+name+' trips</h1><ul><li>'+name+' excursion</li></ul>';history.pushState({},'', '?results='+name);
+}});
+</script>

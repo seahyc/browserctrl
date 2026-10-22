@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import net from 'node:net';
 import http from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { test, before, after } from 'node:test';
-import { startHeadlessBrowser, chromeBinary } from './helpers.mjs';
+import { startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+// Ownership fixtures need no capture, which otherwise prevents daemon.stop().
+process.env.BROWSERCTRL_CAPTURE = '0';
 const exec = promisify(execFile);
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-ten-agents-'));
 process.env.CDP_CLAIMS_FILE = path.join(dir, 'claims.json');
@@ -16,18 +17,21 @@ const moduleUrl = new URL('../lib/daemon.mjs', import.meta.url).href;
 let browser, port;
 before(async () => {
   if (!chromeBinary()) return;
-  const reserve = net.createServer();
-  await new Promise(resolve => reserve.listen(0, '127.0.0.1', resolve));
-  port = reserve.address().port;
-  await new Promise(resolve => reserve.close(resolve));
+  port = TEST_PORT;
   browser = await startHeadlessBrowser(port);
 });
 after(async () => {
-  if (browser) {
-    const client = await connect(port);
-    await client.stop(); client.close(); browser.close();
+  let client;
+  try {
+    if (browser) {
+      client = await connect(port);
+      await client.stop();
+    }
+  } finally {
+    client?.close();
+    await browser?.close();
+    fs.rmSync(dir, { recursive: true, force: true });
   }
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 // Windows runners took 83-120 s for ten agents (each fills, clicks and scrolls); give them headroom.
 const options = { skip: !chromeBinary(), timeout: process.platform === 'win32' ? 240000 : 120000 };
@@ -51,7 +55,7 @@ test('ten independent agents operate distinct tabs through one shared daemon', o
       console.log(JSON.stringify({targetId,pid:(await c.health()).pid,...JSON.parse(result.result.value)}));
       await c.browser('Target.closeTarget',{targetId});
     } finally {c.close();}
-  `], { env: { ...process.env, CDP_AGENT_ID: `worker-${n}` } })));
+  `], { env: { ...process.env, CDP_AGENT_ID: `worker-${n}` }, timeout: options.timeout, killSignal: 'SIGKILL' })));
   const rows = results.map(result => JSON.parse(result.stdout));
   assert.equal(new Set(rows.map(row => row.pid)).size, 1);
   assert.equal(new Set(rows.map(row => row.targetId)).size, 10);

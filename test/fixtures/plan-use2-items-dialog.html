@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Browse journeys</title>
+<style>
+body {font:16px sans-serif;margin:20px} main {display:flex;gap:30px} aside {width:300px} section {margin-bottom:12px} .options {display:grid;grid-template-columns:repeat(3,90px);gap:4px} .options button {height:38px} #results {width:700px} article {height:130px;border:1px solid #aaa;margin:8px;padding:12px} dialog {position:fixed;top:80px;left:20px;margin:0;padding:12px;width:320px} #months {display:grid;grid-template-columns:repeat(3,100px)} #months button {height:45px}
+</style>
+<h1>Journey search results</h1>
+<button id="open" onclick="picker.showModal()">Choose departure</button>
+<main><aside id="filters"></aside><div><h2>Available journeys</h2><div id="results"></div></div></main>
+<dialog id="picker" open aria-label="Departure month"><div id="months"></div></dialog>
+<script>
+for(let n=0;n<9;n++) filters.insertAdjacentHTML('beforeend', `<button aria-expanded="true" aria-controls="f${n}">Filter ${n}</button><section id="f${n}" class="options">${[1,2,3].map(i=>`<button>Option ${n}-${i}</button>`).join('')}</section>`);
+for(let n=1;n<=5;n++) results.insertAdjacentHTML('beforeend', `<article><h3><a href="/journeys/${100+n}">Mountain and coast journey ${n}</a></h3><p>Five nights, guided walking, $${n*200}</p></article>`);
+for(const month of ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']) months.insertAdjacentHTML('beforeend', `<button>${month} Unavailable</button>`);
+</script>
