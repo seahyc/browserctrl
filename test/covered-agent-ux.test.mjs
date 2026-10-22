@@ -47,7 +47,7 @@ t('covered Save names its picker and dismisses it once with a neutral dialog cli
         <div role="listbox" aria-label="Group picker" style="position:absolute;left:80px;top:80px;width:200px;height:160px;background:gray;z-index:2"><div role="option">Selected group</div></div></div>\`; document.addEventListener('click', e => { const p = document.querySelector('[role=listbox]'); if(p && !p.contains(e.target)) p.remove(); });`);
       await assert.rejects(ops.click(conn, id, { selector: '#save' }), e => {
         assert.match(e.message, /listbox "Group picker"/);
-        assert.match(e.message, /Escape may close an enclosing dialog/);
+        assert.match(e.message, /Close the covering popup/);
         assert.doesNotMatch(e.message, /`cdp /);
         return true;
       });

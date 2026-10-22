@@ -7,6 +7,9 @@ import * as ops from '../lib/ops.mjs';
 import { page } from '../lib/page/index.mjs';
 import { shortlistSpans } from '../lib/judge.mjs';
 
+// These extraction fixtures do not exercise capture. The daemon correctly refuses
+// to stop while capture is enabled by the shared test harness.
+process.env.BROWSERCTRL_CAPTURE = '0';
 const haveBrowser = Boolean(chromeBinary());
 let browser, conn;
 before(async () => {

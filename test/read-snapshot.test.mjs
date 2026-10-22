@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as jev from '../lib/jev.mjs';
-import { deepTextExpression, formatRead } from '../lib/refs.mjs';
+import { deepTextExpression, formatRead, frameGroundingHint } from '../lib/refs.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { planJev } from './fake-jev.mjs';
@@ -142,6 +142,30 @@ t('scroll reports screens above and below', async () => {
   assert.equal(b.scroll.above, 2);
   assert.equal(b.scroll.below, Math.round((expect - 2) * 10) / 10);
   assert.match(formatRead(b), /scroll \d+\/\d+ · 2 screens above, [\d.]+ below/);
+  await ops.closeTab(conn, id);
+});
+
+t('a dominant inaccessible frame explains how to open its full URL in a plan', async () => {
+  const id = await open('read-frames.html');
+  // A sandbox without allow-same-origin gives a real opaque-origin document,
+  // while keeping all fixture traffic on the local server.
+  const src = url('read-frames.html') + '?calculator=1#form';
+  await ops.evaluate(conn, id, `document.body.innerHTML = ''; document.body.style.margin = '0';
+    const f = document.createElement('iframe'); f.sandbox = ''; f.src = ${JSON.stringify(src)};
+    f.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0;padding:0'; document.body.append(f);`);
+  await new Promise(r => setTimeout(r, 200));
+  const snap = await ops.readPage(conn, id);
+  assert.equal(snap.stats.inaccessibleFrames[0].src, src);
+  const hint = frameGroundingHint(snap);
+  assert.match(hint, /read\/do cannot ground its contents/);
+  assert.ok(hint.includes(`nav ${src}`));
+  assert.ok(formatRead(snap).includes(hint));
+  const stopped = await runSteps(conn, id, ['fill Pension amount = 100'], { noNotes: true });
+  console.log(formatSteps(stopped));
+  assert.equal(stopped.done, false);
+  assert.ok(stopped.stopped.reason.includes(`nav ${src}`));
+  await ops.evaluate(conn, id, `document.querySelector('iframe').style.cssText = 'width:10px;height:10px'`);
+  assert.equal(frameGroundingHint(await ops.readPage(conn, id)), null, 'small frames do not suggest leaving the page');
   await ops.closeTab(conn, id);
 });
 

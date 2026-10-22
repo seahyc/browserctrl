@@ -205,6 +205,12 @@ export async function startHeadlessBrowser(port = TEST_PORT) {
     ],
     { stdio: ['ignore','ignore','pipe'], detached: process.platform !== 'win32' },
   );
+  // If this test process dies without closing the browser (a timeout kill, a crash, a
+  // SIGKILL), a detached watchdog kills the browser's group and removes its profile.
+  if (process.platform !== 'win32' && child.pid) {
+    spawn('/bin/sh', ['-c', 'while kill -0 "$1" 2>/dev/null; do sleep 2; done; kill -9 -"$2" 2>/dev/null; rm -rf "$3"', 'watchdog', String(process.pid), String(child.pid), userDataDir],
+      { stdio: 'ignore', detached: true }).unref();
+  }
   let startupErrors = '';
   child.stderr.on('data', chunk => { startupErrors = (startupErrors + chunk.toString()).slice(-8192); });
   let endpointReady = false;

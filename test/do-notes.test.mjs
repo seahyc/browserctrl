@@ -168,7 +168,7 @@ t('every run is traced per tab and `trace` prints it', async () => {
   const [first] = runs[0].steps;
   assert.equal(first.action, 'click');
   assert.deepEqual(first.target.name, 'More filters');
-  assert.equal(first.how, 'exact');
+  assert.equal(first.how, 'exact, dismissed cookie banner before retrying');
   assert.equal(first.expect, 'the panel is open');
   assert.equal(first.expect_p, 0.93);
   assert.equal(first.dismissed[0].category, 'cookie banner');
@@ -178,7 +178,7 @@ t('every run is traced per tab and `trace` prints it', async () => {
   const cli = execFileSync(process.execPath, [path.join(HERE, '..', 'bin', 'browserctrl.mjs'), 'trace', id.slice(0, 8), '--last', '1'], { env: { ...process.env, BROWSERCTRL_TRACES: TRACES }, encoding: 'utf8' });
   console.log(cli);
   assert.match(cli, /run \w+ {2}done/);
-  assert.match(cli, /✓ 1\. click "More filters" => "the panel is open" {2}→ button "More filters" ref_\d+ {2}\(exact\) {2}expect "the panel is open" p=0\.93/);
+  assert.match(cli, /✓ 1\. click "More filters" => "the panel is open" {2}→ button "More filters" ref_\d+ {2}\(exact, dismissed cookie banner before retrying\) {2}expect "the panel is open" p=0\.93/);
   assert.match(cli, /dismissed cookie banner: "We use cookies/);
   assert.match(cli, /notice: "Price changed to S\$590"/);
   const json = JSON.parse(execFileSync(process.execPath, [path.join(HERE, '..', 'bin', 'browserctrl.mjs'), 'trace', id.slice(0, 8), '--json'], { env: { ...process.env, BROWSERCTRL_TRACES: TRACES }, encoding: 'utf8' }));

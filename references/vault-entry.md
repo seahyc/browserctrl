@@ -100,7 +100,7 @@ or restrict later actions in the resulting authenticated session.
 ## Owner recovery after uncertain cleanup
 
 Unverified cleanup or transport loss leaves a durable protected phase. Ordinary
-browserctrl access remains blocked, including closing tabs through browserctrl.
+use of the tab through browserctrl stays blocked, including closing it.
 Do not delete its marker, restart the browser or disable protection to retry.
 
 Ask the owner to close only the affected tab using the browser UI. Preserve the

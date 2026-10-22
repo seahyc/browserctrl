@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>Control regressions</title>
+<style>article{padding:12px;border:1px solid} [role=slider]{width:200px;height:25px;background:#ddd}</style>
+<main><h1>Showing 1-15 of 615 results</h1>
+<button id="length" aria-expanded="true" aria-controls="panel" onclick="panel.hidden=false;this.dataset.clicks=Number(this.dataset.clicks||0)+1">Length</button>
+<div id="panel" hidden><input type="range" aria-label="Shortest duration" min="0" max="30" value="0"></div>
+<div role="slider" aria-label="Commit duration" tabindex="0" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0"></div>
+<div id="cards"><article><a href="#recipe"><h2>Beef Sirloin Tip Roast with Mushrooms</h2><span>57 Ratings</span></a></article><article><a href="#other"><h2>Roast Potatoes</h2><span>31 Ratings</span></a></article><article><a href="#third"><h2>Steamed Rice</h2><span>5 Ratings</span></a></article></div>
+</main>
+<script>
+const native=document.querySelector('input');
+const custom=document.querySelector('[role=slider]');
+for(const slider of [native,custom]) slider.addEventListener('pointerup',()=>{
+ document.body.dataset.committed=slider.value||slider.getAttribute('aria-valuenow');
+ if(!location.search.includes('stuck')) {history.replaceState({},'', '?duration='+document.body.dataset.committed);document.querySelector('h1').textContent='Showing 1-15 of 99 results';}
+});
+custom.addEventListener('keydown',e=>{if(e.key==='ArrowRight')custom.setAttribute('aria-valuenow',Number(custom.getAttribute('aria-valuenow'))+1)});
+</script>
