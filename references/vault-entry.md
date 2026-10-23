@@ -1,4 +1,9 @@
-# Protected vault entry
+# Protected vault entry (v1)
+
+Prefer [protected field fill (v2)](vault-fill.md) for new logins. It approves an
+item for origins instead of one tab and its selectors, fills one field per call,
+and handles multi-step and framework-controlled logins. This page covers v1,
+which still works, and the owner recovery command both versions use.
 
 Read this when a browser task needs a vault password or authenticator code.
 Use the agent-vault skill to request credential-use permission and invoke the

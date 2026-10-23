@@ -19,7 +19,7 @@ try {
   if (!/^https?:\/\//.test(origin)) throw new Error('Supply an explicit HTTP(S) --origin');
   if (option('--url') && new URL(option('--url')).origin !== origin) throw new Error('Initial URL must match --origin');
   port = await requireBrowser({browser: option('--browser'), port: option('--port')});
-  conn = await connect(port);
+  conn = await connect(port, { mediated: true });
   if (option('--url')) {
     ({targetId: target} = await conn.browser('Target.createTarget', {url: option('--url'), background: true}));
     owned = true;

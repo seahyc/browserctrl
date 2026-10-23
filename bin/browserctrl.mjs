@@ -489,7 +489,7 @@ const main = async () => {
     const groupId = Number(flags['group-id']);
     if (cmd === 'native-group' && flags['dry-run']) return out(planNativeGroup(await adapter.listTabs(),ids,groupId));
     const port = await requireBrowser(flags);
-    const conn = await connect(port);
+    const conn = await connect(port, { mediated: true });
     try { return out(cmd === 'native-group' ? await conn.groupNativeTabs(ids,groupId,{allowFocus:Boolean(flags['allow-focus'])}) : await conn.focusNativeTab(positional[1])); } finally { conn.close(); }
   }
 
@@ -694,7 +694,7 @@ const main = async () => {
   }
 
   const port = await requireBrowser(flags);
-  const conn = await connect(port);
+  const conn = await connect(port, { mediated: true });
   let stillAfter = null;
   try {
     if (cmd === 'activity') return activityOutput(await conn.activity(positional[1] || 'list', activityDetails(flags)), flags);
@@ -1034,7 +1034,7 @@ const main = async () => {
       case 'html':
         return out(await ops.html(conn, targetId, positional[2]));
       case 'eval':
-        return out(await ops.evaluate(conn, targetId, positional.slice(2).join(' '), { timeoutMs }));
+        return out(await ops.evaluate(conn, targetId, positional.slice(2).join(' '), { timeoutMs, caller: true }));
       case 'act': {
         let raw = flags.steps ?? positional.slice(2).join(' ');
         if (!raw) throw new Error('Usage: browserctrl act <tab> --steps \'[{"action":"scroll","dy":800}]\'');
@@ -1157,7 +1157,7 @@ const main = async () => {
         }
       case 'dialog': {
         if (!flags.accept && !flags.dismiss) throw new Error(`Usage: browserctrl dialog ${tab.id} --accept | --dismiss [--text "prompt answer"]`);
-        const open = (await conn.events(targetId, { limit: 1 }).catch(() => null))?.dialog;
+        const open = (await conn.events(targetId, { limit: 0 }).catch(() => null))?.dialog;
         await conn.send(targetId, 'Page.handleJavaScriptDialog', { accept: Boolean(flags.accept), ...(typeof flags.text === 'string' ? { promptText: flags.text } : {}) }, 5000);
         return out({ answered: flags.accept ? 'accept' : 'dismiss', ...(open ? { dialog: { type: open.type, message: open.message } } : {}) });
       }

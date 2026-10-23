@@ -115,11 +115,14 @@ All options: [`do` reference](references/reading-and-acting.md#plan-several-step
 
 For Safari protected entry, read the Safari section of [vault entry](references/vault-entry.md#safari-27) before requesting an unlock. It uses a fresh disposable automation tab and a separate pinned Safari executor.
 
-For a password or authenticator code, use agent-vault's approved credential-use
-flow. Never fetch values into agent context or enter them through ordinary
-`fill`, `type`, `do` or JavaScript. Before preparing a protected login, read
-[vault entry](references/vault-entry.md) for destination binding, stable owner
-coordination, supported forms and owner recovery. A tab claim is not vault
+For a username, password or authenticator code, use agent-vault's approved
+credential-use flow. Never fetch values into agent context or enter them through
+ordinary `fill`, `type`, `do` or JavaScript. Read [protected field fill](references/vault-fill.md)
+first: the owner approves an item for a set of origins, and each call fills one
+field in a tab and element you choose, so multi-step logins are fill, click Next,
+fill. After a fill the tab refuses `eval`, `shot` and capture until it closes or
+reaches a clean page; reads still work, with values redacted. The older one-form
+[vault entry](references/vault-entry.md) still works. A tab claim is not vault
 permission, and lease expiry does not log out the website.
 
 ## When something goes wrong
@@ -149,5 +152,5 @@ permission, and lease expiry does not log out the website.
 | [connecting.md](references/connecting.md) | browsers, launching, Safari, diagnostics |
 | [activity.md](references/activity.md), [dia-native.md](references/dia-native.md) | agent activity, Dia dormant tabs |
 | [architecture.md](references/architecture.md) | CLI, daemon, Python |
-| [vault-entry.md](references/vault-entry.md) | protected password/TOTP entry through agent-vault and recovery |
+| [vault-fill.md](references/vault-fill.md), [vault-entry.md](references/vault-entry.md) | protected credential fill through agent-vault (v2, then v1), taint and recovery |
 | [settings.md](references/settings.md) | every `BROWSERCTRL_*` setting, folders, Jev key |
