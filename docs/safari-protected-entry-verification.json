@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-23",
+  "platform": "macOS 27.0.1, Safari 27.0.1",
+  "credentials": "Synthetic only; no real vault accessed",
+  "verified": [
+    "Private protected executor submitted username/password/TOTP through native Safari MCP",
+    "Authentication tab closure verified by exact native handle inventory",
+    "Cookie-based synthetic session survived in a fresh tab",
+    "Synthetic scoped broker call completed through the installed driver",
+    "Concurrent screenshot request rejected during sensitive phase",
+    "Console/network inspection rejected after entry",
+    "Stable request ID recovered cached receipt without replay",
+    "Temporary test tabs closed and synthetic grants revoked"
+  ],
+  "not_verified": [
+    "Real website acceptance or account selection",
+    "Real Bitwarden item entry in Safari",
+    "Sites using tab-local session storage",
+    "Multi-page authentication, frames or shadow DOM"
+  ],
+  "source_checks": {
+    "focused_tests": 33,
+    "chromium_protected_entry_regression": "See local test result; synthetic only"
+  }
+}

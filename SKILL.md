@@ -113,6 +113,8 @@ All options: [`do` reference](references/reading-and-acting.md#plan-several-step
 
 ## Vault credentials
 
+For Safari protected entry, read the Safari section of [vault entry](references/vault-entry.md#safari-27) before requesting an unlock. It uses a fresh disposable automation tab and a separate pinned Safari executor.
+
 For a password or authenticator code, use agent-vault's approved credential-use
 flow. Never fetch values into agent context or enter them through ordinary
 `fill`, `type`, `do` or JavaScript. Before preparing a protected login, read

@@ -351,6 +351,8 @@ The CLI and Python client share one long-lived connection per browser debugging 
 browserctrl supports Chromium browsers (Chrome, Dia, Brave, Edge, Chromium, Arc) on macOS, Linux and Windows. Firefox is not supported. An optional extension adds tab groups and other browser-level features; Dia also has native controls for dormant tabs. Details and test evidence are in [compatibility](docs/compatibility.md).
 
 **Safari** 27 or later on macOS works through Apple's own automation interface, in a separate automation session with its own element IDs. Enable Settings → Advanced → Show features for web developers, then Settings → Developer → Allow remote automation and external agents. browserctrl does not enable this for you.
+Protected username/password/TOTP entry is supported in a fresh owned Safari automation tab. It closes that tab after submission and keeps console/network inspection private for the native session. See [Safari credential entry](references/vault-entry.md#safari-27) for setup, session continuity and recovery limits.
+
 
 ```mermaid
 flowchart LR

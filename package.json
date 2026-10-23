@@ -1,6 +1,6 @@
 {
   "name": "@seahyc/browserctrl",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "type": "module",
   "description": "Browser control for agents: shared Chromium CDP and Safari MCP, with CLI and MCP frontends.",
   "keywords": [

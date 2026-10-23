@@ -243,3 +243,30 @@ test('Safari pause blocks queued actions but leaves other owners running', async
   await ipc(socketPath, {op:'activity',action:'resume',activityOwner:'reviewer',owner:'human-controller'});
   assert.ok((await ipc(socketPath, {op:'call',name:'page_info',args:{},tab:'owned',owner:'reviewer'})).result);
 });
+
+test('Safari private IPC blocks captures during entry and Inspector history afterward',async t=>{
+  const target='page-00000000-0000-4000-8000-000000000001';let owner=null,unblock;
+  const hold=new Promise(resolve=>unblock=resolve);const nativeCalls=[];
+  const value=data=>({content:[{type:'text',text:JSON.stringify(data)}]});
+  const {socketPath}=await startFake(t,{
+    claimApi:{claim(_port,_target,identity){owner=identity.owner;},get(){return owner?{owner}:null;},release(){owner=null;},list(){return []; }},
+    callTool:async(name)=>{
+      nativeCalls.push(name);
+      if(name==='create_tab')return value({handle:target});
+      if(name==='evaluate_javascript'){await hold;return value({ok:true,attempted:true,submitted:true});}
+      if(name==='list_tabs')return value([]);
+      return value({});
+    },
+  });
+  await ipc(socketPath,{op:'call',name:'create_tab',args:{url:'https://example.test'},owner:'owner'});
+  const request={version:1,request_id:crypto.randomUUID(),deadline:Date.now()/1000+60,destination:{browser:'safari',tab_id:target,origin:'https://example.test',fields:{password:'#password'},submit:'#submit'},fields:{password:'SYNTHETIC-ONLY'}};
+  const pending=ipc(socketPath,{op:'vault-entry',owner:'owner',request});
+  for(let i=0;i<100 && !nativeCalls.includes('evaluate_javascript');i++)await new Promise(resolve=>setTimeout(resolve,2));
+  const blocked=await ipc(socketPath,{op:'call',name:'screenshot',tab:target,args:{},owner:'observer'});
+  assert.equal(blocked.error.code,'SENSITIVE_PHASE');assert.ok(!nativeCalls.includes('screenshot'));
+  unblock();assert.equal((await pending).result.status,'completed');
+  for(const name of ['get_network_request','list_network_requests','browser_console_messages']) {
+    const denied=await ipc(socketPath,{op:'call',name,tab:target,args:{},owner:'owner'});
+    assert.equal(denied.error.code,'PROTECTED_HISTORY');assert.ok(!nativeCalls.includes(name));
+  }
+});

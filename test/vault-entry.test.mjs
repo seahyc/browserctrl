@@ -11,7 +11,7 @@ const gate=(options={})=>createVaultGate(++port,{recording:()=>false,busy:()=>fa
 
 test('strict contract: exact HTTPS origin and matching field sets',()=>{
   assert.equal(validateVaultEntry(request()).version,1);
-  for(const change of [r=>r.deadline=0,r=>r.destination.origin='https://example.test/path',r=>r.destination.origin='http://example.test',r=>r.fields.extra='secret',r=>delete r.fields.totp,r=>r.destination.fields.totp='#password',r=>r.destination.browser='safari']){const r=request();change(r);assert.throws(()=>validateVaultEntry(r));}
+  for(const change of [r=>r.deadline=0,r=>r.destination.origin='https://example.test/path',r=>r.destination.origin='http://example.test',r=>r.fields.extra='secret',r=>delete r.fields.totp,r=>r.destination.fields.totp='#password',r=>r.destination.browser='firefox']){const r=request();change(r);assert.throws(()=>validateVaultEntry(r));}
 });
 test('single-use request IDs survive new gate instances without storing secrets',async()=>{
   const p=++port, options={recording:()=>false,busy:()=>false,reset:()=>{},evaluate:async(_t,e)=>e.includes('values={}')?{ok:true,document_replaced:true}:{ok:true,attempted:true,submitted:true}};

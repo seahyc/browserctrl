@@ -87,7 +87,7 @@ operations become available after verified cleanup.
 
 A request covers one form submission with a full page navigation. SPA login does
 not release observation automatically. Automatic multi-page login, frames,
-shadow DOM and Safari are unsupported. A password and TOTP can be entered
+shadow DOM are unsupported by the Chromium adapter. A password and TOTP can be entered
 together if that form exposes both fields. This does not provide an automated
 multi-step authentication workflow.
 
@@ -96,6 +96,38 @@ browserctrl's mediated observation channels, not direct CDP, another automation
 framework, OS screenshots or other same-user programs. It is not an OS sandbox.
 The vault lease controls credential use; its expiry does not log out the website
 or restrict later actions in the resulting authenticated session.
+
+## Safari 27+
+
+Safari uses the same private stdio driver with `destination.browser: "safari"`
+and a full native `page-...` handle. Start the Safari daemon through an ordinary
+browserctrl command and verify `browserctrl safari status --browser safari`
+reports `vaultEntry: 1` before requesting a vault unlock. The driver never
+starts or replaces a daemon. Create a fresh authentication tab with that same
+`BROWSERCTRL_AGENT_ID`; an existing user tab or a tab from an older daemon is
+rejected. The executor's configured owner must match this identity.
+
+Safari protection closes the disposable authentication tab after entry and
+verifies its exact handle is absent. Open a new tab at the approved site to
+verify the authenticated account. Cookie-based sessions can survive tab closure;
+a site that requires tab-local session storage may not. Multi-page authentication,
+frames and shadow DOM remain unsupported. A submitted receipt proves input and
+cleanup, not that the service accepted the login.
+
+All mediated observation/actions are blocked during entry. Console and network
+Inspector tools remain blocked for the native automation session afterward,
+because Safari provides no complete verifiable purge for retained request detail.
+Other ordinary tools work again after verified tab closure. To restore Inspector
+access, coordinate an idle native-session restart; this ends its automation
+session and can lose its authenticated state. Never stop another task's session.
+
+A transport failure or unverified closure leaves protection blocked. In the same
+native session, ask the owner to close the exact authentication tab and use the
+private recovery driver. If the daemon restarted while blocked, a fresh native
+session cannot prove the old tab is absent. Recovery then requires the owner to
+quit Safari themselves, after saving their work; the driver verifies that Safari
+is not running before clearing protection. Do not remove marker files to bypass
+that check or restart Safari automatically.
 
 ## Owner recovery after uncertain cleanup
 
