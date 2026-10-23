@@ -120,7 +120,7 @@ credential-use flow. Never fetch values into agent context or enter them through
 ordinary `fill`, `type`, `do` or JavaScript. Read [protected field fill](references/vault-fill.md)
 first: the owner approves an item for a set of origins, and each call fills one
 field in a tab and element you choose, so multi-step logins are fill, click Next,
-fill. After a fill the tab refuses `eval`, `shot` and capture until it closes or
+fill. Open a new tab for the login; a user's tab with history is refused. After a fill the tab refuses `eval`, `shot` and capture until it closes or
 reaches a clean page; reads still work, with values redacted. The older one-form
 [vault entry](references/vault-entry.md) still works. A tab claim is not vault
 permission, and lease expiry does not log out the website.

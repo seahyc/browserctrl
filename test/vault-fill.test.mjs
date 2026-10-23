@@ -56,6 +56,7 @@ test('refusal classification on a tainted tab',async()=>{
     const evaluated=[];
     const g2=gate({send:async(method,params)=>{if(method==='Runtime.evaluate')evaluated.push(params.expression);
       if(method==='Target.getTargets')return {targetInfos:[{targetId:'ABCDEF1234567890',type:'page'}]};
+      if(method==='Page.getNavigationHistory')return {entries:[{url:'x'}],currentIndex:0};
       if(method==='Page.getFrameTree')return {frameTree:{frame:{id:'F',loaderId:'L1',url:'https://accounts.example.com/login'}}};
       if(method==='Page.createIsolatedWorld')return {executionContextId:7};
       if(method==='Runtime.evaluate')return {result:{subtype:'node',objectId:'O1'}};
@@ -102,6 +103,7 @@ test('refusal classification on a tainted tab',async()=>{
 test('fill refuses wrong origin, kind mismatch and reused IDs before any input',async()=>{
   const make=(topUrl,check)=>{const calls=[];return {calls,g:gate({send:async(method,params)=>{calls.push(method);
     if(method==='Target.getTargets')return {targetInfos:[{targetId:'ABCDEF1234567890',type:'page'}]};
+      if(method==='Page.getNavigationHistory')return {entries:[{url:'x'}],currentIndex:0};
     if(method==='Page.getFrameTree')return {frameTree:{frame:{id:'F',loaderId:'L1',url:topUrl}}};
     if(method==='Page.createIsolatedWorld')return {executionContextId:7};
     if(method==='Runtime.evaluate')return {result:{subtype:'node',objectId:'O1'}};
@@ -124,6 +126,7 @@ test('values-free marker survives a restart: only close and owner recovery are a
   const p=++port, t='ABCDEF1234567890';
   const send=async method=>{
     if(method==='Target.getTargets')return {targetInfos:[{targetId:t,type:'page'}]};
+    if(method==='Page.getNavigationHistory')return {entries:[{url:'x'}],currentIndex:0};
     if(method==='Page.getFrameTree')return {frameTree:{frame:{id:'F',loaderId:'L1',url:'https://example.com/login'}}};
     if(method==='Page.createIsolatedWorld')return {executionContextId:7};
     if(method==='Runtime.evaluate')return {result:{subtype:'node',objectId:'O1'}};
@@ -156,6 +159,7 @@ test('closing a live tainted tab lifts the taint and wipes the values',async()=>
   const p=++port, t='ABCDEF1234567890';
   const g=createFillGate(p,{recording:()=>false,sessionFor:async()=>'S',withInput:async(_t,_s,fn)=>fn(),send:async(method,params)=>{
     if(method==='Target.getTargets')return {targetInfos:[{targetId:t,type:'page'}]};
+    if(method==='Page.getNavigationHistory')return {entries:[{url:'x'}],currentIndex:0};
     if(method==='Page.getFrameTree')return {frameTree:{frame:{id:'F',loaderId:'L1',url:'https://example.com/login'}}};
     if(method==='Page.createIsolatedWorld')return {executionContextId:7};
     if(method==='Runtime.evaluate')return {result:{subtype:'node',objectId:'O1'}};
@@ -219,4 +223,30 @@ test('a daemon that answers with an error never started the fill',async()=>{
   try {
     assert.deepEqual(await submitVaultFill(request(),{port:p,trusted:async()=>true}),{status:'failed',verification:'not_verified',input_attempted:false,action_may_have_run:false,code:'daemon_refused'});
   } finally {await new Promise(r=>server.close(r));}
+});
+
+test('the first fill needs a tab browserctrl opened or one with no earlier history',async()=>{
+  const p=++port, t='ABCDEF1234567890';
+  const make=entries=>{const calls=[];return {calls,options:{recording:()=>false,sessionFor:async()=>'S',withInput:async(_t,_s,fn)=>fn(),send:async(method,params)=>{calls.push(method);
+    if(method==='Target.getTargets')return {targetInfos:[{targetId:t,type:'page'}]};
+    if(method==='Page.getNavigationHistory')return {entries:Array.from({length:entries},(_,i)=>({url:`https://example.com/${i}`})),currentIndex:entries-1};
+    if(method==='Page.getFrameTree')return {frameTree:{frame:{id:'F',loaderId:'L1',url:'https://example.com/login'}}};
+    if(method==='Page.createIsolatedWorld')return {executionContextId:7};
+    if(method==='Runtime.evaluate')return {result:{subtype:'node',objectId:'O1'}};
+    if(method==='DOM.describeNode')return {node:{backendNodeId:5}};
+    if(method==='DOM.resolveNode')return {object:{objectId:'O2'}};
+    if(method==='Runtime.callFunctionOn')return {result:{value:params.arguments[0].value.verify?{ok:true,length:20}:{ok:true}}};
+    return {};}}};};
+  const user=make(2), g=createFillGate(p,user.options), r=request();
+  const refused=await g.run(r,'o');
+  assert.equal(refused.code,'tab_not_dedicated');assert.equal(refused.input_attempted,false);assert.ok(!user.calls.includes('Input.insertText'));
+  // Nothing was consumed: the same request can run once the tab qualifies.
+  g.created(t);
+  assert.equal((await g.run(r,'o')).verification,'filled');
+  // Later fills on the tainted tab skip the check; the created list survives a restart.
+  assert.equal((await createFillGate(p,make(3).options).run(request(),'o')).code,'tab_tainted');
+  const fresh=createFillGate(++port,make(1).options);assert.equal((await fresh.run(request(),'o')).verification,'filled');
+  assert.equal((await fresh.run(request(),'o')).verification,'filled');
+  const q=++port;createFillGate(q,make(2).options).created(t);
+  assert.equal((await createFillGate(q,make(4).options).run(request(),'o')).verification,'filled');
 });

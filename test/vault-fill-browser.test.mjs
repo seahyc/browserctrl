@@ -124,6 +124,46 @@ test('protected field fill v2 in isolated HTTPS Chromium', {skip: !chromeBinary(
     await raw.browser('Target.closeTarget', {targetId: id});
   });
 
+  // A tab the user opened, here through the browser's own endpoint rather than the daemon.
+  async function userTab(url) {
+    const r = await fetch(`http://127.0.0.1:${port}/json/new?${origin}${url}`, {method: 'PUT'});
+    const {id} = await r.json();
+    await until(id, "document.readyState==='complete' && !!document.querySelector('input')", true);
+    return id;
+  }
+  const visit = async (id, url) => {
+    await conn.send(id, 'Page.navigate', {url: origin + url});
+    await until(id, `location.pathname + location.search === ${JSON.stringify(url)} && document.readyState==='complete'`, true);
+  };
+
+  await t.test('a user tab with earlier history is refused; a one-entry tab is allowed', async () => {
+    const id = await userTab('/password?a=1');
+    await visit(id, '/password?a=2');
+    assert.equal((await raw.send(id, 'Page.getNavigationHistory', {})).entries.length, 2);
+    const refused = await fill(id, '#pw', 'password', PASSWORD);
+    assert.deepEqual(refused, {status: 'failed', verification: 'not_verified', input_attempted: false, action_may_have_run: false, code: 'tab_not_dedicated'});
+    assert.equal(await ops.evaluate(conn, id, "document.querySelector('#pw').value.length"), 0);
+    assert.equal((await raw.status()).taintedTabs, 0);
+    await raw.browser('Target.closeTarget', {targetId: id});
+    const single = await userTab('/password');
+    assert.equal((await raw.send(single, 'Page.getNavigationHistory', {})).entries.length, 1);
+    assert.equal((await fill(single, '#pw', 'password', PASSWORD)).verification, 'filled');
+    await raw.browser('Target.closeTarget', {targetId: single});
+  });
+
+  await t.test('a browserctrl tab with several history entries is allowed and reset on lift', async () => {
+    const id = await tab('/?step=1');
+    await visit(id, '/?step=2');
+    await visit(id, '/password?mode=clean');
+    assert.equal((await raw.send(id, 'Page.getNavigationHistory', {})).entries.length, 3);
+    assert.equal((await fill(id, '#pw', 'password', PASSWORD)).verification, 'filled');
+    await ops.click(conn, id, {selector: '#submit'});
+    await until(id, "location.pathname==='/done' && document.readyState==='complete'", true);
+    assert.equal(await ops.evaluate(conn, id, '1+1', {caller: true}), 2);
+    assert.equal((await raw.send(id, 'Page.getNavigationHistory', {})).entries.length, 1);
+    await raw.browser('Target.closeTarget', {targetId: id});
+  });
+
   await t.test('a page echoing the secret stays tainted: capture refused, reads redacted, close lifts', async () => {
     const id = await tab('/password?mode=echo');
     assert.equal((await fill(id, '#pw', 'password', PASSWORD)).verification, 'filled');

@@ -91,7 +91,9 @@ and every daemon reply is redacted for each filled value in raw, URI-encoded and
 HTML-entity forms. Redaction cannot catch a fragment that a page script cut off.
 The taint lifts when the tab closes, or after a cross-document navigation to a
 frame-free page that passes the v1 secret scan and a successful history reset.
-The reset clears the whole session history of that tab. An SPA submission keeps
+The reset clears the whole session history of that tab, so the first fill
+refuses a tab with earlier history unless browserctrl opened it
+(`tab_not_dedicated`): a user's own tab never loses its history. An SPA submission keeps
 the taint. Taints are also recorded in a values-free marker; after a daemon
 restart a marked tab allows only closing, then the v1 recovery command. See
 [protected field fill](references/vault-fill.md).

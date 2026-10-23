@@ -21,7 +21,10 @@ generated fresh for each call.
 1. Select the browser explicitly. Keep one stable `BROWSERCTRL_AGENT_ID` for both
    your browserctrl commands and the broker's invocation. The target tab must be
    claimed by that id or unclaimed.
-2. Open or reuse a tab and navigate it to the sign-in page. Read it (`read`) to
+2. Open a new tab for the login (`open <url>`) and navigate it to the sign-in
+   page. The first fill refuses a tab that has earlier history and was not
+   opened through browserctrl (`tab_not_dedicated`), because lifting the taint
+   resets the tab's history. Read the page (`read`) to
    get a ref for the input, or choose a CSS selector that matches exactly one
    element.
 3. Call the approved lease with `tab_id` (the full target ID, not a prefix),
@@ -89,6 +92,11 @@ new ID.
    The driver never starts or replaces a daemon.
 2. `tab_id` is an exact page target on that browser, claimed by the caller or
    unclaimed (`tab_not_found`, `tab_not_owned`). The fill claims it for the caller.
+   The first fill on an untainted tab also needs a tab whose history is safe to
+   reset: one opened through this browserctrl daemon (any number of entries;
+   the list is kept values-free on disk across restarts) or one with exactly one
+   history entry. Anything else gives `tab_not_dedicated` with no input
+   attempted and the request ID unused. Later fills on a tainted tab skip this.
 3. `element` resolves to exactly one connected, visible, enabled, writable
    `<input>` in the top document or a same-process frame. Refs may reach into
    open shadow DOM; CSS searches the top document only (`element_not_found`,
@@ -135,7 +143,8 @@ The taint lifts when:
 
 On lift the daemon resets the tab's navigation history, so Back cannot restore
 the filled form, and wipes the values. Chromium can only reset a tab's whole
-history, so entries from before the fill go too; the current page stays. If the
+history, so entries from before the fill go too; the current page stays. That
+is why the first fill needs a browserctrl tab or one with no earlier history. If the
 reset fails, the taint stays. A client-side (SPA) submission never lifts the
 taint, because page JavaScript may still hold the value.
 
