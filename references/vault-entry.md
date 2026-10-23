@@ -1,4 +1,9 @@
-# Protected vault entry
+# Protected vault entry (v1)
+
+Prefer [protected field fill (v2)](vault-fill.md) for new logins. It approves an
+item for origins instead of one tab and its selectors, fills one field per call,
+and handles multi-step and framework-controlled logins. This page covers v1,
+which still works, and the owner recovery command both versions use.
 
 Read this when a browser task needs a vault password or authenticator code.
 Use the agent-vault skill to request credential-use permission and invoke the
@@ -100,10 +105,10 @@ or restrict later actions in the resulting authenticated session.
 ## Safari 27+
 
 Safari uses the same private stdio driver with `destination.browser: "safari"`
-and a full native `page-...` handle. Start the Safari daemon through an ordinary
-browserctrl command and verify `browserctrl status --browser safari`
-reports `vaultEntry: 1` before requesting a vault unlock. The driver never
-starts or replaces a daemon. Create a fresh authentication tab with that same
+and a full native `page-...` handle. Start the Safari daemon through any ordinary
+command, then check that `browserctrl status --browser safari` reports
+`vaultEntry: 1` before requesting a vault unlock. The driver never starts or
+replaces a daemon. Create a fresh authentication tab with that same
 `BROWSERCTRL_AGENT_ID`; an existing user tab or a tab from an older daemon is
 rejected. The executor's configured owner must match this identity.
 

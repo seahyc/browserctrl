@@ -69,3 +69,31 @@ first upgrade needs an owner-coordinated idle window and exact-daemon shutdown.
 For the trusted stdin contract, agent workflow and exact recovery procedure,
 see [protected vault entry](references/vault-entry.md). Recovery requires the
 original owner identity and trusted proof that the exact affected tab is gone.
+
+## Protected field fill (v2)
+
+A version 2 request fills one field (`username`, `password` or `totp`) in a tab
+and element the agent chooses, limited to 1 to 8 approved HTTPS origins. Before
+sending the value, the driver asks the OS which process listens on the daemon
+socket and requires it to run this install's `lib/daemon-run.mjs`; otherwise it
+fails with `daemon_untrusted`. This stops a stray development daemon, not hostile
+same-user code. The daemon checks the tab claim, resolves the element to one
+visible, enabled, writable input, requires both the top-level and the element's
+document origin to be approved, checks the input type against the field, focuses
+it, repeats the origin and type checks, and inserts the value with CDP
+`Input.insertText`. Checks run in an isolated world without the value. The value
+never appears in a `Runtime.evaluate` expression, a log, a marker or a recording.
+
+A filled tab is tainted. It refuses caller JavaScript, raw CDP passthrough,
+screenshots, video, recording and console or network capture, and keeps no
+console, network or recorder events. Structured reads and actions still work,
+and every daemon reply is redacted for each filled value in raw, URI-encoded and
+HTML-entity forms. Redaction cannot catch a fragment that a page script cut off.
+The taint lifts when the tab closes, or after a cross-document navigation to a
+frame-free page that passes the v1 secret scan and a successful history reset.
+The reset clears the whole session history of that tab, so the first fill
+refuses a tab with earlier history unless browserctrl opened it
+(`tab_not_dedicated`): a user's own tab never loses its history. An SPA submission keeps
+the taint. Taints are also recorded in a values-free marker; after a daemon
+restart a marked tab allows only closing, then the v1 recovery command. See
+[protected field fill](references/vault-fill.md).

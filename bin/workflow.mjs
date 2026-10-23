@@ -28,7 +28,7 @@ try {
   // The same key lookup as do: TYPESAFE_API_KEY, else jev.env in the config folder.
   const jevApiKey = args.includes('--jev') ? jevKey().key : null;
   port = await requireBrowser({browser: option('--browser'), port: option('--port')});
-  conn = await connect(port);
+  conn = await connect(port, { mediated: true });
   if (option('--url')) {
     ({targetId: target} = await conn.browser('Target.createTarget', {url: 'about:blank', background: true}));
     owned = true;
