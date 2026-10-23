@@ -34,6 +34,13 @@ test('ranked pick answers show record text and retain structured sources', () =>
   assert.deepEqual(records, before);
 });
 
+test('ranked pick answer templates expose title, link, and key fields', () => {
+  const records = [{ title: 'Chair', text: 'Chair · $50', link: 'https://example.test/chair', key: 50 }];
+  const result = interpolate(records, '${picked.title} | ${picked.link} | ${picked.key}');
+  assert.equal(result.answer, 'Chair | https://example.test/chair | 50');
+  assert.equal(result.sources.length, 3);
+});
+
 test('plain arrays render semicolon-separated values including nested arrays', () => {
   assert.equal(interpolate(['Cabin A', 'Cabin B', 0, false, ['Cabin C', 'Cabin D']]).answer,
     'Selected: Cabin A; Cabin B; 0; false; Cabin C; Cabin D');
