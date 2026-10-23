@@ -105,10 +105,10 @@ or restrict later actions in the resulting authenticated session.
 ## Safari 27+
 
 Safari uses the same private stdio driver with `destination.browser: "safari"`
-and a full native `page-...` handle. Start the Safari daemon through an ordinary
-browserctrl command and verify `browserctrl status --browser safari`
-reports `vaultEntry: 1` before requesting a vault unlock. The driver never
-starts or replaces a daemon. Create a fresh authentication tab with that same
+and a full native `page-...` handle. Start the Safari daemon through any ordinary
+command, then check that `browserctrl status --browser safari` reports
+`vaultEntry: 1` before requesting a vault unlock. The driver never starts or
+replaces a daemon. Create a fresh authentication tab with that same
 `BROWSERCTRL_AGENT_ID`; an existing user tab or a tab from an older daemon is
 rejected. The executor's configured owner must match this identity.
 

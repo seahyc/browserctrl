@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {validateVaultFill, elementSpec, createRedactor, containsSecret, createFillGate, daemonTrusted, submitVaultFill} from '../lib/vault-fill.mjs';
+import {testPort, validateVaultFill, elementSpec, createRedactor, containsSecret, createFillGate, daemonTrusted, submitVaultFill} from '../lib/vault-fill.mjs';
 import {runtimePath} from '../lib/env.mjs';
 
 const request=(change=()=>{})=>{const r={version:2,request_id:crypto.randomUUID(),deadline:Date.now()/1000+60,destination:{browser:'dia',origins:['https://accounts.example.com','https://example.com'],tab_id:'ABCDEF1234567890',element:'@e12'},field:'password',value:'private-password-123'};change(r);return r;};
@@ -249,4 +249,10 @@ test('the first fill needs a tab browserctrl opened or one with no earlier histo
   assert.equal((await fresh.run(request(),'o')).verification,'filled');
   const q=++port;createFillGate(q,make(2).options).created(t);
   assert.equal((await createFillGate(q,make(4).options).run(request(),'o')).verification,'filled');
+});
+
+test('the test port override needs an isolated BROWSERCTRL_HOME',()=>{
+  assert.equal(testPort({BROWSERCTRL_VAULT_TEST_PORT:'9471'}),undefined);
+  assert.equal(testPort({BROWSERCTRL_VAULT_TEST_PORT:'9471',BROWSERCTRL_HOME:'/tmp/x'}),9471);
+  for(const v of ['80','abc','9471.5','70000','']) assert.equal(testPort({BROWSERCTRL_VAULT_TEST_PORT:v,BROWSERCTRL_HOME:'/tmp/x'}),undefined);
 });
