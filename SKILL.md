@@ -54,6 +54,9 @@ answers what would otherwise take a read and a decision per item.
 
 These run after the filter and sort steps in the same `do`. Each item opens in a background
 tab and closes after; nothing in a loop commits.
+A ranked pick's `${x}` renders the whole item row; `${x.title}`, `${x.link}` and `${x.key}` render
+its title, link or sort value (for top K, all chosen items joined by "; "). `pick "first" top 2`
+takes the main list in page order.
 
 ## Use do well
 

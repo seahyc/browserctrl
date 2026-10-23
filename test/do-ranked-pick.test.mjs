@@ -5,6 +5,7 @@ import * as ops from '../lib/ops.mjs';
 import * as notes from '../lib/notes.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { fakeJev } from './fake-jev.mjs';
+import { ranking } from '../lib/do/rank-lines.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 
 let fixture, browser, conn;
@@ -38,6 +39,12 @@ const rankedJev = (rules = {}) => fakeJev({
 const run = (tab, plan, jev) => runSteps(conn, tab, plan, { jev, noNotes: true, traceRun: false, prefetch: false });
 const choices = report => report.bindings.find(b => b.name === 'choices').value;
 const selectionCall = jev => jev.calls.filter(call => Object.keys(call.questions).some(key => key.endsWith('.eligible')));
+
+test('pure first and page-order ranking criteria do not require a value key', () => {
+  assert.deepEqual(ranking('first in page order'), { type: 'order', direction: 1 });
+  assert.deepEqual(ranking('first'), { type: 'order', direction: 1 });
+  assert.deepEqual(ranking('first available cabin'), { type: 'order', direction: 1 });
+});
 
 t('ranked top-k sorts numeric keys locally, preserves ties, and never opens details', async tab => {
   await listing(tab, [
@@ -137,6 +144,37 @@ t('ranked date keys sort calendar dates locally', async tab => {
   const r = await run(tab, ['pick "earliest listed date" top 2 as $choices'], rankedJev());
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.deepEqual(choices(r).map(item => item.key), ['2026-01-02', '2026-02-03']);
+});
+
+t('page-order-only criteria rank the main listing without Jev or line extraction', async tab => {
+  await listing(tab, [{ name: 'First', price: '' }, { name: 'Second', price: '' }, { name: 'Third', price: '' }]);
+  const j = rankedJev();
+  const r = await run(tab, ['pick "first in page order" top 2 as $choices'], j);
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.deepEqual(choices(r).map(item => item.text.match(/First|Second|Third/)?.[0]), ['First', 'Second']);
+  assert.equal(selectionCall(j).length, 0);
+});
+
+t('mixed price periods choose primary prices, report excluded units, and honor requested unit', async tab => {
+  await listing(tab, [
+    { name: 'A', price: '$100 per person · was $120 per person' },
+    { name: 'B', price: '$80 per person' },
+    { name: 'C', price: '$30 per night' },
+  ]);
+  const j = rankedJev({ choice: (q, id) => id.endsWith('.key') ? Object.keys(q.criteria).find(k => k !== 'none') || 'none' : 'none' });
+  const r = await run(tab, ['pick "lowest listed price per person" top 1 as $choices'], j);
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.equal(choices(r)[0].key, 80);
+  assert.match(r.steps[0].excluded.join(' '), /i\d+ excluded/);
+});
+
+t('unresolved eligibility stops when it could change top K and reports the item', async tab => {
+  await listing(tab, [{ name: 'Resolved A', price: 'SGD 200' }, { name: 'Unresolved', price: 'SGD 1' }, { name: 'Resolved B', price: 'SGD 100' }]);
+  const j = rankedJev({ noul: (q, id) => id.endsWith('.eligible') ? /Unresolved/.test(q.instructions) ? .5 : .95 : .04 });
+  const r = await run(tab, ['pick "lowest price" top 1 as $choices'], j);
+  assert.equal(r.done, false);
+  assert.match(r.stopped.reason, /unresolved could change the top 1/);
+  assert.match(r.stopped.reason, /i\d+/);
 });
 
 for (const p of [.749, .251]) {
