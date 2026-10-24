@@ -407,6 +407,25 @@ t('a clear line that fails verification keeps ⚠ and says why in one line', asy
   assert.match(formatSteps(r), /^⚠ 1\. extract "the total price for the stay".*⚠ uncertain: the line did not verify \(p=0\.30, needs 0\.7\)/m);
 });
 
+t('a chosen line whose agreeing lines fail verification is dropped, saying they did not verify', async () => {
+  const tab = await open();
+  const jev = fakeJev({
+    choice: (q, id) => {
+      if (id !== 'extract') return undefined;
+      const row = Object.entries(q.criteria).find(([k, c]) => k !== 'none' && String(c).includes('Hotel C ·'))?.[0];
+      const link = Object.entries(q.criteria).find(([k, c]) => k !== 'none' && String(c).endsWith(': Hotel C'))?.[0];
+      assert.ok(row && link, 'the fixture offers the item line and its link text');
+      return { choice: row, probabilities: { [row]: 0.45, [link]: 0.3, none: 0.25 } };
+    },
+    noul: (q, id) => id === 'extract_verify' ? 0.4 : undefined,
+  });
+  const r = await run(tab, ['extract "the hotel at $199 a night"'], jev);
+  assert.equal(r.extracted[0].value, null);
+  assert.equal(r.steps[0].extract_verify.p, 0.4);
+  assert.match(r.steps[0].skipped, /^Jev: agreeing lines did not verify \(p=0\.40, needs 0\.7\); \d+ of \d+ lines offered$/);
+  assert.doesNotMatch(formatSteps(r), /no offered line answers/);
+});
+
 t('two competing lines keep ⚠ naming both, without a verification call', async () => {
   const tab = await open();
   let second;
