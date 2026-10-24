@@ -6,6 +6,7 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connect } from '../lib/daemon.mjs';
+import * as timing from '../lib/client-timing.mjs';
 import { listBrowsers, requireBrowser, httpGetJson } from '../lib/discovery.mjs';
 import { relaunchWithDebugPort, planLaunch, planDirectLaunch, startDetached } from '../lib/launch.mjs';
 import { safariCLI } from '../lib/safari-frontend.mjs';
@@ -1193,12 +1194,14 @@ const main = async () => {
     if (stillAfter) stillAfter.status = 'FAILED';
     throw e;
   } finally {
+    timing.mark('command_done');
     if (stillAfter) await rec.still(conn, stillAfter.targetId, stillAfter.label, { status: stillAfter.status || 'SUCCESS', ifChanged: stillAfter.ifChanged && !stillAfter.status });
     for (const warning of conn.takeWarnings()) console.error(`Warning: ${warning}`);
     conn.close();
   }
 };
 
+timing.mark('imports_done');
 main().catch(e => {
   console.error(`Error: ${e.message}`);
   process.exit(1);

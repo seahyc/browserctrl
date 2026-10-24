@@ -96,8 +96,9 @@ Jev answers "which control does this step mean?" for names that are not exact. S
 | `BROWSERCTRL_PREFETCH_REAPER` | on | Close prefetched tabs nobody took (after 90 s). |
 | `BROWSERCTRL_TELEMETRY` | off | `1` keeps local connection lifecycle logs (no page data) for debugging daemon restarts, at most 32 files of 1 MB. |
 | `BROWSERCTRL_DIAGNOSTIC_LOG` | off | A file. A fresh daemon writes a protocol trace there. |
+| `BROWSERCTRL_CLIENT_TIMING` | off | A file (or `stderr`). Each CLI process appends one JSON line saying where its wall time went: startup, reaching the daemon (probes, spawn, upgrade), IPC round trips with the daemon's own share (`prepMs`) of each, and the time after the command (a recording still) until exit. |
 | `BROWSERCTRL_READ_WAIT_MS` | 8000 | How long `read`, `text` and `items` wait for a loading page. |
-| `BROWSERCTRL_IDLE_EXIT_MIN` | 720 | Minutes without clients before a daemon exits. It never exits while recording. |
+| `BROWSERCTRL_IDLE_EXIT_MIN` | 720 / 60 | Minutes with no client connected before a daemon exits: 720 on a named browser's port (9222 Chrome, 9223 Dia, ...), 60 on any other. It never exits while recording. |
 | `BROWSERCTRL_COOLDOWN_MS` | 1200000 | First cool-down after a challenge (20 min; it doubles within a day, up to 2 h). |
 | `BROWSERCTRL_REC_STILLS` | on | `off` logs recording steps without taking the per-action still. |
 | `BROWSERCTRL_STILL_SETTLE_MS` | 4000 | How long a recording still waits for the page to settle. |

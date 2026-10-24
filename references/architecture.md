@@ -37,8 +37,11 @@ extension/          wraps the same overlay; adds a popup and browser shortcuts
 A daemon per port holds one browser WebSocket, so Chrome's "Allow remote
 debugging?" prompt fires once per session rather than per command, and console
 and network events survive between invocations. It reconnects across a browser
-restart and exits after 12 idle hours (`BROWSERCTRL_IDLE_EXIT_MIN`), never while a recording runs.
-A new browser connection can still require approval.
+restart. It exits on SIGTERM (vault protection markers and claims stay on disk), when
+the browser is gone for good, when its socket is removed or taken over, and after a
+period with no client connected (`BROWSERCTRL_IDLE_EXIT_MIN`): 12 hours on a named
+browser's port, whose reconnection may prompt, 1 hour on any other port; never while a
+recording runs. A new browser connection can still require approval.
 
 The CLI and Python clients for one port reuse this daemon and browser
 WebSocket. A kernel-held file lock gives one daemon ownership of each port and

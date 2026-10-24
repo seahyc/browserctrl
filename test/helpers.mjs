@@ -19,9 +19,58 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Every test process gets its own throwaway home for notes, recordings, state, sockets and
 // claims, so tests never touch (or migrate) the real one. It is under /tmp, not os.tmpdir(),
 // because a unix socket path may hold only about 100 bytes. Import this file before any lib/ file.
+let ownHome = null;
 if (!process.env.BROWSERCTRL_HOME) {
-  process.env.BROWSERCTRL_HOME = fs.mkdtempSync(path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', 'bc-test-'));
-  process.on('exit', () => { try { fs.rmSync(process.env.BROWSERCTRL_HOME, { recursive: true, force: true }); } catch {} });
+  ownHome = process.env.BROWSERCTRL_HOME = fs.mkdtempSync(path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', 'bc-test-'));
+}
+// Every daemon this process (or a child it runs) starts is logged here by lib/daemon.mjs, and
+// stopped when this process exits: by exact PID, after checking the PID still runs
+// daemon-run.mjs and started after the log line, never by matching a pattern.
+const daemonLog = process.env.BROWSERCTRL_TEST_DAEMON_LOG = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-daemons-')) + '/spawned.jsonl';
+process.on('exit', () => {
+  stopLoggedDaemons();
+  try { fs.rmSync(path.dirname(daemonLog), { recursive: true, force: true }); } catch {}
+  if (ownHome) try { fs.rmSync(ownHome, { recursive: true, force: true }); } catch {}
+});
+
+// Synchronous, for an exit handler. `port` limits it to one debugging port's daemons.
+// Returns the PIDs it had to stop.
+export function stopLoggedDaemons({ port = null, log = daemonLog } = {}) {
+  let rows = [];
+  try { rows = fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)); } catch { return []; }
+  const live = rows.filter(row => (port === null || row.port === port) && daemonStartedFor(row));
+  const signal = (pid, sig) => { try { process.kill(pid, sig); return true; } catch { return false; } };
+  // A daemon this process spawned stays a zombie until Node reaps it, which this synchronous
+  // loop prevents; a zombie has exited.
+  const alive = pid => signal(pid, 0) && (process.platform === 'win32' || !zombie(pid));
+  const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  for (const { pid } of live) {
+    if (process.platform === 'win32') { try { execFileSync('taskkill.exe', ['/PID', String(pid), '/F'], { stdio: 'ignore' }); } catch {} continue; }
+    signal(pid, 'SIGCONT'); // a test may have frozen it; a stopped process ignores SIGTERM
+    signal(pid, 'SIGTERM');
+  }
+  const deadline = Date.now() + 3000;
+  while (live.some(({ pid }) => alive(pid)) && Date.now() < deadline) pause(25);
+  for (const { pid } of live) if (alive(pid)) signal(pid, 'SIGKILL');
+  return live.map(row => row.pid);
+}
+
+function zombie(pid) {
+  try { return execFileSync('/bin/ps', ['-p', String(pid), '-o', 'stat='], { encoding: 'utf8' }).trim().startsWith('Z'); } catch { return true; }
+}
+
+// The logged PID still runs lib/daemon-run.mjs for the logged port and started no earlier
+// than the spawn was logged (ps start times have one-second resolution), so a reused PID
+// is never signalled.
+function daemonStartedFor({ pid, port, at }) {
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  if (process.platform === 'win32') {
+    try { return execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}").CommandLine`], { encoding: 'utf8' }).trim().replaceAll('\\', '/').endsWith(`/lib/daemon-run.mjs ${port}`); } catch { return false; }
+  }
+  let out = '';
+  try { out = execFileSync('/bin/ps', ['-p', String(pid), '-o', 'lstart=,command='], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } }).trim(); } catch { return false; }
+  const m = out.match(/^(\w{3} \w{3}\s+\d+ [\d:]+ \d{4})\s+(.*)$/);
+  return !!m && m[2].endsWith(`/lib/daemon-run.mjs ${port}`) && Date.parse(m[1]) >= Math.floor(at / 1000) * 1000 - 1000;
 }
 // A test file that loaded lib/config.mjs before this file worked out its folders from the
 // real home: stop before any test writes to, or deletes in, the user's folders.

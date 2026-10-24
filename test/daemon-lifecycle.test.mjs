@@ -8,7 +8,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { connect } from '../lib/daemon.mjs';
 import { SOCK } from '../lib/env.mjs';
-import { startHeadlessBrowser, chromeBinary } from './helpers.mjs';
+import { startHeadlessBrowser, chromeBinary, stopLoggedDaemons } from './helpers.mjs';
 
 const exec = promisify(execFile);
 const daemonModule = new URL('../lib/daemon.mjs', import.meta.url).href;
@@ -25,22 +25,7 @@ async function fixture(t) {
   process.env.CDP_DIAGNOSTIC_LOG = trace;
   t.after(async () => {
     if (process.platform !== 'win32') browser.child.kill('SIGCONT');
-    const { stdout } = await daemonProcesses(port);
-    for (const line of stdout.split('\n')) {
-      if (line.trim().endsWith(`/lib/daemon-run.mjs ${port}`)) {
-        try {
-          const pid = Number(line.trim().split(/\s+/)[0]);
-          if (process.platform !== 'win32') process.kill(pid, 'SIGCONT');
-          process.kill(pid, 'SIGTERM');
-          const deadline = Date.now() + 1000;
-          while (Date.now() < deadline) {
-            try { process.kill(pid, 0); } catch { break; }
-            await new Promise(resolve => setTimeout(resolve, 20));
-          }
-          try { process.kill(pid, 'SIGKILL'); } catch {}
-        } catch {}
-      }
-    }
+    stopLoggedDaemons({ port });
     await browser.close();
     fs.rmSync(traceDir, { recursive: true, force: true });
     if (previousTrace === undefined) delete process.env.CDP_DIAGNOSTIC_LOG;
