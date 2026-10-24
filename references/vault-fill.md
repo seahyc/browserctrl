@@ -89,7 +89,10 @@ new ID.
    `lib/daemon-run.mjs` for that port. Anything else fails with
    `daemon_untrusted` before the value is sent. This catches a stray dev-checkout
    daemon; it is not a defence against hostile code running as the same user.
-   The driver never starts or replaces a daemon.
+   The driver never starts or replaces a daemon. A pinned copy of the driver
+   (agent-vault vendors one per executor) trusts the browser's real install only
+   when its executor policy sets `BROWSERCTRL_VAULT_TRUSTED_ROOTS` to that install
+   folder (absolute paths, separated by `:`).
 2. `tab_id` is an exact page target on that browser, claimed by the caller or
    unclaimed (`tab_not_found`, `tab_not_owned`). The fill claims it for the caller.
    The first fill on an untainted tab also needs a tab whose history is safe to

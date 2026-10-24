@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {testPort, validateVaultFill, elementSpec, createRedactor, containsSecret, createFillGate, daemonTrusted, submitVaultFill} from '../lib/vault-fill.mjs';
+import {testPort, validateVaultFill, elementSpec, createRedactor, containsSecret, createFillGate, daemonTrusted, trustedRoots, submitVaultFill} from '../lib/vault-fill.mjs';
 import {runtimePath} from '../lib/env.mjs';
 
 const request=(change=()=>{})=>{const r={version:2,request_id:crypto.randomUUID(),deadline:Date.now()/1000+60,destination:{browser:'dia',origins:['https://accounts.example.com','https://example.com'],tab_id:'ABCDEF1234567890',element:'@e12'},field:'password',value:'private-password-123'};change(r);return r;};
@@ -192,6 +192,10 @@ test('daemon trust check: the OS-reported listener must run this install root',a
   assert.equal(await daemonTrusted('/tmp/s.sock',9223,{root,exec:async()=>({stdout:''})}),false);
   const other=fs.mkdtempSync(path.join(os.tmpdir(),'bc-root-'));fs.mkdirSync(path.join(other,'lib'));fs.writeFileSync(path.join(other,'lib','daemon-run.mjs'),'');
   assert.equal(await daemonTrusted('/tmp/s.sock',9223,{root:other,exec:exec(`/usr/bin/node ${script} 9223`)}),false);
+  // A pinned driver copy trusts the browser's real install only when its policy lists it.
+  assert.deepEqual(trustedRoots({BROWSERCTRL_VAULT_TRUSTED_ROOTS:`${root}:relative/dir: `},other),[other,root]);
+  assert.equal(await daemonTrusted('/tmp/s.sock',9223,{root:other,roots:trustedRoots({BROWSERCTRL_VAULT_TRUSTED_ROOTS:root},other),exec:exec(`/usr/bin/node ${script} 9223`)}),true);
+  assert.equal(await daemonTrusted('/tmp/s.sock',9223,{root:other,roots:trustedRoots({BROWSERCTRL_VAULT_TRUSTED_ROOTS:root},other),exec:exec(`/usr/bin/node /other/checkout/lib/daemon-run.mjs 9223`)}),false);
   fs.rmSync(other,{recursive:true,force:true});
 });
 
