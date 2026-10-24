@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Upload form</title>
+<h1>Apply</h1>
+<form>
+  <fieldset>
+    <legend>Documents</legend>
+    <label for="cv">Resume</label>
+    <input type="file" id="cv" name="cv">
+    <div class="drop">
+      <input type="file" id="photo" multiple style="display:none">
+      <button type="button" onclick="document.getElementById('photo').click()">Add photos</button>
+    </div>
+    <label>Cover letter <input type="file" id="letter"></label>
+  </fieldset>
+  <button type="button" id="picker" onclick="var i=document.createElement('input');i.type='file';i.onchange=function(){document.getElementById('picked').textContent=i.files[0].name};i.click()">Browse files</button>
+  <p id="picked"></p>
+  <button type="button" onclick="document.body.dataset.marks = Number(document.body.dataset.marks || 0) + 1">Mark</button>
+</form>
+<script>
+  for (const id of ['cv', 'photo', 'letter']) document.getElementById(id).addEventListener('change', e => {
+    document.body.dataset[id] = [...e.target.files].map(f => f.name).join(',');
+  });
+</script>

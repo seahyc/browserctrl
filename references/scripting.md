@@ -21,6 +21,12 @@ Every command uses the same codes. They are stable.
 A `do` plan always exits 3 when it stops, whatever the reason; its report (or `trace`)
 says why. Errors print one `Error: …` line on stderr.
 
+Safari (`--browser safari`) uses the same codes: a shared command or flag Safari has no
+equivalent for, a missing tab handle or bad `--args` JSON is 2; Safari's daemon or its
+automation server not reachable is 4; another agent's claim, a paused agent or a tab private
+after credential entry is 5; a tool Safari answers with an error (`isError`), a failed tab
+switch or a timeout is 6.
+
 ## Streams
 
 - stdout carries the data: the page text, the JSON, a `do` report.
@@ -92,8 +98,61 @@ browserctrl click "$t" "Export" && f=$(browserctrl wait --download) && wc -l "$f
 browserctrl scroll <tab> --in "Log output" end       # a scrollable pane or editor, by name or CSS
 ```
 
+```bash
+browserctrl upload <tab> "Resume" ~/cv.pdf           # a file input's label, aria-label or title
+browserctrl upload <tab> "Add photos" a.jpg b.jpg    # a button beside a hidden input: the files go to the input
+browserctrl upload <tab> "Browse files" cv.pdf       # a button that makes its own picker: the picker is intercepted
+browserctrl upload <tab> --ref ref_2 --files a.pdf,b.png   # refs and CSS selectors still work
+```
+
+`upload` finds the control by its exact name, else Jev picks among the page's upload controls
+(file inputs, their labels and buttons, and buttons that say upload, attach, browse or choose
+file); unsure, it exits 3 and lists them. A file that does not exist, or a folder, exits 2
+before anything on the page is touched; relative paths and `~` are resolved here, not by the
+browser. A picker button whose name commits ("Upload and submit") needs `--commit` (else 5).
+
 `screenshot`, `navigate` and `list` are aliases of `shot`, `nav` and `tabs`. Every shell call
 starts fresh, so name the browser on the same line: `BROWSERCTRL_BROWSER=dia browserctrl …`.
+
+## A current tab
+
+```bash
+export BROWSERCTRL_AGENT_ID=report-bot BROWSERCTRL_BROWSER=dia   # or put both on every line
+browserctrl open https://example.com/orders     # the new tab becomes this agent's current tab
+browserctrl text --match 'Order #'              # the tab left out: the current tab
+browserctrl click "Export"
+browserctrl do . 'fill "Search" = "aeron"' 'key Enter'   # "." names it explicitly
+browserctrl use 1A2B3C4D                        # switch; use alone prints it, use --clear forgets it
+```
+
+The current tab is kept per `BROWSERCTRL_AGENT_ID` and per browser, beside the claims file, as
+tab ids only. Without an agent id it belongs to the calling shell's pid, so a harness that
+starts a fresh shell for every command loses it: set the id. `open` sets it; `close` of it
+forgets it; `tabs` tags it `current`. It grants nothing: a tab another agent claimed still
+refuses (5), and a current tab that was closed fails with exit 6 naming it.
+
+Leaving the tab out is unambiguous: with a current tab, the first word is the tab only if it
+is `.`, a tab id (6 to 32 hex characters with a digit, as `tabs` prints), `active`,
+`focused`, `marked` or one of your tab aliases, or if the command has more words than it
+takes (`nav <tab> <url>`, `click <tab> "Save"`, `fill <tab> ref_5 "x"`). A URL, a visible
+name or a plan step is never read as a tab. A name that looks like a tab id needs `.` in front:
+`browserctrl find . "a1b2c3"`. Without a current tab nothing changes.
+
+## One plan on several tabs
+
+```bash
+browserctrl do --each-tab 1A2B3C4D,5E6F7A8B 'click "Export"'
+browserctrl do --each-tab all-mine 'extract "the order total"' --parallel 3 --json | jq '.[] | {tab, done}'
+```
+
+`--each-tab` takes tab ids (or `.`), or `all-mine` for the open tabs this agent has claimed.
+Every tab is resolved first, so a mistyped one runs nothing (exit 6). The plan runs on one tab
+at a time, or on `--parallel N` at once (at most 4). Each tab's claim is checked as a single
+`do` checks it: another agent's tab is refused and the others still run. It prints each tab's
+report in the order given, then a summary line per tab; `--json` prints an array of reports
+with `tab`, `exit` and `done` added, and `-q` prints only the stopped tabs on stderr. It exits
+3 if any plan stopped, else 5 if a tab was refused, else the first failure's code.
+`--resume` and `--out` work on one tab at a time only.
 
 ## Plans from stdin
 

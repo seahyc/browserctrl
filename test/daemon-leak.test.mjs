@@ -1,3 +1,4 @@
+import './isolated-home.mjs';
 // Daemons never outlive the tests that started them, and SIGTERM always stops one.
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';

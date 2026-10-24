@@ -14,8 +14,9 @@ Use the `browserctrl` CLI on PATH. `browserctrl help` lists every command and fl
   `BROWSERCTRL_BROWSER=dia BROWSERCTRL_AGENT_ID=<task-name> browserctrl tabs`.
   There is no default browser. `browserctrl browsers` lists what is debuggable.
 - Keep one `BROWSERCTRL_AGENT_ID` for the whole task.
-- Open your own background tab: `t=$(browserctrl open <url> --id)`. Respect other agents'
-  claims. Never stop the daemon, restart the browser or open your own CDP or Playwright session.
+- Open your own background tab: `t=$(browserctrl open <url> --id)`. `open` also makes it your
+  current tab, so later commands can leave the tab out or write `.`; `browserctrl use <tab>`
+  switches. Respect other agents' claims. Never stop the daemon, restart the browser or open your own CDP or Playwright session.
 
 ## Output and exit codes
 
@@ -48,6 +49,8 @@ First `browserctrl site <site or URL>`: its recipes (the site's own API) and flo
 | A table or grid | `table "$t"` (`--csv`, `--jsonl`) |
 | Part of a long page | `text "$t" --region "<heading>"`, `--from "<line>" --to "<line>"`, `--tail 40` |
 | Every page of a paged list or log | one `do` with `--repeat 'click "Next"' --collect rows --out /tmp/rows.jsonl` |
+| The same steps on several tabs | `do --each-tab <id,id\|all-mine> '<step>' …` |
+| A file upload | `upload "$t" "Resume" ~/cv.pdf` |
 | Details from several list items | `visit <links> --grep "<label>"` |
 | Controls whose names you can't guess | `read "$t"` once, then plan from the names it shows |
 

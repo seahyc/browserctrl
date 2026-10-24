@@ -19,6 +19,7 @@ import * as ext from '../lib/ext.mjs';
 import {planNativeGroup} from '../lib/tab-control.mjs';
 import {getNativeTabAdapter} from '../lib/adapters/index.mjs';
 import * as claims from '../lib/claims.mjs';
+import * as currentTab from '../lib/current-tab.mjs';
 import * as state from '../lib/state.mjs';
 import * as annotations from '../lib/annotations.mjs';
 import { ensureRunning, bridgeFetch, bridgeToken, BRIDGE_PORT } from '../lib/bridge.mjs';
@@ -29,10 +30,13 @@ import * as cooldown from '../lib/cooldown.mjs';
 import * as profiles from '../lib/profiles.mjs';
 import * as jev from '../lib/jev.mjs';
 import { setting, number, dirs, configPath, migrateLegacy, legacyMoves, requireNode } from '../lib/config.mjs';
+import { agentId } from '../lib/env.mjs';
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { formatRead, deepTextExpression } from '../lib/refs.mjs';
 import { runSteps, formatSteps, PAGE_PARAMS, formatParams, mainLinks } from '../lib/steps.mjs';
 import { resumeLines } from '../lib/do/resume.mjs';
+import { norm } from '../lib/do/context.mjs';
+import { commits } from '../lib/commit.mjs';
 import * as prefetch from '../lib/prefetch.mjs';
 import { visit, formatVisits } from '../lib/visit.mjs';
 import * as show from '../lib/show.mjs';
@@ -44,7 +48,7 @@ import * as readtokens from '../lib/readtokens.mjs';
 import * as finder from '../lib/find.mjs';
 import * as recording from '../lib/recording.mjs';
 import { page } from '../lib/page/index.mjs';
-import { EXIT, exitCodeFor, exitError } from '../lib/exit-codes.mjs';
+import { EXIT, exitCodeFor, exitError, safariResultCode } from '../lib/exit-codes.mjs';
 import { MAX_REPEATS } from '../lib/steps.mjs';
 import { PAGE_CAP } from '../lib/collect.mjs';
 
@@ -285,6 +289,9 @@ function usage() {
                                                    ${PAGE_CAP.text} characters / ${PAGE_CAP.items} items / ${PAGE_CAP.rows} rows; --no-dedupe keeps repeats)
                                                    do <tab> - (or --file plan.txt) reads the steps from stdin, one per line
                                                    [--resume [--replace '<step>']] runs the tab's last stopped plan from its failed step
+    browserctrl do --each-tab <tab,tab,...|all-mine> '<step>'... [--parallel N] [--json]
+                                                   the same plan on each tab (one at a time; --parallel up to ${MAX_PARALLEL}), a report per
+                                                   tab then a summary line each; --json an array; exit 3 if any stopped, 5 if one was refused
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
                                                    whole task in one call: 'extract "<what>"' (copies the answering line),
                                                    'pick "<criterion>"' (opens the best-fitting item), 'if "<page shows>" then <step>',
@@ -310,7 +317,8 @@ function usage() {
     browserctrl dialog <tab> --accept | --dismiss [--text "prompt answer"]   answer a JavaScript alert/confirm/prompt
     browserctrl type  <tab> "literal text"
     browserctrl key   <tab> Enter | cmd+a | shift+Tab
-    browserctrl upload <tab> --ref ref_2 --files a.pdf,b.png
+    browserctrl upload <tab> "<file input, label or button name>" <file>...   (exact name, else Jev; or --ref ref_2 --files a.pdf,b.png)
+                       a missing file exits 2 before anything is touched; a button that makes its own picker is intercepted
     browserctrl scroll <tab> [--dy 600]     browserctrl scroll-to <tab> --ref ref_9
     browserctrl scroll <tab> --in "<pane name or css>" [down|up|end|top|<px>]   a scrollable pane or editor inside the page
     browserctrl drag <tab> --from ref_1 --to ref_2
@@ -346,6 +354,12 @@ function usage() {
     browserctrl group --url <substr>[,<substr>...] [--title T] [--color blue]
     browserctrl ungroup --url <substr>[,<substr>...]
     browserctrl claims [--browser dia]       browserctrl release [<tab>|--mine]
+    browserctrl use <tab> [--json]           this agent's current tab on this browser (open sets it too); commands then take
+                                             "." for the tab or leave it out: browserctrl text, browserctrl click "Save".
+                                             use alone prints it (exit 1 if none); use --clear forgets it. Per
+                                             BROWSERCTRL_AGENT_ID: without one it lasts only while the calling shell runs.
+                                             A word is the tab only if it is ".", a tab id, active, marked or an alias, or the
+                                             command has more words than it takes (nav <tab> <url>); never a URL, name or step
     browserctrl status --browser dia         browserctrl stop --browser dia
 
   Scripting (references/scripting.md): data goes to stdout; hints, warnings and progress to stderr.
@@ -493,6 +507,140 @@ function collectSink(file) {
   return { write: rec => { fs.writeSync(fd, JSON.stringify(rec) + '\n'); }, close: async () => fs.closeSync(fd) };
 }
 
+// What a do plan's flags ask of runSteps, on one tab or on each of several.
+function doOptions(flags) {
+  return { show: show.showing(flags), noNotes: Boolean(flags['no-notes']),
+    then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
+    force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
+    dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,
+    pageCap: flags['page-cap'] ? Number(flags['page-cap']) : undefined, dedupe: !flags['no-dedupe'],
+    open: flags.open ? Number(flags.open) : 0, grep: flags.grep, prefetch: !flags['no-prefetch'], context: flags.context != null ? Number(flags.context) : 1,
+    diff: !flags['no-diff'] };
+}
+
+// do --each-tab <tab,tab,…|all-mine>: the same plan on each tab, one at a time, or --parallel N
+// at once (at most MAX_PARALLEL). Each tab's claim is checked as a single do checks it. Prints
+// each tab's report in the order given, then one summary line per tab; --json prints an array.
+// Exit 3 when any plan stopped, else 5 when a tab was refused, else the first failure's code.
+const MAX_PARALLEL = 4;
+async function doEachTab(conn, port, args, flags) {
+  const usageLine = 'Usage: browserctrl do --each-tab <tab,tab,...|all-mine> \'<step>\' ... [--parallel N]   (do --each-tab … - reads the steps from stdin)';
+  if (typeof flags['each-tab'] !== 'string' || !flags['each-tab'].trim()) throw new Error(usageLine);
+  if (flags.resume || flags.out !== undefined) throw exitError('--each-tab does not combine with --resume or --out: run those on one tab at a time', EXIT.USAGE);
+  const lines = planLines(args, flags);
+  if (!lines.length && !flags.repeat) throw new Error(usageLine);
+  let parallel = 1;
+  if (flags.parallel !== undefined) {
+    parallel = Number(flags.parallel);
+    if (!Number.isInteger(parallel) || parallel < 1) throw new Error('--parallel must be a whole number of tabs, 1 or more');
+    if (parallel > MAX_PARALLEL) { console.error(`(--parallel ${parallel} is capped at ${MAX_PARALLEL})`); parallel = MAX_PARALLEL; }
+  }
+  // Every tab is resolved before any plan runs, so a mistyped id runs nothing.
+  let tabs;
+  if (flags['each-tab'] === 'all-mine') {
+    const mine = new Set(claims.list(port).filter(c => c.owner === agentId()).map(c => c.targetId));
+    tabs = (await ops.tabs(conn)).filter(t => mine.has(t.targetId));
+    if (!tabs.length) { no(`--each-tab all-mine: ${agentId()} holds no claim on an open tab of this browser (browserctrl claims lists the claims).`); return; }
+  } else {
+    tabs = [];
+    for (const w of flags['each-tab'].split(',').map(x => x.trim()).filter(Boolean)) {
+      const t = await resolveTabArg(conn, port, w);
+      if (!tabs.some(x => x.targetId === t.targetId)) tabs.push(t);
+    }
+  }
+  const runOne = async t => {
+    try {
+      claims.claim(port, t.targetId, { steal: Boolean(flags.steal) });
+      const r = await runSteps(conn, t.targetId, lines, { ...doOptions(flags), onWarning: w => console.error(`⚠ ${t.id}: ${w}`), refToken: readtokens.recall(port, t.targetId) });
+      if (r.refsToken) readtokens.remember(port, t.targetId, r.refsToken);
+      return { tab: t.id, targetId: t.targetId, exit: r.done ? EXIT.OK : EXIT.STOPPED, report: r };
+    } catch (e) {
+      return { tab: t.id, targetId: t.targetId, exit: exitCodeFor(e), error: e.message };
+    }
+  };
+  const print = x => {
+    if (flags.json) return;
+    if (quiet) {
+      if (x.error) say(`✗ ${x.tab}: ${x.error}`);
+      else if (x.report.stopped) say(`✗ ${x.tab} stopped at step ${x.report.stopped.step}: ${x.report.stopped.reason}`);
+      return;
+    }
+    const title = tabs.find(t => t.targetId === x.targetId)?.title || '';
+    console.log(`── tab ${x.tab}${title ? `  ${title.slice(0, 60)}` : ''}`);
+    console.log(x.error ? `✗ ${x.exit === EXIT.REFUSED ? 'refused' : 'failed'}: ${x.error}` : formatSteps({ ...x.report, warnings: [] }));
+    console.log('');
+  };
+  // A pool of `parallel` runners; reports print in the order the tabs were given.
+  const results = new Array(tabs.length);
+  let next = 0, printed = 0;
+  await Promise.all(Array.from({ length: Math.min(parallel, tabs.length) }, async () => {
+    while (next < tabs.length) {
+      const i = next++;
+      results[i] = await runOne(tabs[i]);
+      while (printed < tabs.length && results[printed]) print(results[printed++]);
+    }
+  }));
+  const codes = results.map(x => x.exit);
+  process.exitCode = codes.includes(EXIT.STOPPED) ? EXIT.STOPPED : codes.includes(EXIT.REFUSED) ? EXIT.REFUSED : codes.find(c => c !== EXIT.OK) ?? EXIT.OK;
+  if (flags.json) return out(results.map(({ report, ...x }) => ({ ...x, done: x.exit === EXIT.OK, ...(report || {}) })));
+  if (quiet) return;
+  const line = x => `${x.tab}  ${x.error ? `✗ ${x.exit === EXIT.REFUSED ? 'refused' : 'failed'}: ${x.error.split('\n')[0]}` : x.report.done ? `✓ done (${x.report.steps?.length ?? 0} steps)` : `✗ stopped at step ${x.report.stopped?.step}: ${x.report.stopped?.reason}`}`;
+  const n = k => results.filter(k).length;
+  console.log([`${tabs.length} tab${tabs.length === 1 ? '' : 's'}: ${n(x => x.exit === EXIT.OK)} done, ${n(x => x.exit === EXIT.STOPPED)} stopped${n(x => x.error) ? `, ${n(x => x.error)} not run` : ''}`, ...results.map(line)].join('\n'));
+}
+
+// The files an upload names, as absolute paths. One that does not exist, or is not a file, is a
+// usage error (exit 2) before anything on the page is touched.
+function uploadPaths(list) {
+  if (!list.length) throw exitError('Usage: browserctrl upload <tab> "<file input, label or button name>" <file>...   (or --ref ref_2 --files a.pdf,b.png): no file given', EXIT.USAGE);
+  return list.map(f => {
+    const abs = path.resolve(String(f).replace(/^~(?=\/|$)/, os.homedir()));
+    let st;
+    try { st = fs.statSync(abs); } catch { throw exitError(`File not found: ${f}${abs !== f ? ` (${abs})` : ''}; nothing was uploaded`, EXIT.USAGE); }
+    if (!st.isFile()) throw exitError(`Not a file: ${f}; upload takes files, not folders`, EXIT.USAGE);
+    return abs;
+  });
+}
+
+// upload <tab> "<name>" <file>...: the file input, or the label or button that opens one, by the
+// name a person sees: the exact name first, else Jev picks among the page's upload controls.
+// Unsure, or no upload control: exit 3 with the controls there are. A button that opens a
+// picker of the page's making and whose name commits (Upload and submit) needs --commit (else 5).
+async function uploadByName(conn, targetId, name, files, flags) {
+  const found = await ops.evaluate(conn, targetId, page('upload-targets', {}));
+  const controls = found.controls || [];
+  const stop = (reason, extra = {}) => {
+    process.exitCode = extra.exit ?? EXIT.STOPPED;
+    const res = { uploaded: false, target: name, reason, upload_controls: controls.map(c => `${c.kind} "${c.name}"${c.within ? ` (in "${c.within}")` : ''}`), ...(extra.res || {}) };
+    if (quiet) return say(`✗ upload "${name}": ${reason}`);
+    return out(res);
+  };
+  if (!controls.length) return stop('the page has no file input, and no label or button that opens one');
+  const bare = s => norm(s).replace(/[\s*:]+$/, '');
+  const exact = controls.filter(c => bare(c.name) === bare(name));
+  let pick = exact.find(c => c.opens === 'file input') || exact[0];
+  let how = pick ? 'exact name' : null;
+  if (!pick) {
+    let cfg;
+    try { cfg = jev.jevKey(); } catch (e) { return stop(`no upload control is named exactly "${name}"; ${e.message}`); }
+    const elements = controls.map(c => ({ ref: `u${c.i}`, role: c.kind, name: c.name, ...(c.within ? { within: c.within } : {}) }));
+    const view = await ops.evaluate(conn, targetId, jev.VIEW_TEXT).catch(() => null);
+    const r = await jev.pickTarget(cfg, { elements, url: view?.url, title: view?.title, text: '' }, { intent: name, action: 'upload a file to', view });
+    const minP = flags['min-p'] ? Number(flags['min-p']) : 0.6;
+    if (!r.pick || (r.p ?? 0) < minP) return stop(r.pick ? `Jev was unsure (p=${r.p}); name the control exactly` : `Jev found no upload control matching "${name}"`, { res: { candidates: r.ranked } });
+    pick = controls[Number(r.pick.ref.slice(1))];
+    how = `Jev (p=${r.p})`;
+  }
+  if (pick.opens === 'file picker' && !flags.commit && commits(pick.name, { role: 'button', name: pick.name })) {
+    return stop(`"${pick.name}" opens the file picker with a click that can commit something`, { exit: EXIT.REFUSED, res: { retry: 'add --commit if the user asked for this action' } });
+  }
+  const marked = await ops.evaluate(conn, targetId, page('upload-targets', { mark: pick.i }));
+  if (!marked.selector) return stop('the page changed while choosing the control; run upload again');
+  const r = await ops.upload(conn, targetId, { selector: marked.selector, files });
+  if (quiet) return;
+  return out({ ...r, target: { kind: pick.kind, name: pick.name, ...(pick.within ? { within: pick.within } : {}), opens: pick.opens }, how });
+}
+
 // click/fill/select/hover/check by name: a one-step do plan, reported in one JSON object.
 // It stops as a do step does (exit 3), and refuses a control that commits (exit 5) unless
 // --commit says the user wants it clicked.
@@ -559,6 +707,23 @@ async function waitDownload(flags) {
   }
 }
 
+// The tab a command names: its word, or this agent's current tab for "." (placeTab puts "."
+// where the tab was left out). A current tab that was closed is a failure naming it (exit 6).
+async function resolveTabArg(conn, port, arg) {
+  if (arg !== '.') {
+    try { return await ops.resolveTab(conn, arg); }
+    catch (e) {
+      if (!arg && /^No tab given/.test(e.message)) e.message = e.message.replace(/^No tab given\. Pick one:/, 'No tab given, and this agent has no current tab (browserctrl use <tab> sets one). Pick one:');
+      throw e;
+    }
+  }
+  const cur = currentTab.get(port);
+  if (!cur) throw exitError(`"." stands for this agent's current tab, and ${agentId()} has none on this browser. Set one with browserctrl use <tab> (open sets it too), or name the tab.`, EXIT.USAGE);
+  const tab = (await ops.tabs(conn)).find(t => t.targetId === cur.targetId);
+  if (!tab) throw exitError(`The current tab ${cur.targetId.slice(0, 8)} (set by use or open) is closed. Pick another with browserctrl use <tab>; browserctrl tabs lists them.`, EXIT.FAILED);
+  return tab;
+}
+
 const main = async () => {
   requireNode();
   if (!cmd || cmd === 'help' || flags.help) return out(usage());
@@ -572,9 +737,13 @@ const main = async () => {
     if (cmd === 'safari') {
       if (positional[1] === 'tools') return out(await safari.safariTools());
       if (positional[1] !== 'call') throw new Error('Usage: browserctrl safari tools | call <tool> --args JSON --tab <handle> --browser safari');
-      const args = flags.args ? JSON.parse(flags.args) : {};
+      let args = {};
+      if (flags.args !== undefined) {
+        try { args = JSON.parse(String(flags.args)); } catch (e) { throw new Error(`args must be JSON: ${e.message}`); }
+      }
       const result = await safari.safariCall(positional[2], args, { tab: flags.tab });
-      if (result.isError) process.exitCode = 1;
+      // A tool Safari reports as failed exits as any failed command does: 5 refused, else 6.
+      process.exitCode = safariResultCode(result) || process.exitCode;
       return out(result);
     }
     if (cmd === 'reload' || cmd === 'refresh') {
@@ -588,7 +757,7 @@ const main = async () => {
     if (cmd === 'release') return out({ released: flags.mine || !positional[1] ? claims.releaseMine() : claims.release(9228, positional[1]) });
     const request = safariCLI(cmd, positional, flags);
     const result = await safari.safariCall(request.name, request.args, { tab: request.tab });
-    if (result.isError) process.exitCode = 1;
+    process.exitCode = safariResultCode(result) || process.exitCode;
     return out(result);
   }
   if (cmd === 'doctor') {
@@ -862,8 +1031,30 @@ const main = async () => {
   let stillAfter = null;
   try {
     if (cmd === 'activity') return activityOutput(await conn.activity(positional[1] || 'list', activityDetails(flags)), flags);
+    if (cmd === 'use') {
+      // use <tab>: this agent's current tab on this browser; use: print it; use --clear: forget it.
+      if (flags.clear) return out({ cleared: currentTab.clear(port) });
+      if (!positional[1]) {
+        const cur = currentTab.get(port);
+        if (!cur) { no(`No current tab for ${agentId()} on this browser. Set one with browserctrl use <tab>.`); return; }
+        const t = await resolveTabArg(conn, port, '.');
+        return out(flags.json ? { tab: t.id, targetId: t.targetId, title: t.title, url: t.url, agent: agentId() } : t.id);
+      }
+      const t = await resolveTabArg(conn, port, positional[1]);
+      claims.claim(port, t.targetId, { steal: Boolean(flags.steal) });
+      currentTab.set(port, t.targetId);
+      if (/^pid:/.test(agentId())) console.error('(BROWSERCTRL_AGENT_ID is not set, so the current tab lasts only while this shell runs. Set BROWSERCTRL_AGENT_ID=<name> on each command line to keep it across shell calls.)');
+      return out(flags.json ? { current: t.id, targetId: t.targetId, title: t.title, url: t.url, agent: agentId() } : t.id);
+    }
+    if (cmd === 'do' && flags['each-tab'] !== undefined) return await doEachTab(conn, port, positional.slice(1), flags);
+    // With a current tab, the tab may be left out (see lib/current-tab.mjs for how a word is told
+    // apart from a tab); "." always stands for it.
+    if (currentTab.TAB_COMMANDS.has(cmd)) {
+      const placed = currentTab.placeTab(positional, { hasCurrent: Boolean(currentTab.get(port)), aliases: state.aliasNames(port) });
+      positional.splice(0, positional.length, ...placed);
+    }
     if (cmd === 'ready') {
-      const tab = await ops.resolveTab(conn, positional[1]);
+      const tab = await resolveTabArg(conn, port, positional[1]);
       let r;
       try { r = await waitForBackgroundReady(conn, tab.targetId, {waitUntil: flags.until || 'load', timeoutMs: Number(flags.timeout || 15000), selector: flags.selector, text: flags.text, url: flags.url}); }
       catch (e) {
@@ -890,6 +1081,8 @@ const main = async () => {
       let rows = await ops.tabs(conn, { focus: !flags['no-focus'] });
       // Profile names cost a one-time probe per profile; see lib/profiles.mjs.
       rows = flags.profile ? await profiles.filterByProfile(conn, rows, flags.profile) : await profiles.labelTabs(conn, rows);
+      const cur = currentTab.get(port);
+      if (cur) rows = rows.map(t => (t.targetId === cur.targetId ? { ...t, current: true } : t));
       if (flags.json) return out(rows);
       if (flags.jsonl) return outLines(rows);
       // One id per line, for xargs: browserctrl tabs --ids | xargs -n1 browserctrl text
@@ -899,6 +1092,7 @@ const main = async () => {
           .map(t => {
             const tags = [];
             if (t.focused) tags.push('←you');
+            if (t.current) tags.push('current');
             if (t.rendering) tags.push('rendering');
             if (t.anonymous) tags.push('anonymous');
             if (t.marked) tags.push(`marked${t.marked.note ? `: ${t.marked.note}` : ''}`);
@@ -1033,7 +1227,7 @@ const main = async () => {
     if (cmd === 'rec') {
       const sub = positional[1];
       if (!['start', 'stop'].includes(sub) || !positional[2]) throw new Error('Usage: browserctrl rec start|stop <tab> [--out DIR] [--label L]  (also: rec status, rec om2w, replay)');
-      const t = await ops.resolveTab(conn, positional[2]);
+      const t = await resolveTabArg(conn, port, positional[2]);
       if (sub === 'start') return out(await rec.start(conn, t.targetId, { out: flags.out, label: flags.label === true ? null : flags.label }));
       const res = await rec.stop(conn, t.targetId);
       return out({ ...res, replay: `browserctrl replay ${res.recording}` });
@@ -1049,12 +1243,14 @@ const main = async () => {
         res = await observe(conn, res.targetId, res);
       }
       hint(positional[1], flags);
+      // The new tab becomes this agent's current tab: later commands may leave the tab out.
+      currentTab.set(port, res.targetId);
       // --id: only the new tab's id, for t=$(browserctrl open URL --id)
       if (flags.id) return out(res.id);
       return out(res);
     }
 
-    const tab = await ops.resolveTab(conn, positional[1]);
+    const tab = await resolveTabArg(conn, port, positional[1]);
     const targetId = tab.targetId;
     if (MUTATING.has(cmd) || (cmd === 'check' && positional[2] !== undefined && !flags.expect)) claims.claim(port, targetId, { steal: Boolean(flags.steal) });
     if (rec.get(targetId) && (STILL_ACT.has(cmd) || STILL_READ.has(cmd))) {
@@ -1082,7 +1278,7 @@ const main = async () => {
       else if (num(p) && num(positional[3]) && cmd !== 'fill') { target.x = Number(p); target.y = Number(positional[3]); } // click <tab> 150 407
       else if (looksLikeSelector(p) || await selectorOnPage(conn, targetId, p)) target.selector = p;
       else if (/^i\d+$/.test(p)) throw new Error(`${p} is an item id from \`items\`, not a ref. Click the item by its text: browserctrl do ${tab.id} 'click "<the item's text>"', or use a ref_N from browserctrl read ${tab.id}.`);
-      else if (['click', 'hover', 'select'].includes(cmd) || (cmd === 'fill' && (positional[3] !== undefined || typeof flags.value === 'string'))) named = p;
+      else if (['click', 'hover', 'select', 'upload'].includes(cmd) || (cmd === 'fill' && (positional[3] !== undefined || typeof flags.value === 'string'))) named = p;
       else if (cmd !== 'fill') throw new Error(`"${p}" is not a ref (ref_9) or a CSS selector. Name it in words instead: browserctrl do ${tab.id} '${cmd} "${p}"', or browserctrl ${cmd} ${tab.id} --intent "${p}".`);
       if (target.ref || target.selector) valueArg = positional[3];
       if (target.x !== undefined) valueArg = positional[4];
@@ -1104,6 +1300,10 @@ const main = async () => {
 
     // A visible name: found the way a do step finds it (exact name, else Jev), and done as one.
     if (cmd === 'check' && positional[2] !== undefined && !flags.expect) named = String(positional[2]);
+    // upload's files: the words after its target, and --files a,b.
+    const filesGiven = () => [...(typeof flags.files === 'string' ? flags.files.split(',').filter(Boolean) : []),
+      ...positional.slice(named !== null || (positional[2] !== undefined && (target.ref || target.selector) && !flags.ref && !flags.selector) ? 3 : 2)];
+    if (named !== null && cmd === 'upload') return await uploadByName(conn, targetId, named, uploadPaths(filesGiven()), flags);
     if (named !== null) {
       const value = cmd === 'fill' ? (flags.value ?? positional[3]) : cmd === 'select' ? (flags.label ?? flags.value ?? positional[3]) : undefined;
       if (cmd === 'select' && (value === undefined || value === true)) throw new Error(`Usage: browserctrl select ${tab.id} "<list name>" "<option>"`);
@@ -1159,13 +1359,8 @@ const main = async () => {
         const sink = outPath ? collectSink(outPath) : null;
         let r;
         try {
-          r = await runSteps(conn, targetId, lines, { onWarning: warning => console.error(`⚠ ${warning}`), show: show.showing(flags), noNotes: Boolean(flags['no-notes']),
-            then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
-            force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
-            dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : outPath ? 1000 : undefined, collect: flags.collect,
-            collectSink: sink?.write, collectOut: outPath, pageCap: flags['page-cap'] ? Number(flags['page-cap']) : undefined, dedupe: !flags['no-dedupe'],
-            open: flags.open ? Number(flags.open) : 0, grep: flags.grep, prefetch: !flags['no-prefetch'], context: flags.context != null ? Number(flags.context) : 1,
-            diff: !flags['no-diff'], refToken: callerToken,
+          r = await runSteps(conn, targetId, lines, { ...doOptions(flags), onWarning: warning => console.error(`⚠ ${warning}`),
+            max: flags.max ? Number(flags.max) : outPath ? 1000 : undefined, collectSink: sink?.write, collectOut: outPath, refToken: callerToken,
           });
         } finally { await sink?.close(); }
         if (r.refsToken) readtokens.remember(port, targetId, r.refsToken);
@@ -1384,8 +1579,11 @@ const main = async () => {
       }
       case 'select':
         return out(await ops.selectOption(conn, targetId, { ...target, value: flags.value, label: flags.label }));
-      case 'upload':
-        return out(await ops.upload(conn, targetId, { ...target, files: String(flags.files || '').split(',').filter(Boolean) }));
+      case 'upload': {
+        const files = uploadPaths(filesGiven());
+        if (!target.ref && !target.selector) throw new Error(`Usage: browserctrl upload ${tab.id} "<file input, label or button name>" <file>...   (or --ref ref_2, or a CSS selector)`);
+        return out(await ops.upload(conn, targetId, { ...target, files }));
+      }
       case 'scroll': {
         if (typeof flags.in !== 'string') return out(await ops.scroll(conn, targetId, { deltaY: Number(flags.dy || 400), deltaX: Number(flags.dx || 0) }));
         // --in "<pane>" [down|up|end|top|N]: a scrollable pane inside the page, by its name.
@@ -1434,8 +1632,11 @@ const main = async () => {
       }
       case 'cookies':
         return out(await ops.cookies(conn, targetId));
-      case 'close':
-        return out(await ops.closeTab(conn, targetId));
+      case 'close': {
+        const r = await ops.closeTab(conn, targetId);
+        currentTab.clear(port, { targetId });
+        return out(r);
+      }
       case 'focus':
         return out(await ops.focus(conn, targetId));
       case 'wake':
