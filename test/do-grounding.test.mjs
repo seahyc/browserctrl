@@ -69,7 +69,7 @@ t('a search-filter plan runs in one call and waits for late results', async () =
   const id = await open('steps-form.html');
   const r = await runSteps(conn, id, ['fill Search = aeron', 'key Enter', 'click "More filters"', 'fill Maximum = 600', 'click Apply'], { then: 'text' });
   assert.equal(r.done, true, JSON.stringify(r.stopped));
-  assert.ok(r.steps.filter(s => s.target).every(s => s.how === 'exact'));
+  assert.ok(r.steps.filter(s => s.target).every(s => /^exact\b/.test(s.how)));
   assert.match(r.text, /Aeron A · S\$380/);
   assert.match(r.text, /Aeron B · S\$580/);
   assert.doesNotMatch(r.text, /Aeron C|Chair D/);

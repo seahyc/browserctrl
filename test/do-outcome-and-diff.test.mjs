@@ -67,7 +67,7 @@ t('an error after a step stops the plan; a named stepper and its row', async () 
   assert.match(r.stopped.reason, /error after this step: title "Error - How much money do you have"; "There is a problem: Select how much money you have"/);
   const r2 = await runSteps(conn, id, ['click "Increase Children"', 'click "Increase Children"', 'click "Decrease Children"'], { jev: jev });
   assert.equal(r2.done, true, JSON.stringify(r2.stopped));
-  assert.ok(r2.steps.every(s => s.how === 'exact'));
+  assert.ok(r2.steps.every(s => /^exact\b/.test(s.how)), JSON.stringify(r2.steps.map(s => s.how))); // notes such as a late click follow the method
   assert.equal(await text(id, '#kids'), '1');
   await ops.closeTab(conn, id);
 });
