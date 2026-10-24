@@ -101,4 +101,25 @@ if (q.has('tiles')) {
     </div>`).join('') + '</div>';
   addEventListener('hashchange', () => state('opened ' + location.hash.slice(1)));
 }
+if (q.has('busy')) {
+  // A busy page: the main thread is held (busy ms) when the pointer arrives (on=enter) or
+  // presses (on=down), so the click is acknowledged late or never (past INPUT.ACK), and the
+  // page applies the click lateMs after it (a framework's state update). never=1: it never does.
+  const busy = Number(q.get('busy')), on = q.get('on') || 'down', late = Number(q.get('late') || 2500), never = q.has('never');
+  const spin = (ms) => { const end = performance.now() + ms; while (performance.now() < end) {} };
+  root.innerHTML = `<h1>Hotel options</h1>
+    <label id="lab"><input type="checkbox" id="cb"> Include breakfast</label>
+    <div><button type="button" id="more" aria-expanded="false" aria-controls="more-panel">More options</button><div id="more-panel" hidden>Late checkout · Airport transfer</div></div>`;
+  let held = false;
+  const hold = () => { if (held) return; held = true; spin(busy); };
+  for (const el of [document.getElementById('lab'), document.getElementById('more')]) el.addEventListener(on === 'enter' ? 'pointerover' : 'pointerdown', hold);
+  const cb = document.getElementById('cb'), more = document.getElementById('more');
+  cb.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!never) setTimeout(() => { cb.checked = true; state('breakfast on'); }, late);
+  });
+  more.addEventListener('click', () => {
+    if (!never) setTimeout(() => { more.setAttribute('aria-expanded', 'true'); document.getElementById('more-panel').hidden = false; state('more open'); }, late);
+  });
+}
 </script>
