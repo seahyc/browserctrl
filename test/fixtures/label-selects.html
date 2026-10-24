@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Label selects</title></head>
+<body>
+<h1>Billing</h1>
+<div style="display:flex;gap:12px;align-items:center">
+  <label>Project <select id="project"><option>atlas</option><option>borealis</option><option>cygnus</option></select></label>
+  <label>Month <select id="month"><option>2026-08</option><option>2026-09</option><option selected>2026-10</option></select></label>
+  <button id="show">Show summary</button>
+</div>
+<p><label for="year">Year</label> <select id="year"><option>2025</option><option selected>2026</option><option>2027</option></select></p>
+<p><span id="quarter-label">Quarter</span> <select id="quarter" aria-labelledby="quarter-label"><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select></p>
+<p><label>Remember me <input type="checkbox" id="remember"></label></p>
+<p><label>Email <input type="email" id="email"></label></p>
+<p><label>Notes <textarea id="notes">draft text</textarea></label></p>
+<div id="out"></div>
+<script>
+const out = document.getElementById('out');
+const record = () => { out.dataset.s = ['project', 'month', 'year', 'quarter'].map(id => `${id}=${document.getElementById(id).value}`).join(';') + `;remember=${document.getElementById('remember').checked};email=${document.getElementById('email').value};notes=${document.getElementById('notes').value}`; };
+document.querySelectorAll('select,input,textarea').forEach(el => el.addEventListener('change', record));
+document.querySelectorAll('input,textarea').forEach(el => el.addEventListener('input', record));
+record();
+</script>
+</body></html>

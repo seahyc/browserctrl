@@ -124,6 +124,10 @@ Then I flipped it around. The agent plans and reads, and Jev only picks the cont
 
 My takeaway: a small fast model is very good at a narrow question where every possible answer is listed, like "which of these 57 controls is 'Sort by'?". It's poor at open questions like "what should happen next, and are we done?". So each model gets the question it's good at.
 
+### What happens with Jev switched off
+
+I also ran browserctrl with Jev turned off, so that only exact names, refs and selectors work. On 6 short live-site tasks and 7 local tasks, 2 runs each, it made no difference I could measure. Without Jev, runs took about one more tool call on the local tasks, mostly on dropdowns whose label wraps them (a matching gap that's now fixed). Turns and time stayed within noise, and the live-site runs were no worse (12 of 12 correct, against 10 of 12 with Jev). The one wrong answer without Jev was the agent's own currency arithmetic on a hotel list. These were 1 to 2 minute tasks where most names are exact, so Jev rarely came into play. Where it does matter is on controls an agent can't name in advance, as in the clips above, and in `pick` and `extract`, which need it to judge items and lines. I'd like a task set where that's common before claiming a number for it.
+
 ### Reading answers off a page
 
 A plan can also read. `extract "the latest Python version" as $py` asks Jev which line of the page answers the question, and binds that line exactly as the page shows it. `answer "${py}"` fills a template from what was bound. Here is the same five-step plan with the code from before this round (left) and now (right):
