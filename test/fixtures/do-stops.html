@@ -1,0 +1,104 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Recurring plan stops</title>
+<style>
+  body { font: 14px/1.4 sans-serif; margin: 0; padding: 16px; }
+  /* GitHub's issue list: the title's h3 is display:inline with overflow:hidden, which does
+     not clip an inline box, and the link is line-clamped. */
+  .issues { list-style: none; padding: 0; border: 1px solid #ddd; }
+  .row { display: grid; position: relative; grid-template-columns: min-content minmax(30%, 1fr) min-content; gap: 4px; padding: 8px; border-bottom: 1px solid #eee; }
+  .row:hover { background: #f6f8fa; }
+  .title-container { padding-top: 8px; display: block; }
+  .heading { display: inline; overflow: hidden; text-overflow: ellipsis; white-space: normal; font-weight: 500; font-size: 16px; }
+  .anchor { overflow: hidden; text-overflow: ellipsis; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: #1f2328; }
+  .meta { display: flex; overflow: hidden; color: #59636e; }
+  /* UPS's Service Alert flyout: fixed, translated off the right edge until it opens. */
+  .sa-flyout-panel { position: fixed; top: 0; right: 0; max-height: 100vh; width: min(26rem, 100vw); background: #fff; z-index: 2000; display: flex; flex-direction: column; transform: translateX(100%); overflow: hidden; }
+  .sa-flyout-panel.is-open { transform: translateX(0); }
+  .notice-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1999; }
+  .notice { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); width: 420px; background: #fff; z-index: 2000; padding: 16px; }
+  /* Carnival's filter: a React modal rendered into a portal at the end of <body>. */
+  .filters { display: flex; gap: 8px; }
+  .ReactModal__Overlay { position: absolute; inset: 0; z-index: 2; padding: 0 60px; display: grid; }
+  .ReactModal__Content { position: relative; top: 120px; background: #fff; border: 1px solid #ccc; padding: 12px; height: fit-content; width: 300px; }
+  /* IMDb's language flyout: opens while the pointer is over it, a click toggles it. */
+  .flyout { position: relative; display: inline-block; }
+  .flyout-menu { display: none; position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid #ccc; padding: 8px; width: 200px; }
+  .flyout.is-visible .flyout-menu { display: block; }
+  /* Carnival's trip tiles: a Save heart drawn over the image comes first in each tile. */
+  .tiles { display: grid; grid-template-columns: repeat(3, 220px); gap: 12px; }
+  .tile { border: 1px solid #ddd; }
+  .tile .img { position: relative; height: 90px; background: #cde; }
+  .tile .img button { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; }
+</style>
+<p>State: <output id="state"></output></p>
+<div id="root"></div>
+<script>
+const q = new URLSearchParams(location.search);
+const root = document.getElementById('root');
+const state = (t) => { document.getElementById('state').textContent = t; };
+if (q.has('gh')) {
+  const titles = ['[Feature] Roadmap: improve MCP usability and performance under bounded resources, a long title that wraps onto a second line in the list', '[Bug] Invalid method locals-signature tokens receive completions', '[Bug] Prefixed XHTML forms resolve empty actions against the base'];
+  root.innerHTML = '<h2>Issues</h2><ul class="issues" role="list">' + titles.map((t, i) => `
+    <li class="row" tabindex="-1">
+      <div class="status"><svg aria-label="Open" role="img" width="16" height="16"><circle cx="8" cy="8" r="6"/></svg></div>
+      <div class="title-container" data-listview-item-title-container="true">
+        <h3 class="heading"><a class="anchor" href="#issue-${1065 + i}" data-testid="issue-listitem-title-link"><span><span>${t}</span></span></a></h3>
+      </div>
+      <div class="meta"><span>#${1065 + i} opened 37m ago by coygeek</span></div>
+      <div class="comments"><a href="#issue-${1065 + i}-comments" aria-label="${46 - i} comments">${46 - i}</a></div>
+    </li>`).join('') + '</ul><p style="height:1200px"></p>';
+  addEventListener('hashchange', () => state('opened ' + location.hash.slice(1)));
+}
+if (q.has('ups')) {
+  root.innerHTML = `<h1>Flat Rate Shipping with UPS Simple Rate</h1>
+    <div role="tablist"><button role="tab" aria-selected="true" id="t-s">Small: Starting at $15.80</button><button role="tab" aria-selected="false" id="t-m">Medium: Starting at $18.95</button></div>
+    <div role="tabpanel" id="panel">Small box details</div>`;
+  for (const b of root.querySelectorAll('[role=tab]')) b.onclick = () => { for (const o of root.querySelectorAll('[role=tab]')) o.setAttribute('aria-selected', String(o === b)); document.getElementById('panel').textContent = b.textContent + ' details'; state('tab ' + b.textContent); };
+  if (q.get('ups') === 'phantom') root.insertAdjacentHTML('afterend', `<div id="sa-flyout-panel" class="sa-flyout-panel" role="dialog" aria-modal="true" aria-label="Service Alert" aria-hidden="true"><div class="sa-flyout-header"><button type="button" class="sa-flyout-close" aria-label="Close">×</button><h2 class="sa-flyout-title"></h2></div><div class="sa-flyout-body"></div></div>`);
+  if (q.get('ups') === 'notice') root.insertAdjacentHTML('afterend', `<div class="notice-backdrop"></div><div class="notice" role="dialog" aria-modal="true" aria-label="Service Alert"><button type="button" aria-label="Close" onclick="this.parentElement.previousElementSibling.remove(); this.parentElement.remove()">×</button><h2>Service Alert</h2><p>Severe weather may delay deliveries in the Midwest this week.</p></div>`);
+  if (q.get('ups') === 'decide') root.insertAdjacentHTML('afterend', `<div class="notice-backdrop"></div><div class="notice" role="dialog" aria-modal="true" aria-label="Choose your location"><h2>Choose your location</h2><p>Prices differ by country.</p><button type="button" onclick="window.unsafe=true">United States</button><button type="button" onclick="window.unsafe=true">United Kingdom</button></div>`);
+  if (q.get('ups') === 'form') root.insertAdjacentHTML('afterend', `<div class="notice-backdrop"></div><div class="notice" role="dialog" aria-modal="true" aria-label="Service Alert"><button type="button" aria-label="Close" onclick="window.unsafe=true">×</button><h2>Get delivery alerts</h2><label>Email <input type="email"></label><button type="button" onclick="window.unsafe=true">Subscribe</button></div>`);
+}
+if (q.has('portal')) {
+  root.innerHTML = `<h1>Cruise Search</h1><div class="filters">
+    <button type="button" aria-expanded="false" aria-haspopup="true" data-testid="sailFromButton"><div>Sail From</div></button>
+    <button type="button" aria-expanded="false" aria-haspopup="true" data-testid="durationDaysButton"><div>Duration</div></button></div>
+    <p>45 Cruise Results</p>`;
+  let modal = null;
+  const btn = root.querySelector('[data-testid=durationDaysButton]');
+  btn.onclick = () => {
+    if (modal) { modal.remove(); modal = null; btn.setAttribute('aria-expanded', 'false'); state('duration closed'); return; }
+    // React renders the modal into its portal a frame or two later.
+    setTimeout(() => {
+      modal = document.createElement('div');
+      modal.className = 'ReactModal__Overlay';
+      modal.innerHTML = '<div class="ReactModal__Content" role="dialog" aria-modal="true" aria-labelledby="heading" data-testid="durationDaysFiltersModal"><div id="heading" aria-hidden="true">Duration Filter Expanded</div><div>Number Of Days</div>' +
+        [2, 3, 4, 5, 6, 7, 8].map(n => `<button type="button" onclick="document.getElementById('state').textContent='chose ${n} days'">${n} Days</button>`).join('') + '</div>';
+      document.body.append(modal);
+      btn.setAttribute('aria-expanded', 'true');
+      state('duration open');
+    }, 120);
+  };
+}
+if (q.has('hoverflyout')) {
+  root.innerHTML = `<h1>Top 250 Movies</h1><div class="flyout" id="fly"><button type="button" aria-haspopup="true" aria-expanded="false" aria-label="Toggle language selector"><span>EN</span></button>
+    <div class="flyout-menu" role="menu"><span role="menuitem" tabindex="-1">English (United States)</span><span role="menuitem" tabindex="-1">Français (Canada)</span></div></div>`;
+  const fly = document.getElementById('fly'), btn = fly.querySelector('button');
+  window.flyoutLog = [];
+  const set = (open) => { if (fly.classList.contains('is-visible') === open) return; fly.classList.toggle('is-visible', open); btn.setAttribute('aria-expanded', String(open)); state(open ? 'language open' : 'language closed'); window.flyoutLog.push(open ? 'open' : 'closed'); };
+  fly.addEventListener('mouseenter', () => set(true));
+  fly.addEventListener('mouseleave', () => set(false));
+  btn.addEventListener('click', () => set(btn.getAttribute('aria-expanded') !== 'true'));
+}
+if (q.has('tiles')) {
+  const trips = ['4-Day Baja Mexico', '8-Day Mexican Riviera', '14-Day Hawaii'];
+  root.innerHTML = '<h2>18 Cruise Results</h2><div class="tiles">' + trips.map((t, i) => `
+    <div class="tile" data-testid="tripTile_${i}">
+      <div class="img"><button role="checkbox" aria-checked="false" aria-label="Save Itinerary for ${t}" onclick="this.setAttribute('aria-checked', String(this.getAttribute('aria-checked') !== 'true')); document.getElementById('state').textContent='saved ${i}'">♡</button></div>
+      <h3><a href="#trip-${i}">${t}</a></h3><p>from $${428 + i * 100} per person</p>
+      <a href="#trip-${i}-details">View details</a>
+    </div>`).join('') + '</div>';
+  addEventListener('hashchange', () => state('opened ' + location.hash.slice(1)));
+}
+</script>

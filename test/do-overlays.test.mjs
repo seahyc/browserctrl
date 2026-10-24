@@ -130,15 +130,14 @@ t('a toggle clipped by its scrolling list under a static footer is offered and s
   await ops.closeTab(conn, id);
 });
 
-t('a notice on top is named with the control that closes it', async () => {
+t('a notice on top that only closes (Got it, ×) is closed and reported, then the step runs', async () => {
   const id = await open('steps-friction4.html?notice=1');
   const r = await runSteps(conn, id, ['click "Filters"'], { jev: planJev({ Filters: [/^Filters$/, 0.9] }, { blocks: false }), noNotes: true });
   const out = formatSteps(r);
   console.log(out);
-  assert.equal(r.done, false);
-  assert.match(out, /On top: a dialog "Now you’ll see one price/);
-  assert.match(out, /close it with click "Got it"/);
-  assert.match(out, /Covered: button "Filters" is under div "Now you’ll see one price/);
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.match(out, /dismissed notice dialog after step 0: "Now you’ll see one price/);
+  assert.match(out, /\+ dialog "Filters" opened/);
   await ops.closeTab(conn, id);
 });
 
