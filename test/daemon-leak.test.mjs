@@ -90,7 +90,7 @@ test('SIGTERM exits a daemon whose home was deleted, and does not recreate it', 
   const home = fs.mkdtempSync('/tmp/bc-gone-');
   const child = await exec(process.execPath, ['--input-type=module', '-e',
     `import {connect} from ${JSON.stringify(new URL('../lib/daemon.mjs', import.meta.url).href)}; const c=await connect(${port}); console.log((await c.status()).pid); c.close();`],
-    { env: { ...process.env, BROWSERCTRL_HOME: home, BROWSERCTRL_CAPTURE: '1' } });
+    { env: { ...process.env, BROWSERCTRL_HOME: home, BROWSERCTRL_CAPTURE: '1', BROWSERCTRL_EXEMPLARS: path.join(home, 'exemplars') } });
   const pid = Number(child.stdout.trim());
   assert.ok(alive(pid));
   // Stop the socket check from ending it first: SIGTERM is what is under test.
@@ -133,5 +133,6 @@ test('a run of daemon-using test files leaves no daemon behind', options, async 
   // On failure, stop what the run left, by the PIDs found on this run's private port.
   for (const pid of left) { try { process.kill(pid, 'SIGCONT'); process.kill(pid, 'SIGKILL'); } catch {} }
   assert.deepEqual(left, [], `daemons left on port ${port}`);
-  assert.match(output, /# fail 0/, output.slice(-4000));
+  // Only that the files ran: their own failures are theirs to report, not a leak.
+  assert.ok(Number(output.match(/^# tests (\d+)/m)?.[1]) > 0, output.slice(-4000));
 });
