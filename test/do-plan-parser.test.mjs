@@ -133,3 +133,16 @@ test('bound values fill argument slots as literal text, never as plan syntax', (
   assert.equal(step.expect, `${hostile} opened`);
   assert.equal(step.commit, undefined);
 });
+
+test('open takes a bound item, its link or an address, here or in a new tab', () => {
+  const [, a, b] = parsePlan(['pick "lowest price" top 1 as $x', 'open $x', 'extract "rating"']);
+  assert.deepEqual({ action: a.action, from: a.from, newTab: a.newTab }, { action: 'open', from: 'x', newTab: undefined });
+  assert.equal(b.action, 'extract');
+  const [, c] = parsePlan(['pick "lowest price" top 1 as $x', 'open ${x.link} in new tab => "the product page"']);
+  assert.deepEqual({ target: c.target, slots: c.slots, newTab: c.newTab, expect: c.expect }, { target: '${x.link}', slots: ['target'], newTab: true, expect: 'the product page' });
+  assert.equal(parsePlan(['pick "lowest price" top 1 as $x', 'open ${x}'])[1].target, '${x.link}');
+  assert.equal(parsePlan(['open https://example.com/a?b=1'])[0].target, 'https://example.com/a?b=1');
+  assert.throws(() => parsePlan(['open $y']), /unknown variable \$y/);
+  assert.throws(() => parsePlan(['pick "lowest price" top 1 as $x', 'open ${x.title}']), /write open \$x, open \$\{x\.link\} or open https:\/\/…/);
+  assert.throws(() => parsePlan(['open javascript:alert(1)']), /write open/);
+});

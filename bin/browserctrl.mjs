@@ -32,6 +32,7 @@ import { setting, number, dirs, configPath, migrateLegacy, legacyMoves, requireN
 import { itemsExpression, formatItems } from '../lib/items.mjs';
 import { formatRead, deepTextExpression } from '../lib/refs.mjs';
 import { runSteps, formatSteps, PAGE_PARAMS, formatParams, mainLinks } from '../lib/steps.mjs';
+import { resumeLines } from '../lib/do/resume.mjs';
 import * as prefetch from '../lib/prefetch.mjs';
 import { visit, formatVisits } from '../lib/visit.mjs';
 import * as show from '../lib/show.mjs';
@@ -283,6 +284,7 @@ function usage() {
                                                    cap (--max defaults to 1000 then, up to ${MAX_REPEATS}; --page-cap N per page, default
                                                    ${PAGE_CAP.text} characters / ${PAGE_CAP.items} items / ${PAGE_CAP.rows} rows; --no-dedupe keeps repeats)
                                                    do <tab> - (or --file plan.txt) reads the steps from stdin, one per line
+                                                   [--resume [--replace '<step>']] runs the tab's last stopped plan from its failed step
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
                                                    whole task in one call: 'extract "<what>"' (copies the answering line),
                                                    'pick "<criterion>"' (opens the best-fitting item), 'if "<page shows>" then <step>',
@@ -1147,7 +1149,8 @@ const main = async () => {
 
     switch (cmd) {
       case 'do': {
-        const lines = planLines(positional.slice(2), flags);
+        // --resume: the tab's last stopped plan from its failed step (--replace swaps that step).
+        const lines = flags.resume ? resumeLines(targetId, { replace: typeof flags.replace === 'string' ? flags.replace : null }) : planLines(positional.slice(2), flags);
         if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' [--until "…"] --collect items|text|rows [--out FILE|-]] [--then items|text] [--open N --grep "label|label"]   (do <tab> - reads the steps from stdin)');
         const outPath = typeof flags.out === 'string' ? flags.out : null;
         if (flags.out !== undefined && !outPath) throw new Error('--out needs a file name, or - for stdout');

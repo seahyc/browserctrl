@@ -81,17 +81,22 @@ browserctrl do "$t" 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' \
 
 - **Reading the report.** It ends with `✓ done: 3/3 steps` or `✗ stopped at step 2/3: <reason>`.
   Steps marked ✓ did what they say: answer from the report, and don't re-read the page.
-  A ⚠ step is unsure: check that one thing. `changed on the page:` lists what the plan changed.
-- **After a stop,** run the `retry:` or `resume:` line it prints, with the failed step fixed
-  (a listed candidate, a name from `On screen:`, an `i12` item). Don't split the rest into
-  single calls.
+  An extracted value prints with its source line and page. A ⚠ names what is uncertain (two
+  competing lines, a line that did not verify): check only that. `changed on the page:` lists
+  what the plan changed.
+- **After a stop,** run the `retry:` or `resume:` line it prints. `resume:` is
+  `do "$t" --resume --replace '<step>'` with the closest control filled in; swap in another name
+  from `On screen:` or an `i12` item if that one is wrong. Don't split the rest into single calls.
+- **Without a TypeSafe key,** a plan that needs Jev stops before acting and says how to set it.
+  Plans of exact names, refs and CSS selectors run without one.
 - **Steps:** `click`, `check`, `fill <el> = <value>`, `select <el> = <option>`, `hover`,
   `key Enter`, `type "<text>"`, `scroll down|up`, `nav <url>`, `expect <what shows>`,
   `date YYYY-MM-DD`, `set <slider> = <value>`, `optional click "Accept all"`, and
   `click "Filters" | "All filters"` for the first name present.
 - **Answers in the same call:** `extract "<what>"` copies the answering line into the report;
   `pick "lowest price" top 1 as $x` ranks the main list by a value the page shows, and later
-  steps can use `${x.title}` and `${x.link}`. To compare or check several items, read
+  steps can use `${x.title}` and `${x.link}`. For a detail of the chosen item, keep going in the
+  same plan: `'open $x' 'extract "rating"'` (`open $x in new tab` keeps the list). To compare or check several items, read
   [compare, rank or check](references/reading-and-acting.md#compare-rank-or-check-several-items).
 - **Suggest-as-you-type fields:** pick the suggestion by the value you typed plus a word that
   makes it unique: `'fill "To" = "90028"' 'click "CA 90028"'`.

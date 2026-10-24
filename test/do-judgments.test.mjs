@@ -371,3 +371,70 @@ t('numeric price headings retain their preceding plan heading', async () => {
   assert.equal(r.done, true);
   assert.equal(r.bindings[0].value, 0);
 });
+
+// ⚠ on extract means a real ambiguity, said in one line; a clear, verified value is shown
+// with its source and page so the caller can answer from it.
+const totalLine = q => optionWith(q, 'Total for 3 nights');
+const lineIds = q => Object.keys(q.criteria).filter(k => k !== 'none');
+
+t('a clear single-line extract that verifies is reported without ⚠, with its page', async () => {
+  const tab = await open();
+  const jev = fakeJev({
+    choice: (q, id) => id === 'extract' ? { choice: totalLine(q), probabilities: Object.fromEntries([...lineIds(q).map(k => [k, k === totalLine(q) ? 0.6 : 0.3 / lineIds(q).length]), ['none', 0.1]]) } : undefined,
+    noul: (q, id) => id === 'extract_verify' ? 0.92 : undefined,
+  });
+  const r = await run(tab, ['extract "the total price for the stay"'], jev);
+  assert.equal(r.done, true);
+  assert.equal(r.extracted[0].value, 'Total for 3 nights: $597');
+  assert.equal(r.steps[0].unsure, undefined);
+  assert.equal(r.unsure, undefined);
+  assert.equal(r.steps[0].extract_verify.p, 0.92);
+  const out = formatSteps(r);
+  assert.match(out, /^✓ 1\. extract "the total price for the stay"/m);
+  assert.match(out, /= "Total for 3 nights: \$597" on http:\/\/127\.0\.0\.1:\d+\/fixtures\/judge\.html/);
+  assert.doesNotMatch(out, /⚠|unsure/);
+});
+
+t('a clear line that fails verification keeps ⚠ and says why in one line', async () => {
+  const tab = await open();
+  const jev = fakeJev({
+    choice: (q, id) => id === 'extract' ? { choice: totalLine(q), probabilities: Object.fromEntries([...lineIds(q).map(k => [k, k === totalLine(q) ? 0.6 : 0.3 / lineIds(q).length]), ['none', 0.1]]) } : undefined,
+    noul: (q, id) => id === 'extract_verify' ? 0.3 : undefined,
+  });
+  const r = await run(tab, ['extract "the total price for the stay"'], jev);
+  assert.equal(r.steps[0].unsure, true);
+  assert.equal(r.steps[0].ambiguity, 'uncertain: the line did not verify (p=0.30, needs 0.7)');
+  assert.match(formatSteps(r), /^⚠ 1\. extract "the total price for the stay".*⚠ uncertain: the line did not verify \(p=0\.30, needs 0\.7\)/m);
+});
+
+t('two competing lines keep ⚠ naming both, without a verification call', async () => {
+  const tab = await open();
+  let second;
+  const jev = fakeJev({
+    choice: (q, id) => {
+      if (id !== 'extract') return undefined;
+      second = lineIds(q).find(k => k !== totalLine(q));
+      return { choice: totalLine(q), probabilities: { [totalLine(q)]: 0.45, [second]: 0.35, none: 0.2 } };
+    },
+  });
+  const r = await run(tab, ['extract "the total price for the stay"'], jev);
+  assert.equal(r.steps[0].unsure, true);
+  assert.match(r.steps[0].ambiguity, /^ambiguous: "Total for 3 nights: \$597" p=0\.45 vs ".+" p=0\.35$/);
+  assert.ok(!jev.calls.some(call => call.questions.extract_verify));
+  assert.match(formatSteps(r), /extracted:\n {2}the total price for the stay: "Total for 3 nights: \$597" {2}⚠ ambiguous:/);
+});
+
+t('an accepted bound extract below p 0.75 shows no ⚠ in the extracted summary', async () => {
+  const tab = await open();
+  const jev = fakeJev({
+    choice: (q, id) => id === 'extract' ? { choice: totalLine(q), probabilities: Object.fromEntries([...lineIds(q).map(k => [k, k === totalLine(q) ? 0.7 : 0.2 / lineIds(q).length]), ['none', 0.1]]) } : id === 'extract_value' ? { choice: optionWith(q, '$597'), p: 0.95 } : undefined,
+    noul: (q, id) => id === 'extract_verify' ? 0.9 : undefined,
+  });
+  const r = await run(tab, ['extract "the total price for the stay" as number as $total'], jev);
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.equal(r.bindings[0].value, 597);
+  assert.ok(r.bindings[0].p < 0.75);
+  const out = formatSteps(r);
+  assert.match(out, /= 597 from "Total for 3 nights: \$597" on http/);
+  assert.doesNotMatch(out, /⚠/);
+});

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Fridge details</title></head>
+<body>
+<main>
+  <h1 id="name"></h1>
+  <dl><dt>Rating</dt><dd id="rating"></dd><dt>Width</dt><dd id="width"></dd></dl>
+  <button id="cart" onclick="window.carted = 1">Add to cart</button>
+</main>
+<script>
+  const id = new URLSearchParams(location.search).get('id');
+  const data = { 1: ['Coldmaster 300', '4.1 out of 5', '60 cm'], 2: ['Frostline 210', '4.6 out of 5', '55 cm'], 3: ['Polar 500', '3.9 out of 5', '70 cm'] }[id] || ['Unknown', '', ''];
+  document.title = data[0];
+  [document.getElementById('name').textContent, document.getElementById('rating').textContent, document.getElementById('width').textContent] = data;
+</script>
+</body></html>
