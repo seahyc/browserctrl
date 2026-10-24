@@ -9,7 +9,8 @@ const source = readFileSync(new URL('../lib/steps.mjs', import.meta.url), 'utf8'
 const start = source.indexOf('function render(ctx, template, sources) {');
 const end = source.indexOf('\nasync function runPlan(', start);
 assert.ok(start >= 0 && end > start, 'render function section exists');
-const render = vm.runInNewContext(`${source.slice(start, end)}\nrender`);
+// Exported helpers may sit in this section; a vm script can't contain `export`.
+const render = vm.runInNewContext(`${source.slice(start, end).replace(/^export /gm, '')}\nrender`);
 
 function interpolate(value, template = 'Selected: ${picked}') {
   const binding = { type: 'record', value, raw: 'visible list', p: 0.98, step: 1 };
