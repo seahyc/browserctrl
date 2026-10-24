@@ -13,7 +13,7 @@ import * as cooldown from '../lib/cooldown.mjs';
 import { solve, handoff, ping } from '../lib/captcha.mjs';
 import { runSteps } from '../lib/steps.mjs';
 import { runRecipe } from '../lib/recipes.mjs';
-import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, clearAfterFocus } from './helpers.mjs';
+import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, clearAfterFocus, scaled, describeLoad } from './helpers.mjs';
 
 process.env.BROWSERCTRL_NOTIFY = '0';
 delete process.env.BROWSERCTRL_SOLVER_HOSTS;
@@ -25,7 +25,9 @@ const script = path.join(dir, 'notify.sh');
 const sent = path.join(dir, 'sent.txt');
 fs.writeFileSync(script, `#!/bin/sh\nprintf '%s|' "$@" >> "${sent}"\nprintf '\\n' >> "${sent}"\n`, { mode: 0o755 });
 const pings = () => (fs.existsSync(sent) ? fs.readFileSync(sent, 'utf8').trim().split('\n').filter(Boolean) : []);
-const clearPuzzle = "document.getElementById('box').remove(); document.getElementById('msg').textContent = 'Verified'";
+// The page notes when it cleared, so a test can time the resume from then rather than from a
+// page timer that runs late on a loaded machine.
+const clearPuzzle = "document.getElementById('box').remove(); document.getElementById('msg').textContent = 'Verified'; window.__clearedAt = Date.now()";
 
 // The handoff is built for macOS (notifications, Dia); these tests use a POSIX script.
 const onWindows = process.platform === 'win32';
@@ -67,10 +69,14 @@ t('a handoff brings the tab to the front, pings, and resumes when the challenge 
   const tab = await open('fixtures/jigsaw.html?seed=2');
   const started = Date.now();
   const r = await clearAfterFocus(conn, () => solve(conn, tab, { timeoutMs: 10000, pollMs: 250 }), clearPuzzle, 1500);
+  const resumed = Date.now();
   assert.equal(r.captcha, 'unknown-challenge'); // the puzzle page, with no solver plugin installed
   assert.equal(r.solvedBy, 'human');
-  assert.ok(r.waitedMs >= 900 && r.waitedMs <= 3500, `waited ${r.waitedMs}`);
-  assert.ok(Date.now() - started < 5000, 'resumed promptly');
+  assert.ok(r.waitedMs >= 900 && r.waitedMs <= resumed - started, `waited ${r.waitedMs}`);
+  // Resumed within a few 250 ms polls of the challenge clearing, not at the 10 s timeout.
+  const clearedAt = await ops.evaluate(conn, tab, 'window.__clearedAt');
+  assert.ok(clearedAt >= started, 'the challenge cleared during the handoff');
+  assert.ok(resumed - clearedAt <= scaled(1500), `resumed ${resumed - clearedAt} ms after the challenge cleared; ${describeLoad()}`);
   assert.equal(r.solver, undefined, 'no plugin, so nothing was attempted');
   const ping = pings();
   assert.equal(ping.length, 1);
@@ -132,7 +138,7 @@ t('a recipe hands its challenge to the human, then runs; with handoff off it fai
   const blocked = { ...recipe, name: 'fixture/blocked', origin: local, warm_path: '/fixtures/jigsaw.html?seed=6' };
   const started = Date.now();
   await assert.rejects(runRecipe(conn, blocked, {}, { handoff: false }), /handoff was skipped/);
-  assert.ok(Date.now() - started < 15000);
+  assert.ok(Date.now() - started < scaled(15000), describeLoad());
   assert.equal(cooldown.active(local).kind, 'unknown-challenge');
   await assert.rejects(runRecipe(conn, blocked, {}, {}), /refusing to run fixture\/blocked against it/);
 });

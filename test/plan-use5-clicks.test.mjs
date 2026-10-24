@@ -39,7 +39,10 @@ for (const label of ['Open scripted tab', 'Open isolated tab', 'Browse catalogue
     assert.equal(r.steps[0].unsure, true); assert.match(r.steps[0].unchecked, /the click opened a new tab .*; the rest of the plan ran here/);
     assert.equal(r.steps[0].opened_tabs.length, 1);
     assert.ok((await ops.tabs(conn)).some(t => t.targetId === r.steps[0].opened_tabs[0]));
-  } finally { for (const tab of await ops.tabs(conn)) if (!before.has(tab.targetId)) await ops.closeTab(conn, tab.targetId); }
+  } finally {
+    // The plan's own tab may still be listed while it closes: a tab already gone is fine.
+    for (const tab of await ops.tabs(conn)) if (!before.has(tab.targetId)) await ops.closeTab(conn, tab.targetId).catch(e => { if (!/No target with given id/.test(e.message)) throw e; });
+  }
 });
 t('unchanged click cannot pass an expectation on existing text', async () => {
   const r = await run(['click "Unchanged click" => "Existing result"', 'wait 1']);

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { detect, solve } from '../lib/captcha.mjs';
-import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, clearAfterFocus } from './helpers.mjs';
+import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, clearAfterFocus, scaled, describeLoad } from './helpers.mjs';
 
 process.env.BROWSERCTRL_NOTIFY = '0';
 const haveBrowser = Boolean(chromeBinary());
@@ -43,7 +43,7 @@ t('a puzzle challenge waits for the human and reports who cleared it', async () 
   const r = await clearAfterFocus(conn, () => solve(conn, tab, { timeoutMs: 5000, pollMs: 200 }), "history.replaceState(null, '', '/done')", 600);
   assert.equal(r.captcha, 'verification-page');
   assert.equal(r.solvedBy, 'human');
-  assert.ok(r.waitedMs >= 400 && r.waitedMs < 4000, `waited ${r.waitedMs}`);
+  assert.ok(r.waitedMs >= 400 && r.waitedMs < scaled(4000), `waited ${r.waitedMs}; ${describeLoad()}`);
 });
 
 t('an uncleared challenge times out with an error', async () => {

@@ -12,7 +12,7 @@ import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as rec from '../lib/rec.mjs';
 import { settle, waitForContent } from '../lib/steps.mjs';
-import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, scaled, describeLoad } from './helpers.mjs';
 
 const TRACES = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-test-traces-'));
 const MEMO = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-test-memo-'));
@@ -157,9 +157,9 @@ t('a settle is not held by a keepalive beacon or by a style-only animation', asy
 t('a short page that has finished loading is not waited on as a loading shell', async () => {
   const id = await open('steps-friction5.html');
   const t0 = Date.now();
-  await waitForContent(conn, id, { timeoutMs: 10000, minChars: 5000, stable: false });
+  await waitForContent(conn, id, { timeoutMs: scaled(10000), minChars: 5000, stable: false });
   // Guards against waiting out the shell wait, which gives up at 10 s; a normal run takes 1-3 s.
-  assert.ok(Date.now() - t0 < 9000, `waited ${Date.now() - t0} ms`);
+  assert.ok(Date.now() - t0 < scaled(9000), `waited ${Date.now() - t0} ms; ${describeLoad()}`);
   await ops.closeTab(conn, id);
 });
 

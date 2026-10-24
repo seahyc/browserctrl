@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as captcha from '../lib/captcha.mjs';
-import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, scaled } from './helpers.mjs';
 
 const TRACES = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-test-traces-'));
 const MEMO = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-test-memo-'));
@@ -51,6 +51,18 @@ const open = async (page, waitUntil = 'load') => {
   return id;
 };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// The hang fixtures wedge their main thread from a timer shortly after load, and a loaded machine
+// runs that timer late: wait until the page has stopped answering rather than for a fixed time.
+// A bare CDP call, so the probe leaves no site-trouble note behind.
+async function untilStuck(id) {
+  const until = Date.now() + scaled(15000);
+  while (Date.now() < until) {
+    const answered = await conn.send(id, 'Runtime.evaluate', { expression: '1', returnByValue: true }, 500, { light: true }).then(() => true, () => false);
+    if (!answered) return;
+    await sleep(100);
+  }
+  throw new Error(`tab ${id} never stopped answering`);
+}
 
 t('a page waiting on a JavaScript dialog says so and how to answer it; dialog answers it', async () => {
   const id = await open('slice-controls.html');
@@ -70,7 +82,8 @@ t('a stuck main thread is diagnosed with the command to run', async () => {
   const id = await open('slice-controls.html');
   // A long task started from a timer, as a heavy page script runs (not inside our own input event).
   // Background tabs can align timers to 1 s, so wait until the task has really started.
-  await ops.evaluate(conn, id, 'window.__busyFrom = 0; setTimeout(function () { window.__busyFrom = Date.now(); var t = Date.now(); while (Date.now() - t < 15000) {} }, 0); 1');
+  // Busy for longer than the diagnosis probes, which stretch with the machine's load.
+  await ops.evaluate(conn, id, `window.__busyFrom = 0; setTimeout(function () { window.__busyFrom = Date.now(); var t = Date.now(); while (Date.now() - t < ${scaled(15000)}) {} }, 0); 1`);
   for (let i = 0; i < 40; i++) {
     const started = await ops.evaluate(conn, id, 'window.__busyFrom', { timeoutMs: 400 }).catch(() => 'blocked');
     if (started === 'blocked' || started > 0) break;
@@ -96,7 +109,7 @@ t('a read that times out while the page is briefly busy runs again once it answe
 
 t('reload recovers a page whose main thread is stuck: stops the script and loads it again', async () => {
   const id = await open('slice-b2-hang-once.html');
-  await new Promise(r => setTimeout(r, 800)); // the loop starts 300 ms after load
+  await untilStuck(id); // the loop starts 300 ms after load
   const { stdout } = await cli('reload', id.slice(0, 8), '--timeout', '3000');
   const r = JSON.parse(stdout);
   // Stopping the script and reloading is the first resort; on slow runners (Windows CI) the
@@ -110,7 +123,7 @@ t('reload recovers a page whose main thread is stuck: stops the script and loads
 
 t('a page that wedges on every load is reopened in a new tab whose id reload prints', async () => {
   const id = await open('slice-b2-hang-always.html');
-  await new Promise(r => setTimeout(r, 800));
+  await untilStuck(id);
   // The tab was being recorded: the recording is closed off, with the command to continue it.
   const recDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-b2-rec-'));
   const recState = path.join(recDir, 'rec-tabs.json');
@@ -144,7 +157,7 @@ t('a bot check that outlasts the wait gets one reload before giving up', async (
 
 t('navigating away from a stuck page recovers it and lands on the new address', async () => {
   const id = (await ops.newTab(conn, fixture.url + 'fixtures/slice-b2-hang-always.html')).targetId;
-  await sleep(1500); // the loop starts after load
+  await untilStuck(id); // the loop starts after load
   const to = url('slice-r2.html?radius=1');
   const r = await ops.navigate(conn, id, to, { timeoutMs: 12000 });
   assert.ok(r.recovered || r.url === to, JSON.stringify(r));

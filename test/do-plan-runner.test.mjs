@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fakeJev, optionWith } from './fake-jev.mjs';
-import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, scaled } from './helpers.mjs';
 let fixture, browser, conn;
 const haveBrowser = Boolean(chromeBinary());
 before(async () => { if (!haveBrowser) return; fixture = await startFixtureServer(); browser = await startHeadlessBrowser(TEST_PORT); conn = await connect(TEST_PORT); });
@@ -167,12 +167,15 @@ t('deadline after late visual grounding sends no input', async tab => {
   await ops.evaluate(conn,tab, `document.body.innerHTML='<p>Volume controls</p><input type="range" id="a" aria-label="Alpha" min="0" max="100"><input type="range" id="b" aria-label="Beta" min="0" max="100">'`);
   const box=await ops.evaluate(conn,tab, `(()=>{const r=b.getBoundingClientRect();return {left:r.left/innerWidth,right:r.right/innerWidth,top:r.top/innerHeight,bottom:r.bottom/innerHeight}})()`);
   const j=fakeJev({noul:(q,id,state)=>id==='visible'?.96:id==='match' && state.element?.name==='Beta'?.95:.04,box:()=>({box,confidence:.94})});
+  // The screenshot answer arrives just after the run's deadline, however long the text
+  // grounding before it took on a loaded machine.
+  const deadlineMs=scaled(4000), deadlineAt=Date.now()+deadlineMs;
   const fetch=j.fetchImpl;
   j.fetchImpl=async(url,init)=>{
-    if(JSON.parse(init.body).questions.where) await new Promise(resolve=>setTimeout(resolve,4100));
+    if(JSON.parse(init.body).questions.where) await new Promise(resolve=>setTimeout(resolve,Math.max(0,deadlineAt+300-Date.now())));
     return fetch(url,init);
   };
-  const r=await run(tab,['set "the right slider" = 37'],j,{deadlineMs:4000});
+  const r=await run(tab,['set "the right slider" = 37'],j,{deadlineMs});
   assert.equal(r.done,false);
   assert.match(r.stopped.reason,/deadline/);
   assert.equal(r.steps[0].vision.match_p,.95);

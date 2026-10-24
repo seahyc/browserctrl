@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { get, fill, coerce, shape, freshFrameValue, runRecipe, listRecipes, loadRecipe, findRecipes, recipeHint, recipeMatches, tapAdd, tapUpdate, tapRemove, listTaps } from '../lib/recipes.mjs';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
-import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, scaled, describeLoad } from './helpers.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-recipes-'));
 
@@ -254,7 +254,8 @@ t('a read recipe whose call never answers fails fast in the page and is retried 
   assert.equal(res.retried.length, 1);
   assert.match(res.retried[0], /call 1: the request did not finish within 1500 ms.*stopped in call 1/);
   assert.equal(await hits(k), 2);
-  assert.ok(Date.now() - started < 15000, 'bounded by the in-page timeout, not the 30 s CDP one');
+  // Capped below the 30 s CDP timeout, which is what the bound tells apart from the in-page one.
+  assert.ok(Date.now() - started < Math.min(scaled(15000), 29000), `bounded by the in-page timeout, not the 30 s CDP one; ${describeLoad()}`);
 });
 
 t('a write recipe is never retried and says its outcome is uncertain', async () => {

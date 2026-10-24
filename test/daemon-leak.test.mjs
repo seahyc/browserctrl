@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { connect } from '../lib/daemon.mjs';
 import { SOCK, runtimePath } from '../lib/env.mjs';
-import { startHeadlessBrowser, chromeBinary, stopLoggedDaemons } from './helpers.mjs';
+import { startHeadlessBrowser, chromeBinary, stopLoggedDaemons, scaled, describeLoad } from './helpers.mjs';
 
 const exec = promisify(execFile);
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -77,8 +77,8 @@ test('SIGTERM exits a daemon holding a vault taint marker, and the marker stays 
   assert.ok(status.taintedTabs >= 1, 'the daemon holds the taint');
   const started = Date.now();
   process.kill(status.pid, 'SIGTERM');
-  assert.ok(await waitFor(() => !alive(status.pid), 5000), `daemon ${status.pid} ignored SIGTERM`);
-  assert.ok(Date.now() - started < 5000);
+  assert.ok(await waitFor(() => !alive(status.pid), scaled(5000)), `daemon ${status.pid} ignored SIGTERM`);
+  assert.ok(Date.now() - started < scaled(5000), describeLoad());
   assert.equal(fs.readFileSync(marker, 'utf8'), body, 'the protection marker survives the exit');
 });
 

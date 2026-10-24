@@ -6,7 +6,7 @@ import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { fakeJev, optionWith } from './fake-jev.mjs';
-import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, scaled, describeLoad } from './helpers.mjs';
 
 const haveBrowser = Boolean(chromeBinary());
 let fixture, browser, conn;
@@ -174,7 +174,7 @@ t('old quiet page with no answer does not wait or ask again', async () => {
   assert.equal(r.done, false);
   assert.equal(jev.calls.filter(c => c.questions.extract).length, 1);
   assert.equal(r.steps[0].content_wait_ms, undefined);
-  assert.ok(Date.now() - start < 3000);
+  assert.ok(Date.now() - start < scaled(3000), describeLoad());
 });
 
 t('pick retries a loading empty list after none', async () => {

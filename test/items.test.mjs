@@ -70,7 +70,8 @@ t('ids stay stable across reads and newly loaded items are marked', async () => 
   const first = (await items(id)).groups.find(g => g.heading.includes('Search results'));
   assert.ok(first.items.every(i => i.new));
   await ops.evaluate(conn, id, 'window.scrollTo(0, document.body.scrollHeight)');
-  await ops.evaluate(conn, id, 'new Promise(r => setTimeout(r, 300))');
+  // Wait for the page's own lazy load (six more cards), not a fixed time that a loaded machine overruns.
+  await ops.evaluate(conn, id, `new Promise(r => { const t0 = Date.now(); (function poll() { if (document.querySelectorAll('.k7Z').length >= 18 || Date.now() - t0 > 10000) r(); else setTimeout(poll, 50); })(); })`);
   const second = (await items(id, { all: true })).groups.find(g => g.heading.includes('Search results'));
   assert.equal(second.count, 18);
   assert.deepEqual(second.items.slice(0, 12).map(i => i.id), first.items.map(i => i.id));

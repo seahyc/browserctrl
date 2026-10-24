@@ -152,8 +152,9 @@ t('a dominant inaccessible frame explains how to open its full URL in a plan', a
   const src = url('read-frames.html') + '?calculator=1#form';
   await ops.evaluate(conn, id, `document.body.innerHTML = ''; document.body.style.margin = '0';
     const f = document.createElement('iframe'); f.sandbox = ''; f.src = ${JSON.stringify(src)};
-    f.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0;padding:0'; document.body.append(f);`);
-  await new Promise(r => setTimeout(r, 200));
+    f.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0;padding:0';
+    // Resolves once the frame has loaded (the parent sees load even for an opaque origin).
+    new Promise(r => { f.onload = () => r(true); document.body.append(f); setTimeout(() => r(false), 15000); });`);
   const snap = await ops.readPage(conn, id);
   assert.equal(snap.stats.inaccessibleFrames[0].src, src);
   const hint = frameGroundingHint(snap);

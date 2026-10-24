@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startHeadlessBrowser, chromeBinary, TEST_PORT, scaled, describeLoad } from './helpers.mjs';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { judgment, retryContent, settleJudgment } from '../lib/do/judgments.mjs';
@@ -63,7 +63,7 @@ test('changed extraction retries once with a bounded quiet wait', { skip: !chrom
     await retryContent(ctx, step, row, j, structuredClone(none));
     console.log('changed extraction timing', JSON.stringify({ wall: Date.now() - start, wait: row.content_wait_ms || 0 }));
     assert.equal(calls, 1);
-    assert.ok(row.content_wait_ms < 1800);
+    assert.ok(row.content_wait_ms < scaled(1800), `${row.content_wait_ms} ms; ${describeLoad()}`);
     assert.ok(j.spans.some(s => s.text === '11 Mar 2027 is available'));
   } finally { await ops.closeTab(conn, tab); }
 });

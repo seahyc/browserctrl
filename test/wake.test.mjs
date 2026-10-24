@@ -3,7 +3,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
-import { startHeadlessBrowser, chromeBinary } from './helpers.mjs';
+import { startHeadlessBrowser, chromeBinary, scaled } from './helpers.mjs';
 
 const PORT = 9342;
 const haveBrowser = Boolean(chromeBinary());
@@ -21,8 +21,8 @@ after(async () => {
 const t = (name, fn) => test(name, { skip: haveBrowser ? false : 'no Chromium-family browser installed' }, fn);
 const page = id => ops.evaluate(conn, id, `Promise.race([
   new Promise(r => requestAnimationFrame(() => r('frame'))),
-  new Promise(r => setTimeout(() => r('no frame'), 1500)),
-]).then(raf => ({ raf, visibilityState: document.visibilityState }))`, { timeoutMs: 5000 });
+  new Promise(r => setTimeout(() => r('no frame'), ${scaled(1500)})),
+]).then(raf => ({ raf, visibilityState: document.visibilityState }))`, { timeoutMs: scaled(5000) });
 
 t('wake makes a hidden background tab render without selecting it; wake --off undoes it', async () => {
   const tab = await ops.newTab(conn, 'data:text/html,<p>lazy</p>');

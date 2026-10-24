@@ -93,6 +93,13 @@ process.env.BROWSERCTRL_CAPTURE ??= '1';
 process.env.BROWSERCTRL_TRACE ??= '1';
 export const TEST_PORT = Number(process.env.BROWSERCTRL_TEST_PORT || 9333); // override to run suites side by side
 
+// Machine load: loadFactor(), scaled(ms) for duration bounds, and browserctrl's own waits
+// stretched to match, here and in every node process a test starts (see test/load.mjs).
+import { loadFactor, describeLoad, LOAD_IMPORT } from './load.mjs';
+export { loadFactor, scaled, describeLoad } from './load.mjs';
+if (!(process.env.NODE_OPTIONS || '').includes(LOAD_IMPORT)) process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS || ''} ${LOAD_IMPORT}`.trim();
+if (loadFactor() > 1) console.log(`# test timing stretched by ${describeLoad()}`);
+
 const CHROME_CANDIDATES = [
   ...[process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean).flatMap(root => [
     path.join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),

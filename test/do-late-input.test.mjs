@@ -13,7 +13,14 @@ import * as ops from '../lib/ops.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { INPUT } from '../lib/timing.mjs';
 import { fakeJev } from './fake-jev.mjs';
-import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, loadFactor, scaled } from './helpers.mjs';
+
+// The click-acknowledgement thresholds stretch with machine load (test/load.mjs); hold them
+// still for this file, so the page's busy and late times below and the messages they produce
+// stay in step with them. At low load these are the written 1.5 s, 2.5 s, 6 s and 5 s.
+process.env.BROWSERCTRL_TEST_LOAD_FACTOR = String(loadFactor());
+const BUSY = INPUT.SLOW_ACK + 500, LATE = scaled(2500);
+const secs = (ms) => String(ms / 1000).replace('.', '\\.');
 
 const MEMO = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-test-late-'));
 process.env.CDP_AGENT_ID = 'test-do-late-input';
@@ -45,14 +52,14 @@ const why = (r) => JSON.stringify({ stopped: r.stopped, phases: r.phases, steps:
 async function run(query, step) {
   const id = (await ops.newTab(conn, fixture.url + 'fixtures/do-stops.html?' + query)).targetId;
   await ops.waitForReady(conn, id, { waitUntil: 'load' });
-  const r = await runSteps(conn, id, [step], { jev: fakeJev(), noNotes: true, deadlineMs: 45000 });
+  const r = await runSteps(conn, id, [step], { jev: fakeJev(), noNotes: true, deadlineMs: scaled(45000) });
   console.log(formatSteps(r));
   console.log('phases', JSON.stringify(r.phases), 'late_input', JSON.stringify(r.steps[0]?.late_input));
   return { id, r };
 }
 
 t('a checkbox click acknowledged late (main thread held 1.5 s) is waited for, and the step says so', async () => {
-  const { id, r } = await run('busy=1500&on=down', 'click "Include breakfast"');
+  const { id, r } = await run(`busy=${BUSY}&late=${LATE}&on=down`, 'click "Include breakfast"');
   try {
     assert.equal(r.done, true, why(r));
     assert.ok(r.steps[0].late_input?.ms >= INPUT.SLOW_ACK, why(r));
@@ -65,18 +72,18 @@ t('a checkbox click acknowledged late (main thread held 1.5 s) is waited for, an
 });
 
 t('a checkbox click never acknowledged (main thread held past INPUT.ACK) is waited for, and the step says so', async () => {
-  const { id, r } = await run(`busy=${INPUT.ACK + 1000}&on=enter`, 'click "Include breakfast"');
+  const { id, r } = await run(`busy=${INPUT.ACK + 1000}&late=${LATE}&on=enter`, 'click "Include breakfast"');
   try {
     assert.equal(r.done, true, why(r));
     assert.equal(r.steps[0].late_input?.unacknowledged, true, why(r));
-    assert.match(r.steps[0].how, /the page did not acknowledge the click within 6 s/);
+    assert.match(r.steps[0].how, new RegExp(`the page did not acknowledge the click within ${secs(INPUT.ACK)} s`));
     assert.equal(r.steps[0].checked, true);
     assert.equal(await state(id), 'breakfast on');
   } finally { await ops.closeTab(conn, id); }
 });
 
 t('a section whose click was acknowledged late opens 2.5 s later and counts as opened', async () => {
-  const { id, r } = await run('busy=1500&on=down', 'click "More options"');
+  const { id, r } = await run(`busy=${BUSY}&late=${LATE}&on=down`, 'click "More options"');
   try {
     assert.equal(r.done, true, why(r));
     assert.equal(r.steps[0].expanded, true, why(r));
@@ -86,19 +93,19 @@ t('a section whose click was acknowledged late opens 2.5 s later and counts as o
 });
 
 t('a late click that never takes still stops, saying how long it waited', async () => {
-  const { id, r } = await run('busy=1500&on=down&never=1', 'click "Include breakfast"');
+  const { id, r } = await run(`busy=${BUSY}&on=down&never=1`, 'click "Include breakfast"');
   try {
     assert.equal(r.done, false);
-    assert.match(r.stopped.reason, /still unchecked after waiting 5 s for a click the page took late; the click did not take/);
+    assert.match(r.stopped.reason, new RegExp(`still unchecked after waiting ${secs(INPUT.LATE_WAIT)} s for a click the page took late; the click did not take`));
     assert.equal(await state(id), '');
   } finally { await ops.closeTab(conn, id); }
 });
 
 t('a section a late click never opens still stops, saying how long it waited', async () => {
-  const { id, r } = await run('busy=1500&on=down&never=1', 'click "More options"');
+  const { id, r } = await run(`busy=${BUSY}&on=down&never=1`, 'click "More options"');
   try {
     assert.equal(r.done, false);
-    assert.match(r.stopped.reason, /did not open: .* after waiting 5 s for a click the page took late/);
+    assert.match(r.stopped.reason, new RegExp(`did not open: .* after waiting ${secs(INPUT.LATE_WAIT)} s for a click the page took late`));
   } finally { await ops.closeTab(conn, id); }
 });
 
