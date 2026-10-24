@@ -1,0 +1,24 @@
+{
+  "name": "quick",
+  "picked": "2026-10-24",
+  "rule": "dev split only (never final, heldout-2 or heldout.txt); short in past arm-D runs (agent wall and turns); still exercising do plans, filters and pick; sites that loaded without a block on the direct connection. Past timings: arm D rows in bench/om2w/results.jsonl and the 2026-10-24 archived worktrees' results.jsonl; turns from the Codex rollouts where they still exist (turns = model responses, tool-call bursts grouped, +1 final answer).",
+  "expected": "sum of past medians about 590 s per arm per repeat: 2 arms x 3 repeats is about 60 min of agent time, plus 22-39 s of setup per run (measured in the 10-24 A/A smoke at high load), about 80 min in all",
+  "tasks": [
+    {"task_id": "99daaed9a83c266341d28aa40067d376", "past_median_s": 45, "site": "boardgamegeek.com", "past": "7 runs, median 45 s (41-74), turns 7 (6-10), 2 do calls, 7/7 judged ok",
+     "why": "the fastest, steadiest task: a list plus two conditions (rating, player count), done in 2 do calls. Sets the floor for per-run overhead. access.json lists the site as blocked from the 10-16 check, but all 7 runs on 10-22/23 loaded"},
+    {"task_id": "512fd4deab099b8dc0dcfc0ec48a3c63", "past_median_s": 74, "site": "github.com", "past": "7 runs, median 74 s (62-111), turns 8 (6-14), 4 do calls, 7/7",
+     "why": "trending list, then the repo's issues ranked by comments: a sort plus a pick; past runs used filters and pick"},
+    {"task_id": "f05e87c5b92d9869e08806103c1c15a1", "past_median_s": 64, "site": "ycombinator.com", "past": "2 runs, 60 and 68 s, 12 and 10 tool calls, 2/2",
+     "why": "faceted filters on the company directory (two batches, France, hiring)"},
+    {"task_id": "0e5536aaad9d3462b06cf725e6ed535a", "past_median_s": 71.5, "site": "cbp.gov", "past": "2 runs, 89 and 54 s, 14 and 9 tool calls, 2/2",
+     "why": "a government report form with an airport and date fields; past runs tripped on the date format once"},
+    {"task_id": "47bfe8a7e0e4e7efc837287b407fbe90", "past_median_s": 75, "site": "versus.com", "past": "7 runs, median 75 s (70-110), turns 11 (10-12), 7 do calls, 7/7",
+     "why": "rank by popularity, take the top two, open the comparison; past runs used filters and pick; lowest turn variance of the set"},
+    {"task_id": "9d09bc948462db032bac98968b11b008", "past_median_s": 84, "site": "stubhub.com", "past": "2 runs, 106 and 62 s, 14 and 7 tool calls, 0/2 (judge: results mixed in non-Boston events)",
+     "why": "site search then a location filter; short, and the judged failures are about filtering, which is what A/Bs change"},
+    {"task_id": "bfa2de159be6978acf2702be31a2eeeb", "past_median_s": 86, "site": "united.com", "past": "1 run, 86 s, 15 tool calls, 1/1 (load 5)",
+     "why": "a non-list widget (interactive map, flexible dates); the one past run had to switch the site region first"},
+    {"task_id": "2c8ef01a92c71ba9ef2e59bb17eea2b3_110325", "past_median_s": 94, "site": "bhphotovideo.com", "past": "7 runs, median 94 s (72-316), turns 10 (8-26), 7 do calls, 4/7",
+     "why": "filters (used, M4 Max) then the largest discount into the cart: filters, pick and a conditional. Slowest and most variable here; drop it to get a 2x3 run under 60 min"}
+  ]
+}

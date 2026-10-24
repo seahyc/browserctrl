@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Online-Mind2Web runs for the browserctrl bench. See bench/om2w/README.md.
 //
-// Agents run on Codex (gpt-6.1-sol, low reasoning) in a separate, US-routed Chrome on
-// CDP port 9230; every run is recorded and graded by a port of the benchmark's own
+// Agents run on Codex (gpt-6.1-sol, low reasoning) in a separate Chrome on New York time
+// (launch-chrome.sh, CDP port 9240); every run is recorded and graded by a port of the benchmark's own
 // WebJudge whose model calls also go through Codex.
 //
 //   node bench/om2w/run.mjs run <task_id> --arm <name> [--notes reflect|off] [--no-judge]
@@ -22,9 +22,11 @@ import { fileURLToPath } from 'node:url';
 import { exportOm2w } from './export.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const runsDir = path.join(here, 'runs');
-const resultsFile = path.join(here, 'results.jsonl');
-const PORT = process.env.OM2W_PORT || '9230';
+// ab.mjs points these outside the checkout, so removing a worktree never loses a run.
+const runsDir = process.env.OM2W_RUNS_DIR ? path.resolve(process.env.OM2W_RUNS_DIR) : path.join(here, 'runs');
+const resultsFile = process.env.OM2W_RESULTS ? path.resolve(process.env.OM2W_RESULTS) : path.join(here, 'results.jsonl');
+const tasksFile = process.env.OM2W_TASKS ? path.resolve(process.env.OM2W_TASKS) : path.join(here, 'tasks.json');
+const PORT = process.env.OM2W_PORT || '9240';
 const MODEL = process.env.OM2W_MODEL || 'gpt-6.1-sol';
 const EFFORT = process.env.OM2W_EFFORT || 'low';
 const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
@@ -32,7 +34,7 @@ const SCORE_THRESHOLD = 3; // WebJudge's default: stills scored 3+ go to the fin
 const MAX_IMAGE = 50;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const tasks = () => JSON.parse(fs.readFileSync(path.join(here, 'tasks.json'), 'utf8'));
+const tasks = () => JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
 const findTask = (id) => {
   const m = tasks().filter((t) => t.task_id === id || t.task_id.startsWith(id));
   if (m.length !== 1) throw new Error(`task ${id}: ${m.length} matches`);
@@ -336,7 +338,7 @@ function row(run) {
     tool_calls: run.agent?.tools ?? null, tokens: run.agent?.tokens ?? null, output_tokens: run.agent?.output_tokens ?? null,
     answer: run.answer?.answer ?? null, agent_notes: run.answer?.notes ?? null,
     success: run.judge?.success ?? null, judge: run.judge ? { key_points: run.judge.key_points, images_used: run.judge.images_used, thoughts: run.judge.thoughts } : null,
-    run_dir: path.relative(here, runPath(run.runId)), rec: recBytes(runPath(run.runId, 'rec'), run.rec_stopped),
+    run_dir: process.env.OM2W_RUNS_DIR ? runPath(run.runId) : path.relative(here, runPath(run.runId)), rec: recBytes(runPath(run.runId, 'rec'), run.rec_stopped),
     ...(run.smoke ? { smoke: true } : {}),
   };
 }

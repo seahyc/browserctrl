@@ -8,20 +8,19 @@ run with browserctrl by Codex agents and graded by a port of the benchmark's own
 - **Tasks:** the official task file is gated on Hugging Face (`osunlp/Online-Mind2Web`).
   Accept its terms, then download `Online_Mind2Web.json` to `bench/om2w/tasks.json`
   (gitignored). `suggested.txt` lists the task ids we run.
-- **The bench browser:** a separate Chrome for Testing on CDP port 9230 with its own
-  profile, New York time, and both extensions loaded (browserctrl, and a copy of the ChatGPT
-  extension for the native arm; branded Chrome ignores `--load-extension`). Since
-  2026-10-16 it uses a direct connection from Singapore, no VPN: tasks are drawn only from
-  sites `access.json` lists as reachable that way (a Proton VPN exit was tried first, and
-  Cloudflare blocked many sites through it).
+- **The bench browser:** Google Chrome as its own instance: profile
+  `~/.local/share/browserctrl-bench/chrome-profile`, CDP port 9240, New York time, and
+  browserctrl's extension (branded Chrome ignores `--load-extension`, so the launcher loads it
+  over CDP). It never touches your own Chrome profile or port 9222.
   ```sh
-  CFT="$HOME/.cache/chrome-for-testing/chrome/mac_arm-155.0.8059.84/chrome-mac-arm64/Google Chrome for Testing.app"
-  open -n --env TZ=America/New_York -a "$CFT" --args --user-data-dir="$HOME/.local/share/browserctrl/bench-cft-us" \
-    --remote-debugging-port=9230 --no-first-run --no-default-browser-check \
-    --load-extension="$HOME/Code/browserctrl/extension,$HOME/.local/share/browserctrl/chatgpt-extension" about:blank
+  bench/om2w/launch-chrome.sh            # start it unless it answers
+  bench/om2w/launch-chrome.sh --fresh    # stop it, wipe its profile, start again
+  bench/om2w/launch-chrome.sh stop
   ```
-  Put that in a script and set `OM2W_LAUNCH` to it: each run checks the browser answers
-  and relaunches it if it quit. Set `OM2W_PORT` for another browser.
+  Set `OM2W_LAUNCH=bench/om2w/launch-chrome.sh` so a run relaunches it if it quit. Since
+  2026-10-16 runs use a direct connection from Singapore, no VPN: tasks are drawn only from
+  sites `access.json` lists as reachable that way. The Codex-native arm needs the ChatGPT
+  extension, which this launcher does not load.
 - **Agents and judge:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort="low"` on the
   Codex subscription (`OM2W_MODEL`, `OM2W_EFFORT` override). The agent runs with
   `-s danger-full-access` so it can reach the browser's debugging port.
@@ -93,3 +92,61 @@ python3 bench/om2w/make_picker.py bench/om2w bench/om2w/suggested.txt && open be
 Rules: fixes are developed and checked live only on dev sites or synthetic fixtures, never on a
 held-out or final site; a held-out failure is studied as a kind of problem, and the fix is
 verified elsewhere.
+
+## Quick A/B
+
+Compares two or more browserctrl commits on the 8 short dev tasks in `quick.json` (why each
+was picked and its past timings are in the file):
+
+```sh
+node bench/om2w/ab.mjs run --arms main my-fix --quick         # preset: 6 fastest tasks x 2 repeats, about 40 min
+node bench/om2w/ab.mjs run --arms main my-fix                 # all 8 tasks x 3 repeats, about 80 min
+node bench/om2w/ab.mjs run --arms base=2ba3793 new=HEAD --tasks 99daaed9,512fd4de --repeats 3 --gate 30
+node bench/om2w/ab.mjs run --arms main my-fix --quick --dry-run   # print the schedule, run nothing
+node bench/om2w/ab.mjs run --group <id>                       # resume after a stop or crash
+node bench/om2w/ab.mjs status --group <id>
+node bench/om2w/ab.mjs judge --group <id>                     # optional: quick-judge every run afterwards
+python3 -I bench/om2w/compare.py --group <id> [--base <arm>] [--gate 30] [--json out.json]
+```
+
+`--tasks` takes a set name (`quick`), a `.json` or `.txt` file of ids, or comma-separated id
+prefixes for a subset. `--quick` picks the 6 tasks of `quick.json` with the shortest past
+median (boardgamegeek, ycombinator, cbp.gov, github, versus.com, stubhub: about 410 s of
+agent time per arm per repeat), so 2 arms x 6 tasks x 2 repeats is 24 runs of about 100 s,
+about 40 minutes at low load. It is a first look: over 6 tasks only a 6/6 sweep passes a sign
+test (p = 0.03; 5/6 gives 0.22), so read the CI, and confirm a promising result on the
+full set.
+
+- **Arms** are commits. Each gets a detached worktree at `.worktrees/bench-<sha>` (no
+  branches), removed when the group finishes (`--keep-worktrees` keeps them). The harness
+  and the agent prompt come from the checkout you run `ab.mjs` from, the same for every
+  arm; each arm brings its own CLI, `SKILL.md` and `BROWSERCTRL_HOME`. `--arms dev dev` is an
+  A/A check: two arms on one commit should show no difference.
+- **Order:** repeat by repeat, task by task; within a task every arm runs back to back, and
+  which arm goes first rotates with the task and the repeat. Arms run at different times are
+  not comparable, so never merge groups.
+- **Same start:** every run gets a freshly wiped Chrome profile, and the arm's daemon is
+  stopped after it.
+- **Load rule:** a run starts only when the 1-minute load average is under the gate (default 30;
+  other work here often pushes it to 20-160, and runs started under heavy load were slower
+  in ways that favoured whichever arm ran in a quiet spell).
+  The start load is recorded; `compare.py` flags runs at or over the gate. Don't run test
+  suites or other benchmarks while it runs.
+- **Retries:** a run is retried once only when the harness failed (Codex exited with an
+  error or the browser never came up); a wrong answer, a give-up or a 15-minute timeout is
+  the agent's result and stands. Each attempt is a row.
+- **Results** live outside the worktrees, in `~/.local/share/browserctrl-bench/results/`:
+  `<group>.jsonl` (one row per attempt: arm, commit, task, repeat, start load, agent seconds,
+  tool calls, tokens), `<group>.meta.json` (arms, tasks, settings), and `<group>/` (run
+  folders, log; per-arm homes are in `../homes/`). Codex's own rollouts stay in `~/.codex/sessions`.
+- **What `compare.py` measures:** per arm, medians over runs of turns (model responses,
+  parallel tool calls counted once, +1 for the final answer), agent wall time, tool calls, do
+  calls, steps per do plan and plan forms used; then per task the mean over repeats, arm minus
+  base, with a sign test over tasks and a bootstrap 95% CI. With 8 tasks the sign test reaches
+  p < 0.05 only when one arm wins all 8 (7/8 gives p = 0.07); read the CI. It flags runs over the gate,
+  stalled commands, timeouts and retries.
+- **Duration:** past agent time on this set is about 75 s per run. Setup and teardown
+  (fresh Chrome, opening the start tab, stopping the recording) added 22-39 s per run in the
+  A/A smoke check, which ran at load 110-200, so plan on about 100 s per run: 2 arms x 8 tasks
+  x 3 repeats is about 80 minutes at low load. Dropping the slowest task (bhphotovideo) brings
+  that to about 70. Waiting for the load gate adds to it.
