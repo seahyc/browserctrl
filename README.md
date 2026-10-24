@@ -208,6 +208,8 @@ Small mismatches cost minutes. An icon character in a button's name, a sticky ba
 
 Most of the time goes to the agent thinking. Across the final set, browserctrl's `do` plans took under a fifth of its total run time. What actually speeds a run up is fewer and smaller turns: a whole plan in one call, and a short "what changed" report instead of a full page read.
 
+A busy machine makes everything look slow, including things that aren't. Some benchmark runs had commands that seemed to hang for 30 seconds or more. Once every command logged where its time went, browserctrl itself took 0.1 to 3.4 seconds and connected instantly; the agent had started those commands 31 to 152 seconds after deciding to run them, because a virtual machine was keeping the computer's load near 300. Now every benchmark run records its timing, waits for the load to drop before it starts, and flags runs that started under load.
+
 ## Try it
 
 Copy and paste this into your coding agent:
@@ -297,7 +299,18 @@ browserctrl open https://example.com --browser chrome
 browserctrl read <tab> --browser chrome            # the page, with refs like ref_2
 browserctrl click <tab> ref_2 --browser chrome
 browserctrl fill <tab> ref_3 "Example" --browser chrome
+browserctrl click <tab> "More information" --browser chrome   # or by the name you see
 ```
+
+It also works like any other command-line tool, so an agent can script it instead of reading and grepping. Exit codes say what happened (0 done, 1 not found, 3 a plan stopped, 4 no browser, 5 refused); data goes to stdout and notes to stderr; `-q`, `--json` and `--jsonl` work on the read commands. `table <tab>` prints a table or grid as rows, `text <tab> --region "Billing"` or `--from … --to …` prints part of a page, and one `do` call can page through a whole log and write every row to a file:
+
+```sh
+t=$(browserctrl open https://console.example.com/logs --id --browser chrome)
+browserctrl find "$t" "Go to next page" --enabled -q && \
+  browserctrl do "$t" --repeat 'click "Go to next page"' --collect rows --out logs.jsonl --browser chrome
+```
+
+[Scripting](references/scripting.md) has the full list.
 
 `read` waits for a loading page and says how long it waited. A ref keeps meaning what your last `read` showed; if the page changed, browserctrl says the ref is stale instead of clicking something else. It never replays an action whose result is uncertain, and a stuck page can be recovered with `reload`. Give each agent its own identity with `BROWSERCTRL_AGENT_ID` so two agents never share a tab claim. Without it, the parent process ID stands in, and a claim whose owner has gone counts as released.
 

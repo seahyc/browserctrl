@@ -96,7 +96,10 @@ browserctrl do "$t" 'fill "Where" = "Cleveland"' 'key Enter' 'date 2026-10-17' \
 - **Answers in the same call:** `extract "<what>"` copies the answering line into the report;
   `pick "lowest price" top 1 as $x` ranks the main list by a value the page shows, and later
   steps can use `${x.title}` and `${x.link}`. For a detail of the chosen item, keep going in the
-  same plan: `'open $x' 'extract "rating"'` (`open $x in new tab` keeps the list). To compare or check several items, read
+  same plan: `'open $x' 'extract "rating"'` (`open $x in new tab` keeps the list). Several items
+  in one plan: `for top 3 { extract "price" }` (the first few), `try pick "free cancellation" up to 3
+  => "free cancellation"` (the first that qualifies), `each "nonstop" up to 10 { extract "price" }`
+  (every one that qualifies). When the site can sort by the criterion, sort there instead. Details:
   [compare, rank or check](references/reading-and-acting.md#compare-rank-or-check-several-items).
 - **Suggest-as-you-type fields:** pick the suggestion by the value you typed plus a word that
   makes it unique: `'fill "To" = "90028"' 'click "CA 90028"'`.
