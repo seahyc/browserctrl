@@ -6,6 +6,7 @@ import * as notes from '../lib/notes.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { fakeJev } from './fake-jev.mjs';
 import { ranking } from '../lib/do/rank-lines.mjs';
+import { UNAVAILABLE } from '../lib/judge.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 
 let fixture, browser, conn;
@@ -31,11 +32,16 @@ async function listing(tab, rows) {
   const cards = rows.map((row, i) => `<li style="width:600px;height:90px"${row.hint ? ` data-testid="${row.hint}"` : ''}><a href="/detail/${row.link || i + 1}">${row.name}</a><p>${row.price ?? ''}</p><span>${row.policy || 'free cancellation'}</span></li>`).join('');
   await ops.evaluate(conn, tab, `document.body.innerHTML=${JSON.stringify(`<button id="ready">Ready</button><main><h1>Hotels</h1><ul>${cards}</ul></main>`)}; window.sourceMarker=42`);
 }
-const rankedJev = (rules = {}) => fakeJev({
-  noul: (q, id) => id.endsWith('.eligible') || id === 'prev_expect' ? .95 : .04,
-  choice: (q, id) => id.endsWith('.key') ? Object.keys(q.criteria).find(k => k !== 'none') || 'none' : 'none',
-  ...rules,
-});
+// Rules answer eligibility; a price ranking with no requirement beyond availability asks
+// whether the item says it is sold out or unavailable instead, answered as the inverse.
+const rankedJev = (rules = {}) => {
+  const { noul = (q, id) => id.endsWith('.eligible') || id === 'prev_expect' ? .95 : .04, ...rest } = rules;
+  return fakeJev({
+    choice: (q, id) => id.endsWith('.key') ? Object.keys(q.criteria).find(k => k !== 'none') || 'none' : 'none',
+    ...rest,
+    noul: (q, id, state) => { const p = noul(q, id, state); return q.instructions.startsWith(UNAVAILABLE) ? 1 - p : p; },
+  });
+};
 const run = (tab, plan, jev) => runSteps(conn, tab, plan, { jev, noNotes: true, traceRun: false, prefetch: false });
 const choices = report => report.bindings.find(b => b.name === 'choices').value;
 const selectionCall = jev => jev.calls.filter(call => Object.keys(call.questions).some(key => key.endsWith('.eligible')));
@@ -534,4 +540,124 @@ t('a bound title naming a commit control does not press it: the commit guard sti
   assert.deepEqual(r.steps[1].rendered, { target: 'Place order' });
   assert.ok(!r.steps[1].committed);
   assert.equal(await ops.evaluate(conn, tab, 'window.placed ?? null'), null);
+});
+
+// The om2w stays page (bench/om2w/features, feat-stays-cheapest): hosts quote in their own
+// currency, per night or for the stay, and the page states the stay length and the rates.
+const STAYS = [
+  ['Casa Alfama', '$139 / night'], ['Lapa Flat', '$79 / night', true], ['Hotel Tejo', '€360 total for 3 nights'],
+  ['Estrela House', '$89 / night + $70 cleaning fee'], ['Rio View Suites', '£95 per night'], ['Baixa Hostel Private Room', 'S$480 for your stay'],
+  ['Belém Garden', '$105–$125 / night'], ['Alfama Nest', '€99 / night'], ['Graça Terrace', '$329 total'],
+  ['Chiado Rooms', 'USD 112 per night'], ['Sunset Bairro', '€305 for 3 nights'], ['Mouraria Studio', '£250–£280 total'],
+];
+const STAYS_HEAD = '<p>Thu, Nov 12 – Sun, Nov 15, 2026 · 3 nights · 2 guests. Prices are shown in each host\'s own currency; some hosts quote per night, others for the whole stay.</p>';
+const STAYS_RATES = '<p>Exchange rates used for payment: 1 EUR = 1.08 USD · 1 GBP = 1.27 USD · 1 SGD = 0.74 USD.</p>';
+const staysPage = (tab, { head = STAYS_HEAD, rates = STAYS_RATES, stays = STAYS } = {}) => page(tab, `<style>.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}.card{border:1px solid #ddd;padding:14px}</style><header><b>Wanderly</b><span>Stays</span></header><main><h1>Stays in Lisbon</h1>${head}${rates}<div class="grid">${stays.map(([name, price, soldOut]) => `<div class="card"><div style="height:60px"></div><h3>${name}</h3><div>★ 4.3 · Lisbon</div><div class="price">${price}</div>${soldOut ? '<div>Sold out for your dates</div>' : '<div>Available</div>'}<button>View</button></div>`).join('\n')}</div></main>`);
+const staysJev = () => rankedJev({ noul: (q, id) => id.endsWith('.eligible') || id.endsWith('.confirm') ? /Sold out/.test(q.instructions) ? .03 : .95 : .04 });
+
+t('the stays page: per-night prices become totals for the stated nights and currencies convert at the stated rates', async tab => {
+  await staysPage(tab);
+  const r = await run(tab, ['pick "lowest total price in USD, counting the upper end of ranges" top 3 as $choices'], staysJev());
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.match(choices(r)[0].text, /Alfama Nest/);
+  assert.equal(choices(r)[0].key, 320.76);
+  assert.equal(choices(r)[0].evidence.currency, 'USD');
+  assert.equal(choices(r)[0].evidence.unit, 'total');
+  assert.deepEqual(choices(r).map(item => item.text.split(" · ")[0]), ['Alfama Nest', 'Graça Terrace', 'Sunset Bairro']);
+  assert.deepEqual(choices(r).map(item => item.key), [320.76, 329, 329.4]);
+  const out = formatSteps(r);
+  assert.match(out, /note: exchange rates the page states: 1 EUR = 1\.08 USD · 1 GBP = 1\.27 USD · 1 SGD = 0\.74 USD/);
+  assert.match(out, /note: stay length the page states: 3 nights/);
+  assert.match(out, /note: i\d+: €99\/night × 3 × 1\.08 = USD 320\.76/);
+  assert.match(out, /note: i\d+: \(\$89\/night × 3 \+ \$70 fee\) = USD 337\.00/);
+  assert.match(out, /note: i\d+: £280 \(high end of £250–£280\) × 1\.27 = USD 355\.60/);
+  assert.match(out, /note: i\d+: \$125\/night \(high end of \$105–\$125\) × 3 = USD 375\.00/);
+  assert.match(out, /note: i\d+: S\$480 × 0\.74 = USD 355\.20/);
+  assert.ok(!r.steps[0].excluded?.length, JSON.stringify(r.steps[0].excluded));
+  assert.ok(!choices(r).some(item => /Lapa Flat/.test(item.text)));
+  // Without the range clause a range ranks by its low end, as before: Belém at $105 × 3.
+  const r2 = await run(tab, ['pick "lowest total price in USD" top 1 as $choices'], staysJev());
+  assert.equal(r2.done, true, JSON.stringify(r2.stopped));
+  assert.match(choices(r2)[0].text, /Belém Garden/);
+  assert.equal(choices(r2)[0].key, 315);
+});
+
+t('rates without a stated stay length convert currencies only; per-night prices are not guessed into totals', async tab => {
+  await staysPage(tab, { head: '<p>2 guests. Prices are shown in each host\'s own currency.</p>' });
+  const r = await run(tab, ['pick "lowest total price in USD, counting the upper end of ranges" top 1 as $choices'], staysJev());
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  // Totals only: $329, €305 × 1.08 = 329.40, €360 × 1.08, S$480 × 0.74 = 355.20, £280 × 1.27.
+  assert.match(choices(r)[0].text, /Graça Terrace/);
+  assert.equal(choices(r)[0].key, 329);
+  const out = formatSteps(r);
+  assert.doesNotMatch(out, /stay length the page states/);
+  assert.doesNotMatch(out, /\/night ×/);
+  const [nest, estrela] = await ids(tab, ['Alfama Nest', 'Estrela House']);
+  assert.match(out, new RegExp(`${nest} excluded: €99 is per night, not total price`));
+  assert.match(out, new RegExp(`${estrela} excluded: \\$89 is per night, not total price`));
+});
+
+t('a page that states no rates ranks as before: other currencies are excluded, not converted', async tab => {
+  await staysPage(tab, { rates: '' });
+  const r = await run(tab, ['pick "lowest total price in USD, counting the upper end of ranges" top 1 as $choices'], staysJev());
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  // USD only, per-night prices made totals for the stated 3 nights. "$" next to "S$" stays
+  // ambiguous without the page's rates, so only Chiado (USD 112 × 3) is in USD.
+  assert.match(choices(r)[0].text, /Chiado Rooms/);
+  assert.equal(choices(r)[0].key, 336);
+  const out = formatSteps(r);
+  assert.doesNotMatch(out, /exchange rates the page states/);
+  assert.doesNotMatch(out, / × (?!3 )/);
+  const [nest, graca] = await ids(tab, ['Alfama Nest', 'Graça Terrace']);
+  assert.match(out, new RegExp(`${nest} excluded: €99 is in EUR, not USD`));
+  assert.match(out, new RegExp(`${graca} excluded: \\$329 is in dollar, not USD`));
+  // A list in one currency and basis with no rates keeps today's output exactly.
+  await listing(tab, [{ name: 'Desk A', price: 'USD 300' }, { name: 'Desk B', price: 'EUR 80' }, { name: 'Desk C', price: 'USD 250' }]);
+  const r2 = await run(tab, ['pick "lowest price" top 1 as $choices'], rankedJev());
+  assert.match(choices(r2)[0].text, /Desk C/);
+  assert.match(formatSteps(r2), /excluded: EUR 80 is in EUR; most items are in USD and no conversion is made ⚠/);
+  assert.doesNotMatch(formatSteps(r2), /×/);
+});
+
+t('ambiguous rate statements are ignored: approximate, ranged, contradicted or naming an ambiguous "$"', async tab => {
+  const desks = [{ name: 'Desk A', price: 'USD 300' }, { name: 'Desk B', price: 'EUR 80' }, { name: 'Desk C', price: 'USD 250' }];
+  for (const [rates, why] of [
+    ['Approx. 1 EUR = 1.08 USD', /1 EUR = 1\.08 USD \(approximate\)/],
+    ['1 EUR = 1.08 USD at checkout; 1 EUR = 1.20 USD on arrival', /\(they disagree\)/],
+    ['1 EUR = 1.05–1.10 USD', null],
+  ]) {
+    await listing(tab, desks);
+    await ops.evaluate(conn, tab, `document.querySelector('main').insertAdjacentHTML('afterbegin', ${JSON.stringify(`<p>${rates}</p>`)})`);
+    const r = await run(tab, ['pick "lowest price" top 1 as $choices'], rankedJev());
+    assert.equal(r.done, true, JSON.stringify(r.stopped));
+    assert.match(choices(r)[0].text, /Desk C/, rates);
+    const out = formatSteps(r);
+    assert.match(out, /EUR 80 is in EUR; most items are in USD and no conversion is made/, rates);
+    assert.doesNotMatch(out, /×/, rates);
+    if (why) assert.match(out, why, rates);
+  }
+  // "$" is ambiguous where the page writes both SGD and USD: a rate quoted in "$" is not used.
+  await listing(tab, [{ name: 'Lamp A', price: 'SGD 30' }, { name: 'Lamp B', price: '€10' }, { name: 'Lamp C', price: 'SGD 25' }, { name: 'Lamp D', price: 'USD 40' }]);
+  await ops.evaluate(conn, tab, `document.querySelector('main').insertAdjacentHTML('afterbegin', '<p>€1 = $1.45</p>')`);
+  const r = await run(tab, ['pick "lowest price" top 1 as $choices'], rankedJev());
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.match(choices(r)[0].text, /Lamp C/);
+  assert.doesNotMatch(formatSteps(r), /×/);
+});
+
+t('rates in either direction and symbol forms convert to the criterion currency; stated stay lengths that disagree give none', async tab => {
+  await listing(tab, [{ name: 'Room A', price: 'SGD 270 total' }, { name: 'Room B', price: '€150 total' }, { name: 'Room C', price: 'USD 210 total' }]);
+  await ops.evaluate(conn, tab, `document.querySelector('main').insertAdjacentHTML('afterbegin', '<p>USD 1 = SGD 1.35 · €1 = US$1.10</p>')`);
+  const r = await run(tab, ['pick "lowest price in USD" top 3 as $choices'], rankedJev());
+  assert.equal(r.done, true, JSON.stringify(r.stopped));
+  assert.deepEqual(choices(r).map(item => item.key), [165, 200, 210]);
+  assert.match(formatSteps(r), /€150 × 1\.1 = USD 165\.00/);
+  assert.match(formatSteps(r), /SGD 270 \/ 1\.35 = USD 200\.00/);
+  await listing(tab, [{ name: 'Room A', price: '$100 per night' }, { name: 'Room B', price: '$250 total' }, { name: 'Room C', price: '$90 per night' }]);
+  await ops.evaluate(conn, tab, `document.querySelector('main').insertAdjacentHTML('afterbegin', '<p>3 nights · Nov 12 – Nov 16, 2026</p>')`);
+  const r2 = await run(tab, ['pick "lowest total price" top 1 as $choices'], rankedJev());
+  assert.equal(r2.done, true, JSON.stringify(r2.stopped));
+  assert.match(choices(r2)[0].text, /Room B/);
+  assert.match(formatSteps(r2), /different stay lengths \(3, 4 nights\)/);
+  assert.doesNotMatch(formatSteps(r2), /\/night ×/);
 });
