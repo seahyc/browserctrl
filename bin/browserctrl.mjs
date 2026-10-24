@@ -42,6 +42,10 @@ import * as rec from '../lib/rec.mjs';
 import * as readtokens from '../lib/readtokens.mjs';
 import * as finder from '../lib/find.mjs';
 import * as recording from '../lib/recording.mjs';
+import { page } from '../lib/page/index.mjs';
+import { EXIT, exitCodeFor, exitError } from '../lib/exit-codes.mjs';
+import { MAX_REPEATS } from '../lib/steps.mjs';
+import { PAGE_CAP } from '../lib/collect.mjs';
 
 // Commands that act on a page take a still when their tab is being recorded; reads
 // only when the page moved on since the last one.
@@ -123,15 +127,20 @@ const MUTATING = new Set([
   'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha', 'do',
 ]);
 
+// Flags that never take a value, so `--json <tab>` or `-q <tab>` keeps the word that follows.
+// --count takes one only when it is a number (click --count 2; find … --count).
+const SWITCHES = new Set(['quiet', 'json', 'jsonl', 'enabled', 'no-dedupe', 'id', 'csv', 'commit']);
+
 function parseArgs(argv) {
   const flags = {};
   const positional = [];
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
-    if (a.startsWith('--')) {
+    if (a === '-q') flags.quiet = true;
+    else if (a.startsWith('--')) {
       const name = a.slice(2);
       const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--')) flags[name] = true;
+      if (next === undefined || next.startsWith('--') || SWITCHES.has(name) || (name === 'count' && !/^\d+$/.test(next))) flags[name] = true;
       else {
         flags[name] = next;
         i += 1;
@@ -142,6 +151,15 @@ function parseArgs(argv) {
 }
 
 const out = v => console.log(typeof v === 'string' ? v : JSON.stringify(v, null, 2));
+// One JSON object per line (--jsonl); nothing at all for an empty list.
+const outLines = rows => { if (rows.length) process.stdout.write(rows.map(r => JSON.stringify(r)).join('\n') + '\n'); };
+// A negative answer (exit 1): the message goes to stderr, so stdout holds only data.
+function no(message) {
+  process.exitCode = EXIT.NO;
+  if (message) console.error(message);
+}
+// A word for the shell: quoted unless it is plain.
+const shellWord = w => /^[\w@%+=:,./-]+$/.test(w) ? w : `'${String(w).replace(/'/g, `'"'"'`)}'`;
 
 // What browserctrl knows about the site the agent is about to drive: recipes (faster than
 // the UI), then flow notes. Hints go to stderr so stdout stays parseable.
@@ -186,7 +204,7 @@ function usage() {
     browserctrl migrate [--apply]                       move an earlier version's folders to this OS's (shows the plan first)
     browserctrl where                                    the install folder and the data, config, state and runtime folders
     browserctrl launch <browser> [--user-data-dir D]     relaunch with its debug port; waits until ready (D = separate instance)
-    browserctrl tabs --browser dia                       tabs, with who has claimed them
+    browserctrl tabs --browser dia [--json|--jsonl|--ids]  tabs, with who has claimed them (--ids: one id per line, for xargs)
     browserctrl native-tabs --browser dia                all Dia tabs, including dormant tabs
     browserctrl native-focus <native UUID> --browser dia  select and wake a native Dia tab
     browserctrl native-group --ids UUIDs --group-id N --browser dia [--dry-run] [--allow-focus]
@@ -235,9 +253,13 @@ function usage() {
 
   Read before you act:
     browserctrl read <tab> --browser dia [--json] [--all] snapshot with ref_1..N + page text (--all: whole page, not just near the viewport)
-    browserctrl text <tab> [--max-text 8000] [--match re] visible text, bounded by default
-    browserctrl find <tab> "<text or regex>" [--json]    controls whose name matches, hidden ones too: what hides them, the
-                                                          control that opens them, their link; handles work in do steps
+    browserctrl text <tab> [--max-text 8000] [--match re] [--count]  visible text, bounded by default; with --match, exit 1 when no line matches
+                       [--region "main|dialog|<landmark label>|<heading>"] [--from "<line text>" [--to "<line text>"]] [--tail N]
+    browserctrl table <tab> [--json|--jsonl|--csv] [--selector css] [--max N]  the main table or grid (ARIA and div rows too) as
+                                                          header-keyed rows; TSV by default; exit 1 when there is none
+    browserctrl find <tab> "<text or regex>" [--json|--jsonl] [--count] [--enabled]  controls whose name matches, hidden ones too: what
+                                                          hides them, the control that opens them, their link; handles work in do steps;
+                                                          exit 1 when nothing matches (--enabled: disabled controls don't count)
     browserctrl fields <tab> [--all] [--json]            every form field and what it holds now (selects, boxes, sliders, radios)
     browserctrl items <tab> [--group g2] [--all] [--json]  repeated items (results, cards, rows, messages) grouped by page region
                        read, text and items first wait up to 8 s for skeletons/spinners to clear (--no-wait skips);
@@ -245,13 +267,22 @@ function usage() {
     browserctrl html <tab> [selector]
     browserctrl eval <tab> <js>
 
+  Act by the name you see (exact name, else Jev, as in do; exit 3 when unsure, 5 for a committing click without --commit):
+    browserctrl click <tab> "Save"        browserctrl fill <tab> "Search" "aeron"      browserctrl select <tab> "Country" "Singapore"
+    browserctrl hover <tab> "Account"     browserctrl check <tab> "Remember me"        (prints one JSON object: what it acted on)
+
   Act (all accept --ref ref_3, --selector <css>, or --x/--y):
     browserctrl click <tab> --intent "the Grey option" [--expect "…"]   Jev picks the element (also fill/select/hover); never clicks Buy/Send/Pay/Delete
     browserctrl do <tab> 'fill "search" = "aeron"' 'key Enter' 'click Apply => "results are filtered"' [--then items|text]
                                                    run a plan in one call; stops at the first uncertain or committing step,
                                                    or the first unmet => expectation; 'optional click …' skips when absent
                                                    [--dismiss "cookie banner, app-install prompt"] closes only those overlays
-                                                   [--repeat 'click Next' --until "<condition>" --max 10 --collect items|text]
+                                                   [--repeat 'click Next' [--until "<condition>"] --max 10 --collect items|text|rows]
+                                                   ends at the last page (no Next, disabled Next, or the page did not change)
+                                                   --out FILE|- streams every page as a JSON line {page, url, text|items|rows}, no total
+                                                   cap (--max defaults to 1000 then, up to ${MAX_REPEATS}; --page-cap N per page, default
+                                                   ${PAGE_CAP.text} characters / ${PAGE_CAP.items} items / ${PAGE_CAP.rows} rows; --no-dedupe keeps repeats)
+                                                   do <tab> - (or --file plan.txt) reads the steps from stdin, one per line
                                                    a challenge mid-plan goes to the human [--handoff-timeout ms | --no-handoff]
                                                    whole task in one call: 'extract "<what>"' (copies the answering line),
                                                    'pick "<criterion>"' (opens the best-fitting item), 'if "<page shows>" then <step>',
@@ -279,6 +310,7 @@ function usage() {
     browserctrl key   <tab> Enter | cmd+a | shift+Tab
     browserctrl upload <tab> --ref ref_2 --files a.pdf,b.png
     browserctrl scroll <tab> [--dy 600]     browserctrl scroll-to <tab> --ref ref_9
+    browserctrl scroll <tab> --in "<pane name or css>" [down|up|end|top|<px>]   a scrollable pane or editor inside the page
     browserctrl drag <tab> --from ref_1 --to ref_2
     browserctrl act <tab> --steps '[{"action":"scroll","dy":800},{"action":"key","key":"Enter"}]'
 
@@ -289,7 +321,9 @@ function usage() {
                        --hard restarts the tab's renderer when the page is stuck and a plain reload times out)
     browserctrl nav <tab> <url> [--until load|domcontentloaded|networkidle|none]
     browserctrl wait <tab> --selector ".done" | --text "Saved" | --url /success | --gone ".spinner" | --network-idle
-                   [--timeout 15000]
+                   [--timeout 15000]   exit 1 when it never happened
+    browserctrl wait --download [DIR] [--timeout 60000] [--since 30]   prints the downloaded file's path (~/Downloads by default)
+                       nav, click and do steps already wait for the page to settle and fill in: no sleep after them
 
   See what happened:
     browserctrl shot <tab> [file] [--full] [--emulate-focus] [--ref ref_3] [--selector css]
@@ -298,7 +332,7 @@ function usage() {
     browserctrl cookies <tab>
 
   Tabs and claims:
-    browserctrl open <url> --browser dia [--anonymous]          open a tab
+    browserctrl open <url> --browser dia [--anonymous] [--id]   open a tab (--id prints only its id: t=$(browserctrl open URL --id))
     browserctrl visit <url|/path>... [--from <tab>] [--grep RE] [--then items] [--parallel 4]
                        open links in parallel background tabs, return matching lines or items, close them
     browserctrl open <url> --browser dia --anonymous            clean temporary session
@@ -311,6 +345,13 @@ function usage() {
     browserctrl ungroup --url <substr>[,<substr>...]
     browserctrl claims [--browser dia]       browserctrl release [<tab>|--mine]
     browserctrl status --browser dia         browserctrl stop --browser dia
+
+  Scripting (references/scripting.md): data goes to stdout; hints, warnings and progress to stderr.
+    -q/--quiet drops those; find, text --match, wait, ready and check --expect then print nothing (as grep -q).
+    --json gives one JSON object; --jsonl one object per line (tabs, find, items, table, fields, console, network, claims, browsers).
+    Exit codes: 0 ok/found  1 not found or condition false  2 usage error  3 do plan stopped (or --intent unsure)
+                4 no browser or daemon  5 refused (claimed tab, paused agent, cool-down, vault-tainted tab, committing click)
+                6 other failure (timeout, closed tab, page error)
 
   Chromium commands take --browser <${Object.keys(BROWSERS).join('|')}> or --port <n>, or set
   BROWSERCTRL_BROWSER / BROWSERCTRL_PORT once in the environment of the agent that runs them.
@@ -373,7 +414,18 @@ async function launch(name) {
 }
 
 const { flags, positional } = parseArgs(process.argv.slice(2));
+// Names agents reach for that mean an existing command.
+const ALIASES = { screenshot: 'shot', navigate: 'nav', list: 'tabs' };
+if (ALIASES[positional[0]]) positional[0] = ALIASES[positional[0]];
 const cmd = positional[0];
+// -q/--quiet: no hints, warnings or progress on stderr (errors still print). Commands that
+// test a condition (find, text --match, wait, ready, check --expect) print nothing at all, as
+// grep -q: the exit code is the answer. A do plan prints no report, only why it stopped.
+const quiet = Boolean(flags.quiet);
+const say = console.error.bind(console);
+if (quiet) console.error = () => {};
+// A reader that stopped early (| head) is not an error.
+process.stdout.on('error', e => { if (e.code === 'EPIPE') process.exit(process.exitCode || 0); throw e; });
 // The browser is never guessed, but whoever launches an agent can choose it once:
 // BROWSERCTRL_BROWSER=dia or BROWSERCTRL_PORT=9230 stands for --browser/--port on every command.
 if (flags.browser === undefined && flags.port === undefined) {
@@ -405,6 +457,104 @@ export function suggestCommand(word, known = knownCommands()) {
   if (SYNONYMS[word] && known.has(SYNONYMS[word])) return SYNONYMS[word];
   const best = [...known].map(k => [k, k.startsWith(word) || word.startsWith(k) ? 0.5 : editDistance(word, k)]).sort((a, b) => a[1] - b[1])[0];
   return best && best[1] <= Math.max(2, Math.floor(word.length / 3)) ? best[0] : '';
+}
+
+// The steps of a do plan: its arguments, with "-" standing for stdin, after the lines of
+// --file. One step per line; blank lines and lines starting with # are skipped.
+function planLines(args, flags) {
+  const fromText = text => String(text).split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  const lines = [];
+  if (typeof flags.file === 'string') {
+    try { lines.push(...fromText(fs.readFileSync(flags.file === '-' ? 0 : flags.file, 'utf8'))); }
+    catch (e) { throw new Error(`Cannot read the plan file ${flags.file}: ${e.message}`); }
+  } else if (flags.file !== undefined) throw new Error('--file needs a file name, or - for stdin');
+  for (const a of args) {
+    if (a !== '-') { lines.push(a); continue; }
+    if (process.stdin.isTTY) throw new Error('do - reads plan steps from stdin, one per line: pipe them in (printf \'%s\\n\' \'click "Next"\' | browserctrl do <tab> -)');
+    lines.push(...fromText(fs.readFileSync(0, 'utf8')));
+  }
+  return lines;
+}
+
+// Where --out sends each collected page: one JSON line per page, written as it is read.
+function collectSink(file) {
+  if (file === '-') {
+    return {
+      write: rec => new Promise((resolve, reject) => {
+        if (process.stdout.write(JSON.stringify(rec) + '\n')) resolve();
+        else process.stdout.once('drain', resolve).once('error', reject);
+      }),
+      close: async () => {},
+    };
+  }
+  const fd = fs.openSync(path.resolve(file), 'w');
+  return { write: rec => { fs.writeSync(fd, JSON.stringify(rec) + '\n'); }, close: async () => fs.closeSync(fd) };
+}
+
+// click/fill/select/hover/check by name: a one-step do plan, reported in one JSON object.
+// It stops as a do step does (exit 3), and refuses a control that commits (exit 5) unless
+// --commit says the user wants it clicked.
+async function actByName(conn, targetId, step, flags) {
+  const r = await runSteps(conn, targetId, [step], { onWarning: w => console.error(`⚠ ${w}`), noNotes: Boolean(flags['no-notes']), show: show.showing(flags),
+    minP: flags['min-p'] ? Number(flags['min-p']) : undefined, dismiss: flags.dismiss, diff: false, prefetch: false, handoff: !flags['no-handoff'] });
+  const row = r.steps.find(s => s.step === 1 || s.step === '1') || r.steps[0] || {};
+  if (r.done) {
+    if (quiet) return;
+    return out({ acted: true, step, target: row.target, ...(row.how ? { how: row.how } : {}), ...(row.checked !== undefined ? { checked: row.checked } : {}),
+      ...(row.url_change ? { url_change: row.url_change } : {}), page: r.page });
+  }
+  const committing = /commit/i.test(r.stopped?.reason || '');
+  process.exitCode = committing ? EXIT.REFUSED : EXIT.STOPPED;
+  const res = { acted: Boolean(row.acted), step, reason: r.stopped?.reason, ...(r.stopped?.candidates ? { candidates: r.stopped.candidates } : {}),
+    ...(r.stopped?.hidden ? { hidden: r.stopped.hidden } : {}), ...(r.stopped?.controls ? { on_screen: r.stopped.controls } : {}), ...(committing ? { retry: 'add --commit if the user asked for this action' } : {}) };
+  const retry = dismissRetry(r);
+  if (retry) res.retry = retry;
+  if (quiet) return say(`✗ ${step}: ${res.reason}${retry ? `\n${retry}` : ''}`);
+  return out(res);
+}
+
+// A plan stopped by an overlay: the same command again with that overlay in --dismiss.
+function dismissRetry(r) {
+  if (!r.stopped?.overlay) return null;
+  const named = /^(\w+) "([^"]+)" is blocking/.exec(r.stopped.reason || '');
+  const firstLine = String(r.stopped.overlay).split(/\n/).map(l => l.trim()).find(Boolean) || '';
+  const kind = (r.stopped.category || (named ? `${named[2]} ${named[1]}` : `"${firstLine.slice(0, 50)}" popup`)).replace(/[",]/g, '').replace(/\s+/g, ' ').trim();
+  const argv = process.argv.slice(2);
+  const words = [];
+  let dismiss = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--dismiss') { if (argv[i + 1] && !argv[i + 1].startsWith('--')) dismiss.push(argv[++i]); continue; }
+    words.push(argv[i]);
+  }
+  dismiss = [...dismiss, kind].join(', ');
+  return `retry: browserctrl ${[...words, '--dismiss', dismiss].map(shellWord).join(' ')}   # the overlay is "${kind}"; --dismiss closes only overlays of the kinds it names`;
+}
+
+// wait --download [DIR]: the newest finished file in the downloads folder that appeared since
+// --since seconds ago (30, so a click just before counts; 0: only files from now on). A file
+// still being written (.crdownload, .part, .download) is waited for until it is complete.
+async function waitDownload(flags) {
+  const dir = path.resolve(typeof flags.download === 'string' ? flags.download : typeof flags.dir === 'string' ? flags.dir : path.join(os.homedir(), 'Downloads'));
+  if (!fs.existsSync(dir)) throw new Error(`--download: no folder ${dir}`);
+  const timeoutMs = Number(flags.timeout || 60000);
+  const since = Date.now() - Number(flags.since ?? 30) * 1000;
+  const PARTIAL = /\.(crdownload|part|partial|download|tmp)$/i;
+  const started = Date.now();
+  let last = null;
+  for (;;) {
+    const files = fs.readdirSync(dir).filter(f => !f.startsWith('.')).map(f => {
+      try { const st = fs.statSync(path.join(dir, f)); return { f, st }; } catch { return null; }
+    }).filter(x => x && x.st.mtimeMs >= since);
+    const partial = files.some(x => PARTIAL.test(x.f));
+    const done = files.filter(x => x.st.isFile() && !PARTIAL.test(x.f)).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs)[0];
+    // Finished when nothing is partial and its size held still between two looks.
+    if (done && !partial && last && last.f === done.f && last.size === done.st.size) {
+      return { path: path.join(dir, done.f), bytes: done.st.size, ms: Date.now() - started };
+    }
+    last = done ? { f: done.f, size: done.st.size } : null;
+    if (Date.now() - started >= timeoutMs) return { reason: `No download finished in ${dir} within ${timeoutMs} ms${partial ? ' (one is still being written)' : ''}` };
+    await new Promise(r => setTimeout(r, 300));
+  }
 }
 
 const main = async () => {
@@ -466,6 +616,8 @@ const main = async () => {
 
   if (cmd === 'browsers') {
     const rows = await listBrowsers();
+    if (flags.json) return out(rows);
+    if (flags.jsonl) return outLines(rows);
     return out(
       rows
         .map(b => {
@@ -626,6 +778,8 @@ const main = async () => {
   if (cmd === 'claims') {
     const port = flags.browser || flags.port ? await requireBrowser(flags) : null;
     const rows = claims.list(port);
+    if (flags.json) return out(rows);
+    if (flags.jsonl) return outLines(rows);
     return out(rows.length ? rows.map(r => `${r.targetId.slice(0, 8)}  :${r.port}  ${r.label} (${r.owner})  ${Math.round(r.ageMs / 60000)}m ago`).join('\n') : '(no live claims)');
   }
 
@@ -694,6 +848,13 @@ const main = async () => {
     return out(lines.join('\n'));
   }
 
+  // A download is a file, not a page: no browser needed.
+  if (cmd === 'wait' && flags.download) {
+    const r = await waitDownload(flags);
+    if (!r.path) { no(r.reason); return quiet ? undefined : out({ downloaded: false, reason: r.reason }); }
+    return quiet ? undefined : out(flags.json ? r : r.path);
+  }
+
   const port = await requireBrowser(flags);
   const conn = await connect(port, { mediated: true });
   let stillAfter = null;
@@ -701,7 +862,14 @@ const main = async () => {
     if (cmd === 'activity') return activityOutput(await conn.activity(positional[1] || 'list', activityDetails(flags)), flags);
     if (cmd === 'ready') {
       const tab = await ops.resolveTab(conn, positional[1]);
-      return out(await waitForBackgroundReady(conn, tab.targetId, {waitUntil: flags.until || 'load', timeoutMs: Number(flags.timeout || 15000), selector: flags.selector, text: flags.text, url: flags.url}));
+      let r;
+      try { r = await waitForBackgroundReady(conn, tab.targetId, {waitUntil: flags.until || 'load', timeoutMs: Number(flags.timeout || 15000), selector: flags.selector, text: flags.text, url: flags.url}); }
+      catch (e) {
+        if (!/readiness timed out/.test(e.message)) throw e;
+        no(e.message);
+        return quiet ? undefined : out({ ready: false, reason: e.message });
+      }
+      return quiet ? undefined : out(r);
     }
     if (cmd === 'status') return out(await conn.status());
     if (cmd === 'stop') {
@@ -716,11 +884,14 @@ const main = async () => {
         `${p.default ? '  [default: new tabs land here]' : ''}${p.email ? `  ${p.email}` : ''}`)].join('\n'));
     }
     if (cmd === 'tabs') {
-      if (!flags.json) for (const line of cooldownLines()) console.error(line);
+      if (!flags.json && !flags.jsonl && !flags.ids) for (const line of cooldownLines()) console.error(line);
       let rows = await ops.tabs(conn, { focus: !flags['no-focus'] });
       // Profile names cost a one-time probe per profile; see lib/profiles.mjs.
       rows = flags.profile ? await profiles.filterByProfile(conn, rows, flags.profile) : await profiles.labelTabs(conn, rows);
       if (flags.json) return out(rows);
+      if (flags.jsonl) return outLines(rows);
+      // One id per line, for xargs: browserctrl tabs --ids | xargs -n1 browserctrl text
+      if (flags.ids) { if (rows.length) process.stdout.write(rows.map(t => t.id).join('\n') + '\n'); return; }
       return out(
         rows
           .map(t => {
@@ -740,6 +911,7 @@ const main = async () => {
     }
     if (cmd === 'marks') {
       const rows = state.marks(port);
+      if (flags.json) return out(rows);
       if (!rows.length) return out('(no marked tabs)');
       const all = await ops.tabs(conn);
       return out(
@@ -875,12 +1047,14 @@ const main = async () => {
         res = await observe(conn, res.targetId, res);
       }
       hint(positional[1], flags);
+      // --id: only the new tab's id, for t=$(browserctrl open URL --id)
+      if (flags.id) return out(res.id);
       return out(res);
     }
 
     const tab = await ops.resolveTab(conn, positional[1]);
     const targetId = tab.targetId;
-    if (MUTATING.has(cmd)) claims.claim(port, targetId, { steal: Boolean(flags.steal) });
+    if (MUTATING.has(cmd) || (cmd === 'check' && positional[2] !== undefined && !flags.expect)) claims.claim(port, targetId, { steal: Boolean(flags.steal) });
     if (rec.get(targetId) && (STILL_ACT.has(cmd) || STILL_READ.has(cmd))) {
       // One still per action once the command is done (or failed), outside its timing.
       stillAfter = { targetId, label: actionLabel(cmd, positional, flags), ifChanged: STILL_READ.has(cmd) };
@@ -894,15 +1068,19 @@ const main = async () => {
       token: flags.token,
     };
     const timeoutMs = flags.timeout ? Number(flags.timeout) : undefined;
-    // The natural forms: `click <tab> ref_9`, `click <tab> "#id"`, `fill <tab> ref_61 "value"`.
+    // The natural forms: `click <tab> ref_9`, `click <tab> "#id"`, `fill <tab> ref_61 "value"`,
+    // and by the name a person sees: `click <tab> "Save"`, `fill <tab> "Search" "aeron"`.
     let valueArg = positional[2];
+    let named = null;
     if (TARGET_CMDS.has(cmd) && !flags.intent && !target.ref && !target.selector && target.x === undefined && positional[2] !== undefined) {
       const p = String(positional[2]);
+      if (!p.trim()) throw new Error(`Usage: browserctrl ${cmd} ${tab.id} "<visible name>" | ref_N | "<css>": the target is empty (a shell variable that should hold it is unset?)`);
       const num = (v) => v !== undefined && /^-?\d+(\.\d+)?$/.test(String(v));
       if (/^(ref_\d+|e\d+)$/.test(p)) target.ref = p;
       else if (num(p) && num(positional[3]) && cmd !== 'fill') { target.x = Number(p); target.y = Number(positional[3]); } // click <tab> 150 407
       else if (looksLikeSelector(p) || await selectorOnPage(conn, targetId, p)) target.selector = p;
       else if (/^i\d+$/.test(p)) throw new Error(`${p} is an item id from \`items\`, not a ref. Click the item by its text: browserctrl do ${tab.id} 'click "<the item's text>"', or use a ref_N from browserctrl read ${tab.id}.`);
+      else if (['click', 'hover', 'select'].includes(cmd) || (cmd === 'fill' && (positional[3] !== undefined || typeof flags.value === 'string'))) named = p;
       else if (cmd !== 'fill') throw new Error(`"${p}" is not a ref (ref_9) or a CSS selector. Name it in words instead: browserctrl do ${tab.id} '${cmd} "${p}"', or browserctrl ${cmd} ${tab.id} --intent "${p}".`);
       if (target.ref || target.selector) valueArg = positional[3];
       if (target.x !== undefined) valueArg = positional[4];
@@ -922,6 +1100,17 @@ const main = async () => {
       await show.busy(conn, targetId, false); // the idle timer runs from here until the next command
     }
 
+    // A visible name: found the way a do step finds it (exact name, else Jev), and done as one.
+    if (cmd === 'check' && positional[2] !== undefined && !flags.expect) named = String(positional[2]);
+    if (named !== null) {
+      const value = cmd === 'fill' ? (flags.value ?? positional[3]) : cmd === 'select' ? (flags.label ?? flags.value ?? positional[3]) : undefined;
+      if (cmd === 'select' && (value === undefined || value === true)) throw new Error(`Usage: browserctrl select ${tab.id} "<list name>" "<option>"`);
+      if (cmd === 'click' && (flags.button || flags.count || flags.mod)) throw new Error('--button, --count and --mod need a ref or a CSS selector: browserctrl click <tab> ref_9 --button right');
+      const q = v => `"${String(v)}"`;
+      const step = `${cmd}${cmd === 'click' && flags.commit ? '!' : ''} ${q(named)}${value !== undefined ? ` = ${q(value)}` : ''}`;
+      return await actByName(conn, targetId, step, flags);
+    }
+
     // Refs that --intent prints come from its own snapshot, the page's latest. A do plan reads
     // the caller's refs in the caller's last read, and hands over its own snapshot only when
     // its report prints refs.
@@ -935,7 +1124,8 @@ const main = async () => {
       const pick = await jev.pickTarget(cfg, snap, { intent: String(flags.intent), action: cmd, view });
       const why = jev.refusal(pick, flags['min-p'] ? Number(flags['min-p']) : undefined);
       if (why) {
-        process.exitCode = 3;
+        // A click that could commit is refused (5); an unsure pick stops like a do step (3).
+        process.exitCode = /intents never click it/.test(why) ? EXIT.REFUSED : EXIT.STOPPED;
         return out({ acted: false, reason: why, candidates: pick.ranked, jev_ms: pick.ms });
       }
       const t = { ref: pick.pick.ref, token: snap.token };
@@ -957,30 +1147,48 @@ const main = async () => {
 
     switch (cmd) {
       case 'do': {
-        const lines = positional.slice(2);
-        if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' --until "…" --collect items] [--then items|text] [--open N --grep "label|label"]');
-        const r = await runSteps(conn, targetId, lines, { onWarning: warning => console.error(`⚠ ${warning}`), show: show.showing(flags), noNotes: Boolean(flags['no-notes']),
-          then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
-          force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
-          dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : undefined, collect: flags.collect,
-          open: flags.open ? Number(flags.open) : 0, grep: flags.grep, prefetch: !flags['no-prefetch'], context: flags.context != null ? Number(flags.context) : 1,
-          diff: !flags['no-diff'], refToken: callerToken,
-        });
+        const lines = planLines(positional.slice(2), flags);
+        if (!lines.length && !flags.repeat) throw new Error('Usage: browserctrl do <tab> \'click "More filters"\' \'click Apply => "results are filtered"\' ... [--dismiss "cookie banner, …"] [--repeat \'click Next\' [--until "…"] --collect items|text|rows [--out FILE|-]] [--then items|text] [--open N --grep "label|label"]   (do <tab> - reads the steps from stdin)');
+        const outPath = typeof flags.out === 'string' ? flags.out : null;
+        if (flags.out !== undefined && !outPath) throw new Error('--out needs a file name, or - for stdout');
+        if (outPath && (!flags.repeat || !flags.collect)) throw new Error('--out needs --repeat \'<step>\' and --collect text|items|rows');
+        if (flags['page-cap'] !== undefined && !(Number(flags['page-cap']) > 0)) throw new Error('--page-cap must be a positive number');
+        const sink = outPath ? collectSink(outPath) : null;
+        let r;
+        try {
+          r = await runSteps(conn, targetId, lines, { onWarning: warning => console.error(`⚠ ${warning}`), show: show.showing(flags), noNotes: Boolean(flags['no-notes']),
+            then: flags.then, minP: flags['min-p'] ? Number(flags['min-p']) : undefined,
+            force: Boolean(flags.force), handoff: !flags['no-handoff'], handoffMs: Number(flags['handoff-timeout'] || 300000),
+            dismiss: flags.dismiss, repeat: flags.repeat, until: flags.until, max: flags.max ? Number(flags.max) : outPath ? 1000 : undefined, collect: flags.collect,
+            collectSink: sink?.write, collectOut: outPath, pageCap: flags['page-cap'] ? Number(flags['page-cap']) : undefined, dedupe: !flags['no-dedupe'],
+            open: flags.open ? Number(flags.open) : 0, grep: flags.grep, prefetch: !flags['no-prefetch'], context: flags.context != null ? Number(flags.context) : 1,
+            diff: !flags['no-diff'], refToken: callerToken,
+          });
+        } finally { await sink?.close(); }
         if (r.refsToken) readtokens.remember(port, targetId, r.refsToken);
-        if (!r.done) process.exitCode = 3;
-        return out(flags.json ? r : formatSteps({ ...r, warnings: [] }));
+        if (!r.done) process.exitCode = EXIT.STOPPED;
+        const retry = r.stopped ? dismissRetry(r) : null;
+        // The report is stdout's data, unless --out sends the collected pages there or to a file.
+        const print = outPath ? say : console.log;
+        if (quiet) {
+          if (r.stopped) say(`✗ stopped at step ${r.stopped.step}: ${r.stopped.reason}${retry ? `\n${retry}` : ''}`);
+        } else print(flags.json ? JSON.stringify(retry ? { ...r, retry } : r, null, 2) : formatSteps({ ...r, warnings: [] }) + (retry ? `\n${retry}` : ''));
+        return;
       }
       case 'items': {
         await waitToRead(conn, targetId, flags);
         const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }), { retry: true }));
         if (flags.group) r.groups = r.groups.filter(g => g.id === flags.group);
         if (!flags['no-prefetch']) await prefetch.start(conn, mainLinks(r, 3, r.url)).catch(() => {});
+        if (flags.jsonl) return outLines(r.groups.flatMap(g => g.items.map(it => ({ group: g.id, ...it }))));
         return out(flags.json ? r : formatItems(r, { full: Boolean(flags.group), grep: flags.grep }));
       }
       case 'check': {
         const page = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
         const c = await jev.checkPage(jev.jevKey(), page, { expect: flags.expect });
         const cool = c.flags.includes('challenge') ? cooldown.record(page.url, { kind: 'challenge (Jev)' }) : null;
+        if (flags.expect && !c.expected) no(`The page does not show: ${flags.expect} (p=${c.checks.expect})`);
+        if (quiet) return;
         return out({ page: { url: page.url, title: page.title }, ...c, ...(cool ? { cooldown: cooldown.describe(cool) } : {}) });
       }
       case 'read': {
@@ -1007,11 +1215,38 @@ const main = async () => {
         const raw = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, deepTextExpression(), { retry: true }));
         const source = String(raw || '');
         let selected = source;
+        // Ranges, in this order: --region, --from/--to, --match, --tail. A range that finds
+        // nothing is a negative answer (exit 1).
+        const nothing = (message, extra = {}) => { no(message); if (flags.json && !quiet) out({ text: '', textLength: 0, truncated: false, ...extra }); };
+        if (typeof flags.region === 'string') {
+          const r = await ops.evaluate(conn, targetId, page('region-text', { region: flags.region }));
+          if (!r.found) return nothing(`No landmark or heading on the page matches "${flags.region}". Landmarks: ${r.landmarks.join(', ') || 'none'}. Headings: ${r.headings.map(h => JSON.stringify(h)).join(', ') || 'none'}.`, { landmarks: r.landmarks, headings: r.headings });
+          selected = String(r.text || '');
+          console.error(`(${r.found})`);
+        }
+        if (typeof flags.from === 'string' || typeof flags.to === 'string') {
+          const lines = selected.split(/\r?\n/);
+          const has = (l, w) => l.toLowerCase().includes(String(w).toLowerCase());
+          const start = typeof flags.from === 'string' ? lines.findIndex(l => has(l, flags.from)) : 0;
+          if (start < 0) return nothing(`No line contains "${flags.from}".`);
+          const rel = typeof flags.to === 'string' ? lines.slice(start + 1).findIndex(l => has(l, flags.to)) : -1;
+          selected = lines.slice(start, rel < 0 ? lines.length : start + 2 + rel).join('\n');
+        }
+        // --match is grep-like: exit 1 when no line matches; -q prints nothing; --count the lines.
         if (flags.match) {
           let re;
           try { re = new RegExp(String(flags.match), 'i'); }
           catch (e) { throw new Error(`Invalid --match regex: ${e.message}`); }
-          selected = source.split(/\r?\n/).filter(line => re.test(line)).join('\n');
+          selected = selected.split(/\r?\n/).filter(line => re.test(line)).join('\n');
+          const n = selected ? selected.split('\n').length : 0;
+          if (!n) no(flags.json || flags.count ? '' : `No line of the page matches /${flags.match}/i.`);
+          if (quiet) return;
+          if (flags.count) return out(String(n));
+          if (!n && !flags.json) return;
+        }
+        if (flags.tail !== undefined) {
+          if (!(Number(flags.tail) > 0)) throw new Error('--tail must be a positive number of lines');
+          selected = selected.split(/\r?\n/).slice(-Number(flags.tail)).join('\n');
         }
         const limit = flags['max-text'] === undefined ? 20000 : Number(flags['max-text']);
         const clipped = limit > 0 && selected.length > limit;
@@ -1025,15 +1260,45 @@ const main = async () => {
         try { new RegExp(pattern, 'i'); } catch (e) { throw new Error(`Invalid pattern: ${e.message}`); }
         await waitToRead(conn, targetId, flags);
         const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, finder.FIND(pattern, { limit: Number(flags.max) || 25 }), { retry: true }));
-        return out(flags.json ? r : finder.formatFind(r, pattern));
+        // --enabled: a disabled control (a greyed-out Next) does not count as found.
+        if (flags.enabled) { r.rows = r.rows.filter(x => !x.disabled && x.role !== 'text'); r.matches = r.rows.length + (r.more || 0); }
+        const count = r.rows.length ? Math.max(r.matches, r.rows.length) : 0;
+        // grep-like: exit 1 when nothing matches; -q prints nothing; --count prints the number.
+        if (!count) no(flags.json || flags.count || flags.jsonl ? '' : finder.formatFind(r, pattern));
+        if (quiet) return;
+        if (flags.count) return out(String(count));
+        if (flags.jsonl) return outLines(r.rows);
+        if (flags.json) return out(r);
+        if (count) return out(finder.formatFind(r, pattern));
+        return;
+      }
+      case 'table': {
+        // The page's main table or grid as header-keyed rows (the code do --collect rows uses).
+        await waitToRead(conn, targetId, flags);
+        const t = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, page('table-rows', { max: Number(flags.max) || PAGE_CAP.rows, selector: typeof flags.selector === 'string' ? flags.selector : null }), { retry: true }));
+        if (!t.rows.length) {
+          no(t.error ? `No table: ${t.error}` : 'No table, grid or repeated rows on the page. Try items, or table --selector "<css of the table>".');
+          if (flags.json && !quiet) out(t);
+          return;
+        }
+        if (quiet) return;
+        if (t.truncated) console.error(`(first ${t.rows.length} of ${t.total} rows; --max N for more)`);
+        if (flags.json) return out(t);
+        if (flags.jsonl) return outLines(t.rows);
+        const cell = flags.csv ? v => (/[",\n\r]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : String(v)) : v => String(v).replace(/[\t\n\r]+/g, ' ');
+        const sep = flags.csv ? ',' : '\t';
+        return out([t.columns, ...t.rows.map(r => t.columns.map(c => r[c] ?? ''))].map(row => row.map(cell).join(sep)).join('\n'));
       }
       case 'fields': {
         await waitToRead(conn, targetId, flags);
         const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, finder.FIELDS({ all: !!flags.all }), { retry: true }));
+        if (flags.jsonl) return outLines(r.rows || []);
         return out(flags.json ? r : finder.formatFields(r));
       }
-      case 'html':
-        return out(await ops.html(conn, targetId, positional[2]));
+      case 'html': {
+        const html = await ops.html(conn, targetId, positional[2]);
+        return out(flags.json ? { html } : html);
+      }
       case 'eval':
         return out(await ops.evaluate(conn, targetId, positional.slice(2).join(' '), { timeoutMs, caller: true }));
       case 'act': {
@@ -1077,13 +1342,21 @@ const main = async () => {
         hint(res.url, flags);
         return out(res);
       }
-      case 'wait':
-        return out(
-          await ops.waitFor(conn, targetId, {
+      case 'wait': {
+        // A condition that never came true is a negative answer (exit 1), not a failure.
+        let r;
+        try {
+          r = await ops.waitFor(conn, targetId, {
             selector: flags.selector, text: flags.text, url: flags.url, gone: flags.gone, present: Boolean(flags.present),
             fn: flags.fn, networkIdle: Boolean(flags['network-idle']), timeoutMs: timeoutMs || 15000,
-          }),
-        );
+          });
+        } catch (e) {
+          if (!/^Timed out after/.test(e.message)) throw e;
+          no(e.message);
+          return quiet ? undefined : out({ matched: false, reason: e.message });
+        }
+        return quiet ? undefined : out(r);
+      }
       case 'click':
         return out(
           await ops.click(conn, targetId, {
@@ -1110,8 +1383,23 @@ const main = async () => {
         return out(await ops.selectOption(conn, targetId, { ...target, value: flags.value, label: flags.label }));
       case 'upload':
         return out(await ops.upload(conn, targetId, { ...target, files: String(flags.files || '').split(',').filter(Boolean) }));
-      case 'scroll':
-        return out(await ops.scroll(conn, targetId, { deltaY: Number(flags.dy || 400), deltaX: Number(flags.dx || 0) }));
+      case 'scroll': {
+        if (typeof flags.in !== 'string') return out(await ops.scroll(conn, targetId, { deltaY: Number(flags.dy || 400), deltaX: Number(flags.dx || 0) }));
+        // --in "<pane>" [down|up|end|top|N]: a scrollable pane inside the page, by its name.
+        const amount = positional[2] ?? (flags.dy !== undefined ? Number(flags.dy) : 'down');
+        if (!/^(down|up|end|top|-?\d+)$/.test(String(amount))) throw new Error('Usage: browserctrl scroll <tab> --in "<pane name or CSS>" [down|up|end|top|<pixels>]');
+        const r = await ops.evaluate(conn, targetId, page('scroll-in', { name: flags.in, amount: /^-?\d+$/.test(String(amount)) ? Number(amount) : amount }));
+        if (!r.pane) {
+          no(`No scrollable pane matches "${flags.in}"${r.matched ? ` (${r.matched} elements match, none scrolls)` : ''}. Scrollable panes: ${r.panes.join(', ') || 'none'}.`);
+          return;
+        }
+        // A pane that scrolls with its own script (an editor) gets a mouse wheel at its centre.
+        if (r.wheel) {
+          await conn.send(targetId, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x: r.wheel.x, y: r.wheel.y, deltaX: 0, deltaY: r.wheel.deltaY });
+          return quiet ? undefined : out({ pane: r.pane, wheel: r.wheel.deltaY, at: { x: r.wheel.x, y: r.wheel.y } });
+        }
+        return quiet ? undefined : out(r);
+      }
       case 'scroll-to':
         return out(await ops.scrollTo(conn, targetId, target));
       case 'captcha':
@@ -1123,10 +1411,13 @@ const main = async () => {
           ref: flags.ref,
           selector: flags.selector,
         });
+        if (flags.json) return out({ path: res.path, bytes: res.bytes, dpr: res.dpr });
         return out(`Saved ${res.path} (${Math.round(res.bytes / 1024)} KB, DPR=${res.dpr}; CSS px = image px / DPR)`);
       }
       case 'console': {
         const d = await ops.diagnostics(conn, targetId, { limit: Number(flags.limit || 50), clear: Boolean(flags.clear) });
+        if (flags.json) return out({ console: d.console, errors: d.errors });
+        if (flags.jsonl) return outLines([...d.console, ...d.errors.map(e => ({ level: 'error', ...e }))]);
         const rows = [...d.console.map(c => `[${c.level}] ${c.text}`), ...d.errors.map(e => `[error] ${e.text} (${e.url || ''}:${e.line ?? ''})`)];
         return out(rows.join('\n') || '(no console output buffered since the daemon attached to this tab)');
       }
@@ -1134,6 +1425,8 @@ const main = async () => {
         const rows = flags.failed
           ? await ops.failedRequests(conn, targetId, { limit: Number(flags.limit || 50) })
           : (await ops.diagnostics(conn, targetId, { limit: Number(flags.limit || 50) })).network;
+        if (flags.json) return out(rows);
+        if (flags.jsonl) return outLines(rows);
         return out(rows.map(r => `${String(r.status ?? (r.failed ? 'ERR' : '...')).padEnd(4)} ${r.method.padEnd(5)} ${r.url.slice(0, 100)}${r.errorText ? `  ${r.errorText}` : ''}`).join('\n') || '(no requests buffered)');
       }
       case 'cookies':
@@ -1203,6 +1496,8 @@ const main = async () => {
 
 timing.mark('imports_done');
 main().catch(e => {
-  console.error(`Error: ${e.message}`);
-  process.exit(1);
+  // Each shell call starts with a fresh environment: say how to name the browser on the line.
+  if (/^No browser specified/.test(e.message)) e.message += '\nSet it on the same command line, since every shell call starts fresh: BROWSERCTRL_BROWSER=dia browserctrl … (or BROWSERCTRL_PORT=9222), or pass --browser dia.';
+  say(`Error: ${e.message}`);
+  process.exit(exitCodeFor(e));
 });

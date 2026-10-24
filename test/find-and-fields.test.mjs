@@ -86,7 +86,7 @@ t('read shows a disclosure button as collapsed or expanded, and items lists the 
   assert.match(formatItems(r), /\(in an expanded section\)/);
 });
 
-t('click and fill take a positional ref or selector; a word that is neither says what to do instead', async () => {
+t('click and fill take a positional ref or selector; a word that is neither is a visible name, found as a do step finds it', async () => {
   const id = await open('slice-controls.html');
   const short = id.slice(0, 8);
   const { stdout } = await cli('read', short);
@@ -98,7 +98,8 @@ t('click and fill take a positional ref or selector; a word that is neither says
   assert.equal(await ops.evaluate(conn, id, 'seats.getAttribute("aria-expanded")'), 'true');
   await cli('fill', short, '#checkin', '2026-11-01');
   assert.equal(await ops.evaluate(conn, id, 'checkin.value'), '2026-11-01');
-  await assert.rejects(cli('click', short, 'Add to bag'), /not a ref .* or a CSS selector[\s\S]*do .* 'click "Add to bag"'/);
+  // No control has that name (and there is no Jev key): it acts on nothing and stops as do does.
+  await assert.rejects(cli('click', short, 'Add to bag'), e => e.code === 3 && JSON.parse(e.stdout).acted === false);
   await assert.rejects(cli('click', short, 'i140'), /item id from `items`/);
 });
 

@@ -236,12 +236,33 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
 - Notices are never acted on: a new toast, alert or inline message such as "Price
   changed", "Out of stock" or "Did you mean" is reported under `events` with the step
   that caused it, beside the overlays dismissed. Read them before reporting a result.
-- `--repeat '<step>' --until "<page condition>"` runs after the plan: it repeats the
-  step (usually `click Next`) until Jev judges the condition true, the step cannot be
-  done (no Next button), or `--max` (10) repeats. `--collect items` returns the `items`
-  of every page, merged and de-duplicated by link and text; `--collect text` the text.
+- `--repeat '<step>' [--until "<page condition>"]` runs after the plan: it repeats the
+  step (usually `click Next`) until Jev judges the `--until` condition true, the step
+  cannot be done (no Next button), the button the step names is disabled, the page did
+  not change after the step (a Next that stays enabled on the last page), or `--max`
+  (10) repeats. Without `--until` it simply runs to the last page. `--collect items`
+  returns the `items` of every page, merged and de-duplicated by link and text;
+  `--collect rows` the rows of the page's main table or grid as objects keyed by the
+  column headers (log viewers, admin tables), de-duplicated; `--collect text` the text.
+  In the report these are bounded (text 6,000 characters a page and 20,000 in all,
+  items 200 a page, rows 500 shown).
+- For a bulk export add `--out FILE` (or `--out -` for stdout): each page is written as
+  one JSON line the moment it is read, `{"page":3,"url":…,"columns":[…],"rows":[{…}],"duplicates":0}`
+  (`"items":[…]` for items, `"text":"…","chars":N` for the page's full text), with no
+  total cap. `--max` then defaults to 1000 (up to 5000); `--page-cap N` bounds one page
+  (default 1,000,000 characters, 5,000 items or rows); `--no-dedupe` keeps repeated
+  rows. The report goes to stderr. Instead of a shell loop of `text`, `find` and `click`:
+
+  ```bash
+  browserctrl do <tab> --repeat 'click "Go to next page"' --collect rows --out /tmp/slow-log.jsonl
+  jq -c '.rows[]' /tmp/slow-log.jsonl > /tmp/rows.jsonl
+  ```
+- A plan stopped by a dialog or popup prints the same command with that overlay added to
+  `--dismiss`, as a `retry:` line; run it if closing that overlay is harmless.
+- `do <tab> -` reads the steps from stdin, one per line (`--file plan.txt` from a file);
+  blank lines and `#` comments are skipped. See [scripting.md](scripting.md).
 - `--then items` or `--then text` returns the resulting page in the same call.
-- Exit 3 means the plan stopped: the report names the step, the reason, Jev's
+- Exit 3 means the plan stopped (other codes: [scripting.md](scripting.md)): the report names the step, the reason, Jev's
   candidates with refs, elements with that name that exist but are hidden (often opened
   by another control), and the controls on screen. Re-plan from that report; the steps
   before it already happened.
@@ -494,7 +515,22 @@ chips, commits and checks that depend on an earlier input cannot be batched.
 
 ### Single actions
 
-Every action takes a ref or selector, positionally (`click <tab> ref_3`, `click <tab>
+`click`, `fill`, `select`, `hover` and `check` also take the name a person sees, found the
+way a `do` step finds it (the exact name, else Jev), so you need no `read | grep` for a ref:
+
+```bash
+browserctrl click  <tab> "Trust Policy"
+browserctrl fill   <tab> "Search" "aeron"
+browserctrl select <tab> "Country" "Singapore"
+browserctrl check  <tab> "Remember me"          # ticks it; check <tab> --expect "…" is the page check
+browserctrl click  <tab> "Delete user" --commit # a control that commits needs --commit (else exit 5)
+```
+
+Each prints one JSON object (`acted`, `target`, `page`). When it cannot pick with
+confidence it acts on nothing, exits 3 and lists the candidates and the controls on screen,
+as a `do` step does. An empty name (an unset shell variable) is a usage error (exit 2).
+
+Every action also takes a ref or selector, positionally (`click <tab> ref_3`, `click <tab>
 "#id"`, `fill <tab> ref_5 "text"`) or as `--ref ref_3` / `--selector <css>`, or `--x/--y`.
 Refs keep meaning what your last `read` showed, even after a `do` read the page again. A
 click on a ref waits until the element stops moving and lands where it is on top; if
@@ -520,6 +556,7 @@ browserctrl type  <tab> "literal text"
 browserctrl key   <tab> Enter                                 # cmd+a, shift+Tab, Escape
 browserctrl upload <tab> --ref ref_4 --files /abs/a.pdf,/abs/b.png
 browserctrl scroll <tab> --dy 600
+browserctrl scroll <tab> --in "Policy document" down   # a pane inside the page: down|up|end|top|<px>
 browserctrl scroll-to <tab> --ref ref_9
 browserctrl drag <tab> --from ref_1 --to ref_2
 browserctrl act <tab> --steps '[{"action":"scroll","dy":800},{"action":"key","key":"Enter"}]'
@@ -549,6 +586,21 @@ browserctrl wait <tab> --text "Saved"
 browserctrl wait <tab> --url /success
 browserctrl wait <tab> --network-idle --timeout 30000
 ```
+
+A file download is a wait of its own; it needs no tab:
+
+```bash
+browserctrl click <tab> "Export CSV"
+browserctrl wait --download --timeout 60000      # prints the file's path (~/Downloads; or --download DIR)
+```
+
+It takes the newest finished file that appeared in the last `--since` seconds (30, so the
+click before it counts; `--since 0` for files from now on), and waits while one is still
+being written (`.crdownload`). `nav`, `click`, `fill` and `do` steps already wait for the page
+to settle and fill in, so no `sleep` is needed after them.
+
+`wait` and `ready` exit 1 when the condition never held within the timeout (`-q` prints
+nothing), so `browserctrl wait <tab> --text Saved -q && …` reads as a test.
 
 `--selector` and `--gone` mean *visible*, not merely present in the DOM. A
 `display:none` node that is already in the markup would otherwise satisfy the
@@ -588,7 +640,12 @@ browserctrl console <tab>                      # console output + uncaught error
 browserctrl network <tab> --failed             # 4xx/5xx and failed requests
 browserctrl cookies <tab>
 browserctrl text <tab> --max-text 8000         # bounded visible text (20,000 by default)
-browserctrl text <tab> --match '评价|平台'      # only lines matching a case-insensitive regex
+browserctrl text <tab> --match '评价|平台'      # only lines matching a case-insensitive regex; exit 1 if none (--count, -q)
+browserctrl text <tab> --region "Policy Document"            # a heading and what follows it, or a landmark: main, dialog, nav, aside "Filters"
+browserctrl text <tab> --from "Policy Document" --to "Grants" # from the first line containing one text to the next containing the other
+browserctrl text <tab> --tail 40                              # the last 40 lines (after the other ranges)
+browserctrl table <tab> [--csv|--json|--jsonl]                # the main table or grid as header-keyed rows (TSV by default)
+browserctrl find <tab> "Go to next page" --enabled -q   # exit 0 if an enabled control matches, else 1
 browserctrl html <tab> [selector]
 browserctrl eval <tab> "location.href"
 ```
@@ -646,9 +703,10 @@ browserctrl check <tab> [--expect "the price filter is open"] --browser dia
 ```
 
 - An intent acts only when Jev's top pick has p ≥ 0.6 (`--min-p`). Otherwise it exits 3
-  with the top candidates and their refs; pick one and act by ref.
+  with the top candidates and their refs; pick one and act by ref. `check --expect` exits 1
+  when the page does not show what was expected.
 - An intent never clicks a control that can commit something (Buy, Send, Pay, Delete,
-  Submit, Confirm…), even when the intent names it. It returns the ref; if the user
+  Submit, Confirm…), even when the intent names it (exit 5). It returns the ref; if the user
   authorized the action, click it by ref or with `do` and `click! "<exact name>"`.
 - After acting it reports yes/no probabilities for a challenge, a login wall, an error,
   a dialog and an empty state, plus `--expect`, from what is on screen. `check` runs the

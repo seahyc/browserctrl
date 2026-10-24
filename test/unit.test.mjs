@@ -129,7 +129,8 @@ test('a stale DevToolsActivePort file does not report a dead browser as debuggab
 test('an unknown command names the nearest one instead of printing all of help', async () => {
   const { execFile } = await import('node:child_process');
   const run = (c) => new Promise(res => execFile(process.execPath, [fileURLToPath(new URL('../bin/browserctrl.mjs', import.meta.url)), c], (e, so, se) => res(se)));
-  assert.match(await run('screenshot'), /Unknown command "screenshot"\. Did you mean "shot"\?/);
+  // screenshot, navigate and list are aliases now; other near words still get a pointer.
+  assert.match(await run('snapshot'), /Unknown command "snapshot"\. Did you mean "read"\?/);
   assert.match(await run('shto'), /Did you mean "shot"\?/);
   assert.match(await run('zzqqxx'), /Unknown command "zzqqxx"\. Run browserctrl help/);
 });

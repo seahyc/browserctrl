@@ -1,0 +1,60 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Slow query log</title>
+<style>
+  body { font: 13px sans-serif; margin: 20px; }
+  table { border-collapse: collapse; width: 900px; table-layout: fixed; }
+  td, th { border: 1px solid #ccc; padding: 2px 6px; text-align: left; }
+  .pager { margin-top: 8px; }
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); }
+  .modal { position: fixed; top: 80px; left: 120px; width: 500px; background: #fff; padding: 20px; }
+</style></head>
+<body>
+<h1>Slow Query Log Details</h1>
+<!-- A fixed-header grid: the header row lives in its own table, as in Ant Design. -->
+<div class="grid">
+  <div class="grid-head"><table><thead><tr><th>Time</th><th>Duration (ms)</th><th>Query</th><th>Rows</th></tr></thead></table></div>
+  <div class="grid-body"><table><tbody id="rows"></tbody></table></div>
+</div>
+<div class="pager">
+  <button aria-label="Go to previous page" id="prev">‹</button>
+  <span id="where"></span>
+  <button aria-label="Go to next page" id="next">›</button>
+</div>
+<script>
+// ?pages=N (40), ?per=N (25), ?keepnext=1: Next stays enabled on the last page and does
+// nothing; ?modal=1: a blocking dialog is open.
+const q = new URLSearchParams(location.search);
+const PAGES = Number(q.get('pages') || 40), PER = Number(q.get('per') || 25);
+let current = 1;
+const pad = n => String(n).padStart(2, '0');
+function row(i) {
+  const t = new Date(Date.UTC(2026, 9, 1, 0, 0, 0) + i * 61000);
+  return [`${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())} ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}:${pad(t.getUTCSeconds())}`,
+    String(500 + (i * 37) % 9000), `SELECT * FROM orders WHERE id = ${i}`, String(i % 97)];
+}
+function render() {
+  const tb = document.getElementById('rows');
+  // A zero-height measure row first, as fixed-layout grids keep.
+  let html = '<tr aria-hidden="true" style="height:0;visibility:collapse"><td></td><td></td><td></td><td></td></tr>';
+  for (let k = 0; k < PER; k++) {
+    const i = (current - 1) * PER + k + 1;
+    html += '<tr>' + row(i).map(c => `<td>${c}</td>`).join('') + '</tr>';
+  }
+  tb.innerHTML = html;
+  document.getElementById('where').textContent = `Page ${current} of ${PAGES}`;
+  document.getElementById('prev').disabled = current === 1;
+  document.getElementById('next').disabled = current === PAGES && !q.get('keepnext');
+}
+// The next page arrives a moment after the click, as from a server.
+document.getElementById('next').addEventListener('click', () => {
+  if (current >= PAGES) return;
+  document.getElementById('rows').innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+  setTimeout(() => { current++; render(); }, 120);
+});
+document.getElementById('prev').addEventListener('click', () => { if (current > 1) { current--; render(); } });
+render();
+if (q.get('modal')) {
+  document.body.insertAdjacentHTML('beforeend', '<div class="modal-mask"></div><div class="modal" role="dialog" aria-modal="true" aria-label="Export settings"><p>Choose the columns to export before you continue.</p><button>Close</button></div>');
+}
+</script>
+</body></html>

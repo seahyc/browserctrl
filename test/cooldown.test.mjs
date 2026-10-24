@@ -120,7 +120,7 @@ t('during the cool-down, open, nav, do with nav and recipe run refuse the site; 
   const refused = /127\.0\.0\.1 is cooling down after a verification-page .*--force/s;
 
   const open = await cli('open', `${fixture.url}fixtures/page.html`);
-  assert.equal(open.code, 1);
+  assert.equal(open.code, 5); // refused (lib/exit-codes.mjs)
   assert.match(open.stderr, refused);
 
   const other = await cli('open', `${local}fixtures/page.html`);
@@ -128,11 +128,11 @@ t('during the cool-down, open, nav, do with nav and recipe run refuse the site; 
   const tab = JSON.parse(other.stdout).id;
 
   const nav = await cli('nav', tab, `${fixture.url}`);
-  assert.equal(nav.code, 1);
+  assert.equal(nav.code, 5);
   assert.match(nav.stderr, /refusing to navigate to it/);
 
   const plan = await cli('do', tab, 'wait 10', `nav ${fixture.url}`);
-  assert.equal(plan.code, 1);
+  assert.equal(plan.code, 5);
   assert.match(plan.stderr, refused);
 
   // Reading the already-open tab is still allowed.
@@ -142,7 +142,7 @@ t('during the cool-down, open, nav, do with nav and recipe run refuse the site; 
   fs.mkdirSync(path.join(process.env.BROWSERCTRL_RECIPES, '127.0.0.1'), { recursive: true });
   fs.writeFileSync(path.join(process.env.BROWSERCTRL_RECIPES, '127.0.0.1', 'cool.json'), JSON.stringify({ origin: fixture.url, js: 'async () => ({ items: [1], next: null })' }));
   const recipe = await cli('recipe', 'run', '127.0.0.1/cool');
-  assert.equal(recipe.code, 1);
+  assert.equal(recipe.code, 5);
   assert.match(recipe.stderr, /refusing to run 127\.0\.0\.1\/cool against it/);
 
   const tabs = await cli('tabs');
@@ -162,7 +162,7 @@ t('captcha on a cleared tab ends the cool-down early, and the site opens again',
   const tab = await ops.newTab(conn, `${fixture.url}fixtures/page.html`);
   await ops.waitForReady(conn, tab.targetId);
   cooldown.record(fixture.url, { kind: 'jigsaw-slider' });
-  assert.equal((await cli('open', `${fixture.url}fixtures/page.html`)).code, 1);
+  assert.equal((await cli('open', `${fixture.url}fixtures/page.html`)).code, 5);
   const r = await cli('captcha', tab.id);
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(JSON.parse(r.stdout), { captcha: null });
