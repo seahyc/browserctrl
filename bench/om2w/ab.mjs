@@ -4,8 +4,11 @@
 //   node bench/om2w/ab.mjs run --arms <ref> <ref> [...] [--tasks quick] [--repeats 3] [--gate 30]
 //                              [--group <id>] [--judge] [--keep-worktrees] [--keep-profile] [--dry-run]
 //   node bench/om2w/ab.mjs run --arms <ref> <ref> --quick   the 6 fastest quick.json tasks, 2 repeats
-//   --tasks takes a set name (quick), a .json or .txt file, or comma-separated id prefixes,
-//   so a subset is e.g. --tasks 99daaed9,512fd4de
+//   --tasks takes a set name (quick, features), a .json or .txt file, or comma-separated id prefixes,
+//   so a subset is e.g. --tasks 99daaed9,512fd4de or --tasks feat-audit,feat-usage
+//   An arm is [label=]<ref>[:option,...]; options: jev=off (no TypeSafe key: the arm's daemon and
+//   agent see no TYPESAFE_API_KEY and an empty key file) and env.NAME=value. --skill-path names the
+//   arm's SKILL.md in the prompt instead of inlining it (the behaviour before 2026-10-24).
 //   node bench/om2w/ab.mjs run --group <id>           resume a group with its saved settings
 //   node bench/om2w/ab.mjs judge --group <id> [--parallel 3]   quick-judge its runs afterwards
 //   node bench/om2w/ab.mjs status --group <id>
@@ -44,17 +47,20 @@ const listFlag = (name) => { const i = rest.indexOf(name); if (i < 0) return nul
 
 const tasksFile = [process.env.OM2W_TASKS, path.join(here, 'tasks.json'), path.join(mainRoot, 'bench/om2w/tasks.json')].find((f) => f && fs.existsSync(f));
 
-// Task set: quick (bench/om2w/<name>.json), a JSON file with tasks[].task_id, a text file of
-// ids, or comma-separated id prefixes. Final and held-out tasks are refused.
+// Task set: quick (bench/om2w/<name>.json), features (the local feature tasks,
+// features/tasks.json), a JSON file with tasks[].task_id, a text file of ids, or comma-separated
+// id prefixes. Final and held-out tasks are refused.
+const featuresFile = path.join(here, 'features', 'tasks.json');
+const featureIds = () => JSON.parse(fs.readFileSync(featuresFile, 'utf8')).tasks.map((t) => t.task_id);
 function resolveTasks(spec) {
-  const all = JSON.parse(fs.readFileSync(tasksFile, 'utf8')).map((t) => t.task_id);
+  const all = [...(tasksFile ? JSON.parse(fs.readFileSync(tasksFile, 'utf8')).map((t) => t.task_id) : []), ...featureIds()];
   let ids;
-  const named = path.join(here, `${spec}.json`);
+  const named = spec === 'features' ? featuresFile : path.join(here, `${spec}.json`);
   const file = fs.existsSync(named) ? named : fs.existsSync(spec) ? spec : null;
   if (file && file.endsWith('.json')) ids = JSON.parse(fs.readFileSync(file, 'utf8')).tasks.map((t) => t.task_id || t);
   else if (file) ids = fs.readFileSync(file, 'utf8').split('\n').map((l) => l.replace(/#.*/, '').trim()).filter(Boolean);
   else ids = spec.split(',');
-  ids = ids.map((p) => { const m = all.filter((t) => t.startsWith(p)); if (m.length !== 1) throw new Error(`task ${p}: ${m.length} matches`); return m[0]; });
+  ids = ids.map((p) => { const m = all.filter((t) => t === p || t.startsWith(p)); if (m.length !== 1 && !m.includes(p)) throw new Error(`task ${p}: ${m.length} matches`); return m.includes(p) ? p : m[0]; });
   const splits = JSON.parse(fs.readFileSync(path.join(here, 'splits.json'), 'utf8'));
   const held = new Set([...splits.final.tasks, ...(splits['heldout-2']?.tasks || []),
     ...fs.readFileSync(path.join(here, 'heldout.txt'), 'utf8').split('\n').filter((l) => l && !l.startsWith('#'))]);
@@ -63,17 +69,32 @@ function resolveTasks(spec) {
   return ids;
 }
 
+// [label=]<ref>[:opt,opt]: dev:jev=off is commit dev without a TypeSafe key.
+function parseOpts(text) {
+  const opts = {};
+  for (const o of (text || '').split(',').filter(Boolean)) {
+    const [k, ...v] = o.split('=');
+    if (k === 'jev' && ['off', 'on'].includes(v.join('='))) opts.jev = v.join('=');
+    else if (k.startsWith('env.') && k.length > 4) (opts.env ||= {})[k.slice(4)] = v.join('=');
+    else throw new Error(`arm option ${o}: use jev=off or env.NAME=value`);
+  }
+  return opts;
+}
 function resolveArms(specs) {
   const arms = specs.map((s) => {
-    const [label, ref] = s.includes('=') ? s.split('=') : [null, s];
+    const m = s.match(/^(?:([\w.-]+)=)?([^:]+?)(?::(.+))?$/);
+    if (!m) throw new Error(`arm ${s}: use [label=]<ref>[:jev=off]`);
+    const [, label, ref, optText] = m;
     const sha = git('rev-parse', '--verify', `${ref}^{commit}`);
-    return { label, ref, sha };
+    const opts = parseOpts(optText);
+    return { label: label || null, ref, sha, ...(Object.keys(opts).length ? { opts, opts_text: optText } : {}) };
   });
-  // Unnamed arms are named by short sha; a repeated commit gets a/b suffixes (A/A checks).
+  // Unnamed arms are named by short sha (plus their options); a repeated arm gets a/b suffixes (A/A checks).
+  const base = (a) => a.sha.slice(0, 7) + (a.opts_text ? `:${a.opts_text}` : '');
   const counts = {};
-  for (const a of arms) if (!a.label) counts[a.sha] = (counts[a.sha] || 0) + 1;
+  for (const a of arms) if (!a.label) counts[base(a)] = (counts[base(a)] || 0) + 1;
   const seen = {};
-  for (const a of arms) if (!a.label) { const n = (seen[a.sha] = (seen[a.sha] || 0) + 1); a.label = a.sha.slice(0, 7) + (counts[a.sha] > 1 ? '-' + 'abcdefgh'[n - 1] : ''); }
+  for (const a of arms) if (!a.label) { const n = (seen[base(a)] = (seen[base(a)] || 0) + 1); a.label = base(a) + (counts[base(a)] > 1 ? '-' + 'abcdefgh'[n - 1] : ''); }
   if (new Set(arms.map((a) => a.label)).size !== arms.length) throw new Error('arm labels must differ');
   return arms;
 }
@@ -178,10 +199,23 @@ function armEnv(meta, arm) {
   for (const k of ['BROWSERCTRL_AGENT_ID', 'BROWSERCTRL_BROWSER', 'BROWSERCTRL_PORT', 'BROWSERCTRL_HOME', 'CDP_AGENT_ID']) delete env[k];
   const jev = path.join(os.homedir(), '.config/browserctrl/jev.env');
   if (!env.BROWSERCTRL_JEV_ENV && fs.existsSync(jev)) env.BROWSERCTRL_JEV_ENV = jev;
+  // jev=off: what a user without a TypeSafe key has. No key in the environment and an empty key
+  // file (the arm's home has no jev.env of its own), so exact names, refs and selectors still
+  // work and nothing is sent to TypeSafe.
+  if (arm.opts?.jev === 'off') {
+    for (const k of ['TYPESAFE_API_KEY', 'TYPESAFE_MODEL']) delete env[k];
+    const empty = path.join(armHome(meta, arm), 'no-jev.env');
+    fs.mkdirSync(path.dirname(empty), { recursive: true });
+    fs.writeFileSync(empty, '');
+    env.BROWSERCTRL_JEV_ENV = empty;
+  }
+  Object.assign(env, arm.opts?.env || {});
   // browserctrl needs Node 22+: put the one running this first, then Homebrew's tools.
   env.PATH = [path.dirname(process.execPath), '/opt/homebrew/bin', '/usr/sbin', env.PATH].join(path.delimiter);
   Object.assign(env, {
-    OM2W_PORT: PORT, OM2W_LAUNCH: LAUNCH, OM2W_TASKS: tasksFile,
+    OM2W_PORT: PORT, OM2W_LAUNCH: LAUNCH, ...(tasksFile ? { OM2W_TASKS: tasksFile } : {}),
+    // Groups made before 2026-10-24 have no skill_inline and keep the path-only prompt on resume.
+    OM2W_SKILL_INLINE: meta.skill_inline ? 'on' : 'off',
     OM2W_BROWSERCTRL: worktreeOf(arm.sha), OM2W_BC_HOME: armHome(meta, arm),
     OM2W_VARIANT: `${meta.group}:${arm.label}`,
     OM2W_RUNS_DIR: path.join(groupDir(meta.group), 'runs'), OM2W_RESULTS: path.join(groupDir(meta.group), 'run-rows.jsonl'),
@@ -234,10 +268,10 @@ async function runJob(meta, job, attempt) {
     run: run?.runId || null, run_dir: runDir, rollout: runDir ? rolloutOf(runDir) : null,
     seconds: run?.agent ? Math.round(run.agent.ms / 1000) : null, timed_out: run?.agent?.timed_out ?? null,
     tool_calls: run?.agent?.tools ?? null, tokens: run?.agent?.tokens ?? null, output_tokens: run?.agent?.output_tokens ?? null,
-    answer: run?.answer?.answer ?? null, success: run?.judge?.success ?? null,
+    answer: run?.answer?.answer ?? null, success: run?.check?.success ?? run?.judge?.success ?? null, check: run?.check ?? null,
   };
   appendRow(meta.group, row);
-  log(meta, `end   r${job.repeat} ${job.task.slice(0, 8)} ${arm.label} ${c.status}${c.why ? ` (${c.why})` : ''} agent ${row.seconds ?? '-'} s, ${row.tool_calls ?? '-'} tool calls`);
+  log(meta, `end   r${job.repeat} ${job.task.slice(0, 8)} ${arm.label} ${c.status}${c.why ? ` (${c.why})` : ''} agent ${row.seconds ?? '-'} s, ${row.tool_calls ?? '-'} tool calls${row.check ? `, answer ${row.check.success ? 'correct' : 'wrong'}` : ''}`);
   return row;
 }
 
@@ -265,11 +299,12 @@ async function run() {
     const quickSix = () => JSON.parse(fs.readFileSync(path.join(here, 'quick.json'), 'utf8')).tasks
       .sort((x, y) => x.past_median_s - y.past_median_s).slice(0, 6).map((t) => t.task_id).join(',');
     const taskSpec = flag('--tasks') || (has('--quick') ? quickSix() : 'quick');
+    if (!tasksFile && taskSpec !== 'features') throw new Error('tasks.json not found (set OM2W_TASKS); only --tasks features runs without it');
     const tasks = resolveTasks(taskSpec);
     const id = group || `ab-${new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-')}-${arms.map((a) => a.label).join('-vs-')}`;
     meta = {
       group: id, created: new Date().toISOString(), arms, tasks, task_set: has('--quick') && !flag('--tasks') ? 'quick-6' : taskSpec, repeats: Number(flag('--repeats', has('--quick') ? 2 : 3)),
-      gate: Number(flag('--gate', 30)), judge: has('--judge'), keep_profile: has('--keep-profile'), port: PORT,
+      gate: Number(flag('--gate', 30)), judge: has('--judge'), keep_profile: has('--keep-profile'), port: PORT, skill_inline: !has('--skill-path'),
       harness: { checkout, commit: git('rev-parse', 'HEAD'), dirty: git('status', '--porcelain', '--', 'bench/om2w').length > 0 },
       model: process.env.OM2W_MODEL || 'gpt-6.1-sol', effort: process.env.OM2W_EFFORT || 'low', host: { cpus: os.cpus().length },
     };
@@ -278,16 +313,15 @@ async function run() {
   // compare.py flags against, and each row records the gate it waited for.
   meta.run_gate = flag('--gate') ? Number(flag('--gate')) : meta.gate;
   if (has('--dry-run')) {
-    console.log(`${meta.group}: ${meta.arms.map((a) => `${a.label}=${a.sha.slice(0, 7)}`).join(' ')}, ${meta.tasks.length} tasks x ${meta.repeats} repeats, gate ${meta.run_gate}`);
+    console.log(`${meta.group}: ${meta.arms.map((a) => `${a.label}=${a.sha.slice(0, 7)}${a.opts_text ? `:${a.opts_text}` : ''}`).join(' ')}, ${meta.tasks.length} tasks x ${meta.repeats} repeats, gate ${meta.run_gate}, skill ${meta.skill_inline ? 'inline' : 'path'}`);
     for (const j of schedule(meta)) console.log(`r${j.repeat} ${j.task.slice(0, 8)} ${j.arm}`);
     return;
   }
   fs.mkdirSync(groupDir(meta.group), { recursive: true });
-  if (!tasksFile) throw new Error('tasks.json not found (set OM2W_TASKS)');
   for (const a of meta.arms) ensureWorktree(a.sha, meta);
   saveMeta(meta);
   const jobs = schedule(meta);
-  log(meta, `group ${meta.group}: ${meta.arms.map((a) => `${a.label}=${a.sha.slice(0, 7)}`).join(' ')}, ${meta.tasks.length} tasks x ${meta.repeats} repeats, gate ${meta.run_gate}`);
+  log(meta, `group ${meta.group}: ${meta.arms.map((a) => `${a.label}=${a.sha.slice(0, 7)}${a.opts_text ? `:${a.opts_text}` : ''}`).join(' ')}, ${meta.tasks.length} tasks x ${meta.repeats} repeats, gate ${meta.run_gate}, skill ${meta.skill_inline ? 'inline' : 'path'}`);
   for (const job of jobs) {
     const { done, errs } = doneSet(readRows(meta.group));
     const k = `${job.arm}\t${job.task}\t${job.repeat}`;
@@ -309,7 +343,7 @@ async function run() {
 async function judgeGroup() {
   const g = flag('--group');
   const meta = JSON.parse(fs.readFileSync(metaFile(g), 'utf8'));
-  const rows = readRows(g).filter((r) => r.status !== 'harness_error' && r.run && r.success == null);
+  const rows = readRows(g).filter((r) => r.status !== 'harness_error' && r.run && r.success == null && !r.check);
   const n = Number(flag('--parallel', 3));
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(n, rows.length) }, async () => {

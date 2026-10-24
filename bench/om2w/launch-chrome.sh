@@ -10,6 +10,8 @@
 #   OM2W_PROFILE    profile folder (default ~/.local/share/browserctrl-bench/chrome-profile);
 #                   it must sit under ~/.local/share/browserctrl-bench/ because --fresh deletes it
 #   OM2W_EXTENSION  unpacked extension (default: this checkout's extension/)
+#   OM2W_DOWNLOADS  where a fresh profile saves downloads, without asking (default
+#                   ~/.local/share/browserctrl-bench/downloads), so runs never write to ~/Downloads
 #
 # Branded Chrome ignores --load-extension, so the extension is loaded over CDP
 # (Extensions.loadUnpacked, allowed by --enable-unsafe-extension-debugging).
@@ -21,6 +23,7 @@ PROFILE=${OM2W_PROFILE:-$BENCH/chrome-profile}
 EXT=${OM2W_EXTENSION:-$here/../../extension}
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 PIDFILE="$PROFILE.pid"
+DOWNLOADS=${OM2W_DOWNLOADS:-$BENCH/downloads}
 NODE=${NODE:-node}
 
 case "$PORT" in 9222|9223) echo "port $PORT belongs to the user's own browser; use another (default 9240)" >&2; exit 2;; esac
@@ -47,7 +50,10 @@ case "${1:-}" in
 esac
 
 if up; then echo "port $PORT is taken by a browser this script did not start; not touching it" >&2; exit 1; fi
-if [ "${1:-}" = --fresh ] || [ ! -d "$PROFILE" ]; then rm -rf "$PROFILE"; mkdir -p "$PROFILE"; fi
+if [ "${1:-}" = --fresh ] || [ ! -d "$PROFILE" ]; then
+  rm -rf "$PROFILE"; mkdir -p "$PROFILE/Default" "$DOWNLOADS"
+  printf '{"download":{"default_directory":"%s","prompt_for_download":false,"directory_upgrade":true},"savefile":{"default_directory":"%s"}}\n' "$DOWNLOADS" "$DOWNLOADS" >"$PROFILE/Default/Preferences"
+fi
 TZ=America/New_York nohup "$CHROME" --user-data-dir="$PROFILE" --remote-debugging-port="$PORT" \
   --no-first-run --no-default-browser-check --disable-search-engine-choice-screen \
   --enable-unsafe-extension-debugging about:blank >"$PROFILE.log" 2>&1 &

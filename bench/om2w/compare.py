@@ -10,6 +10,9 @@ exceeded its own reported work by more than 60 s, or that never returned). Per a
 over runs. Paired: each task's mean over its repeats, arm minus base, with a two-sided sign
 test over tasks and a bootstrap 95% CI (tasks resampled, then repeats within each task).
 Flags runs that started at load >= the gate, stalled, timed out, or needed a retry.
+Success is the judge's verdict, or for feature tasks (features/tasks.json) the exact answer
+check; when runs have it, it is paired too (per-task success rate, arm minus base), and wrong
+checked answers are listed with what the agent answered.
 
 Per run, from the BROWSERCTRL_CLIENT_TIMING files run.mjs writes (client-timing.jsonl for the
 agent's commands, watcher-timing.jsonl for the harness's 4 s reads): the slowest command, the
@@ -253,24 +256,26 @@ def main():
 
     tasks = meta.get('tasks') or sorted({r['task_id'] for r in runs})
     out = {'group': group, 'base': base, 'arms': arms, 'runs': runs, 'paired': {}}
+    for r in runs: r['success_n'] = None if r.get('success') is None else int(bool(r['success']))
+    pkeys = keys[:3] + ([('success_n', 'success')] if any(r['success_n'] is not None for r in runs) else [])
     for a in arms:
         if a == base: continue
         print(f"paired: {a} - {base} (per-task means over repeats)")
-        print(f"{'task':9} {'n b/a':>6} " + ' '.join(f'{h:>15}' for _, h in keys[:3]))
-        per = {k: [] for k, _ in keys[:3]}
+        print(f"{'task':15} {'n b/a':>6} " + ' '.join(f'{h:>15}' for _, h in pkeys))
+        per = {k: [] for k, _ in pkeys}
         for t in tasks:
             b = [r for r in runs if r['arm'] == base and r['task_id'] == t]
             x = [r for r in runs if r['arm'] == a and r['task_id'] == t]
             cells = []
-            for k, _ in keys[:3]:
+            for k, _ in pkeys:
                 bv, xv = [r[k] for r in b if r.get(k) is not None], [r[k] for r in x if r.get(k) is not None]
                 if bv and xv:
                     per[k].append((bv, xv))
                     cells.append(f'{statistics.mean(bv):.1f}->{statistics.mean(xv):.1f}')
                 else: cells.append('-')
-            print(f"{t[:8]:9} {len(b):>2}/{len(x):<3} " + ' '.join(f'{c:>15}' for c in cells))
+            print(f"{t[:14]:15} {len(b):>2}/{len(x):<3} " + ' '.join(f'{c:>15}' for c in cells))
         out['paired'][a] = {}
-        for k, h in keys[:3]:
+        for k, h in pkeys:
             diffs = [statistics.mean(xv) - statistics.mean(bv) for bv, xv in per[k]]
             if not diffs: continue
             p, pos, neg = sign_test(diffs)
@@ -299,6 +304,16 @@ def main():
             for x in t['never_started']: print(f"    never started a CLI process: {x!r}")
         print()
     else: print('client timing: none recorded (runs before BROWSERCTRL_CLIENT_TIMING)\n')
+
+    checked = [r for r in runs if r.get('check')]
+    if checked:
+        wrong = [r for r in checked if not r['check'].get('success')]
+        print(f"checked answers: {len(checked) - len(wrong)}/{len(checked)} correct" + (':' if not wrong else '; wrong:'))
+        for r in wrong:
+            c = r['check']
+            print(f"  {r['arm']:12} {r['task_id'][:20]:20} r{r['repeat']}: answered {str(r.get('answer'))[:80]!r}, expected {c.get('expected')!r}"
+                  + (f", also named {c['also_named']}" if c.get('also_named') else ''))
+        print()
 
     flags = []
     for r in runs:

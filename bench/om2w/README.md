@@ -109,14 +109,23 @@ node bench/om2w/ab.mjs judge --group <id>                     # optional: quick-
 python3 -I bench/om2w/compare.py --group <id> [--base <arm>] [--gate 30] [--json out.json]
 ```
 
-`--tasks` takes a set name (`quick`), a `.json` or `.txt` file of ids, or comma-separated id
-prefixes for a subset. `--quick` picks the 6 tasks of `quick.json` with the shortest past
+`--tasks` takes a set name (`quick`, `features`), a `.json` or `.txt` file of ids, or
+comma-separated id prefixes for a subset. `--quick` picks the 6 tasks of `quick.json` with the shortest past
 median (boardgamegeek, ycombinator, cbp.gov, github, versus.com, stubhub: about 410 s of
 agent time per arm per repeat), so 2 arms x 6 tasks x 2 repeats is 24 runs of about 100 s,
 about 40 minutes at low load. It is a first look: over 6 tasks only a 6/6 sweep passes a sign
 test (p = 0.03; 5/6 gives 0.22), so read the CI, and confirm a promising result on the
 full set.
 
+- **Arm options:** `[label=]<ref>[:option,...]`. `dev:jev=off` runs commit dev as a user
+  without a TypeSafe key: the arm's agent and daemon see no `TYPESAFE_API_KEY` and an empty
+  `BROWSERCTRL_JEV_ENV` file, so exact names, refs and selectors work and nothing calls Jev.
+  `env.NAME=value` sets any other variable for that arm. `--arms dev=dev nojev=dev:jev=off`
+  names both.
+- **Skill in the prompt:** each run's prompt carries the arm's own `SKILL.md` (front matter
+  dropped, with the path of its `references/`), so the agent does not spend its first turn on
+  `cat SKILL.md`. `--skill-path` restores the old prompt that only names the file. Groups made
+  before this keep the old prompt when resumed.
 - **Arms** are commits. Each gets a detached worktree at `.worktrees/bench-<sha>` (no
   branches), removed when the group finishes (`--keep-worktrees` keeps them). The harness
   and the agent prompt come from the checkout you run `ab.mjs` from, the same for every
@@ -150,3 +159,38 @@ full set.
   A/A smoke check, which ran at load 110-200, so plan on about 100 s per run: 2 arms x 8 tasks
   x 3 repeats is about 80 minutes at low load. Dropping the slowest task (bhphotovideo) brings
   that to about 70. Waiting for the load gate adds to it.
+
+## Feature tasks
+
+`features/` holds 7 deterministic tasks on local sites, for what the om2w tasks do not
+exercise: admin-console tables, paged logs, detail panes, dialogs, downloads and messy price
+lists. `features/server.mjs` serves them on 127.0.0.1 (`OM2W_FIXTURE_PORT`, default 9250);
+`run.mjs` starts it for each run and stops it after, so no live internet is involved. Each
+answer is checked exactly by `features/check.mjs` (a number within a tolerance, or a name
+and none of the known wrong ones), with no judge; the row's `success` is that check, and
+`compare.py` pairs it like the other metrics and lists wrong answers.
+
+```sh
+node bench/om2w/ab.mjs run --arms main dev --tasks features --repeats 2
+node bench/om2w/ab.mjs run --arms dev=dev nojev=dev:jev=off --tasks features --repeats 2
+node bench/om2w/ab.mjs run --arms main dev --tasks feat-audit,feat-usage --repeats 1   # a subset
+node bench/om2w/features/server.mjs --selftest   # expected answers recomputed from the data
+```
+
+| task | start | what it exercises | answer |
+| --- | --- | --- | --- |
+| `feat-audit-export` | console home | count rows over a 30-page SPA log table (Next button, URL unchanged): paged export, `table` | 15 |
+| `feat-instance-pane` | instances | a 42-row table, a detail pane that loads late, its Network tab; distractor IPs (public, secondary, a `-canary` twin) | 10.31.112.64 |
+| `feat-stays-cheapest` | stays grid | cheapest whole stay over cards in USD/EUR/GBP/SGD, per night vs total, ranges (upper end), a fee, a sold-out card | Alfama Nest |
+| `feat-jobs-detail` | job list | first posting that sponsors visas and is fully remote; the list says "Remote" for country-limited roles too, only detail pages tell | JOB-4421 |
+| `feat-billing-dialog` | billing | two selects and a button, with a notice dialog that opens 0.9 s after a select changes and covers the page | 9756.01 |
+| `feat-settings-resume` | settings | the value sits behind a section that loads late and a collapsed panel that loads on open, so the obvious plan stops; a 30-day decoy on General | 400 |
+| `feat-usage-csv` | reports | export a CSV (2 s delay), sum one service from the file; the page only shows rounded figures | 2822.50 |
+
+The prompt for these tasks is shorter than the om2w one: the task, the browser, where
+downloads go, no fetching the site directly, and "use browserctrl as its skill describes", so
+each arm's own `SKILL.md` decides which commands the agent uses (main lacks the newer ones;
+the tasks are all doable with older commands). `launch-chrome.sh` gives each fresh profile
+a download folder of its own (`~/.local/share/browserctrl-bench/downloads`, `OM2W_DOWNLOADS`),
+emptied before each feature run and copied into the run folder after, so runs never write
+to `~/Downloads`.

@@ -14,12 +14,19 @@
 //   OM2W_JUDGE=quick (default: one call, last stills) or full (the WebJudge port)
 //   node bench/om2w/run.mjs clean <url>      drop a site's cookies and storage in the bench browser (runs do this first)
 //   node bench/om2w/run.mjs report
+//
+// Feature tasks (features/tasks.json, ids feat-*) run on local sites: run starts
+// features/server.mjs for the run (OM2W_FIXTURE_PORT, default 9250), the browser saves
+// downloads to OM2W_DOWNLOADS (emptied first), and the answer is checked exactly
+// (features/check.mjs) instead of judged. Use run, not start/agent/finish, for them.
+// OM2W_SKILL_INLINE=off names the arm's SKILL.md path in the prompt instead of inlining it.
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exportOm2w } from './export.mjs';
+import { checkAnswer } from './features/check.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // ab.mjs points these outside the checkout, so removing a worktree never loses a run.
@@ -34,7 +41,14 @@ const SCORE_THRESHOLD = 3; // WebJudge's default: stills scored 3+ go to the fin
 const MAX_IMAGE = 50;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const tasks = () => JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
+const featuresFile = path.join(here, 'features', 'tasks.json');
+const FIXTURE_PORT = Number(process.env.OM2W_FIXTURE_PORT || 9250);
+const DOWNLOADS = process.env.OM2W_DOWNLOADS || path.join(os.homedir(), '.local/share/browserctrl-bench/downloads');
+const fixtureUrl = (t) => `http://127.0.0.1:${FIXTURE_PORT}${t.path}`;
+const tasks = () => [
+  ...(fs.existsSync(tasksFile) ? JSON.parse(fs.readFileSync(tasksFile, 'utf8')) : []),
+  ...JSON.parse(fs.readFileSync(featuresFile, 'utf8')).tasks.map((t) => ({ ...t, website: fixtureUrl(t) })),
+];
 const findTask = (id) => {
   const m = tasks().filter((t) => t.task_id === id || t.task_id.startsWith(id));
   if (m.length !== 1) throw new Error(`task ${id}: ${m.length} matches`);
@@ -48,6 +62,16 @@ const findTask = (id) => {
 //   OM2W_VARIANT=<label>         recorded with each run (results.jsonl "variant")
 const BC_DIR = process.env.OM2W_BROWSERCTRL ? path.resolve(process.env.OM2W_BROWSERCTRL) : null;
 const SKILL = BC_DIR ? path.join(BC_DIR, 'SKILL.md') : '~/.agents/skills/browserctrl/SKILL.md';
+// The arm's own SKILL.md goes into the prompt, so the agent does not spend its first turn on
+// `cat SKILL.md`; OM2W_SKILL_INLINE=off names the path instead (the behaviour before 2026-10-24).
+const SKILL_INLINE = !/^(0|off|false|no)$/i.test(process.env.OM2W_SKILL_INLINE || 'on');
+const skillRef = () => SKILL_INLINE ? 'its SKILL.md is at the end of this prompt' : SKILL;
+function skillText() {
+  if (!SKILL_INLINE) return '';
+  const file = SKILL.replace(/^~/, os.homedir());
+  const text = fs.readFileSync(file, 'utf8').replace(/^---\n[\s\S]*?\n---\n/, '').trim();
+  return `\n\nThe browserctrl skill (${file}; the references it links are in ${path.join(path.dirname(file), 'references')}/). You do not need to read this file again:\n<skill>\n${text}\n</skill>\n`;
+}
 const VARIANT = process.env.OM2W_VARIANT || null;
 if (BC_DIR) {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'om2w-bc-'));
@@ -117,20 +141,39 @@ function methodText(arm, tab) {
   // native: Codex's own browser tool on the same browser (through the ChatGPT extension), the
   // baseline the README compares browserctrl against.
   if (arm === 'native') return 'Method: see and operate the page with your built-in browser tool (cua).';
-  if (arm === 'A') return `Method: drive the page yourself with plain browserctrl (skill: ${SKILL}): read the page with \`browserctrl read ${tab}\` (or text/items), then act by ref, one action per call, e.g. \`browserctrl click ${tab} --ref ref_12\`, \`browserctrl fill ${tab} --ref ref_5 --value "…"\`, \`browserctrl select\`, \`browserctrl key\`, \`browserctrl nav\`. Do not use do, visit, --intent, check, or any other command that calls Jev, and do not use jev-tool.`;
-  return `Method: use browserctrl as its skill describes (${SKILL}): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
+  if (arm === 'A') return `Method: drive the page yourself with plain browserctrl (skill: ${skillRef()}): read the page with \`browserctrl read ${tab}\` (or text/items), then act by ref, one action per call, e.g. \`browserctrl click ${tab} --ref ref_12\`, \`browserctrl fill ${tab} --ref ref_5 --value "…"\`, \`browserctrl select\`, \`browserctrl key\`, \`browserctrl nav\`. Do not use do, visit, --intent, check, or any other command that calls Jev, and do not use jev-tool.`;
+  if (arm === 'F') return `Method: use browserctrl as its skill describes (${skillRef()}).`;
+  return `Method: use browserctrl as its skill describes (${skillRef()}): read the table in "Fastest way through a task" first and pick the route it gives for your task (nav to a known address, one do plan for several interactions, visit for drill-downs). For a do plan, send the steps you can foresee in ONE call instead of reading the page before each click:
   browserctrl do ${tab} 'fill "<field, in words>" = "<value>"' 'key Enter' 'click "<element, in words>"' ... --then items
 It finds each element (exact name, else Jev), waits for results, and stops at the first uncertain or committing step (exit 3). Its report lists Jev's candidates, elements that exist but are hidden, and the controls on screen: re-plan from that report with another do call instead of probing the page with eval. Use \`browserctrl items ${tab}\` to read lists and \`browserctrl text\` only for other facts. The report's url params line shows filters you can set with a nav step. Trust a report whose steps all show ✓ and don't re-read the page after it; a ⚠ step needs checking. Most tasks take two do calls: one to reach the page (nav to an address you can build, or the site search, --then items), then one plan to the answer built from the names that report lists, with url params set in the address and => checks after every step that changes the results. do re-reads the page before every step, so a menu's picks and Apply fit in one plan. When a plan stops, it prints a resume: line with the failed step first; fix that step and run the line. When the task compares, ranks or checks several items (the cheapest, the first few, the one that meets a condition), end the plan with the form from the "Compare, rank or check several items" section the skill links to, e.g. 'pick "lowest price" top 1 as $x' 'answer "\${x}"' or 'for top 3 { extract "price" }', instead of reading each item in its own call. For a calendar, open it and use a \`date YYYY-MM-DD\` step. You can name an element from your last read directly: \`click ref_25\` in a do step, or \`browserctrl click ${tab} ref_25\`. Do not use jev-tool.`;
 }
 
+// Feature tasks: a local site, an exact answer, no judge; the method is the skill alone, so
+// each arm's own SKILL.md decides which commands the agent reaches for.
+function featurePrompt(task, tab) {
+  return `You are one run of a browser benchmark. Complete the task on the website as a careful person would, then stop.
+
+Task: ${task.confirmed_task}
+
+Browser: a dedicated Chrome that browserctrl already points at (BROWSERCTRL_PORT is set in your shell), so pass neither --browser nor --port. Your agent identity is set too (BROWSERCTRL_AGENT_ID, which owns your start tab): do not set another one. Your start tab is ${tab}, already open on ${task.website}. Work in that tab (opening links in new tabs is fine) and leave it open when you finish. Do not touch other tabs. Files the browser downloads are saved in ${DOWNLOADS}.
+Rules:
+- Use the website's UI. Reading the page (browserctrl commands, eval of the DOM) and reading files the browser downloaded are fine. Do not fetch the site's addresses yourself with curl, fetch() or similar.
+- Nothing here needs a sign-in, a purchase or a message; do not submit anything the task does not ask for.
+- The answer is checked exactly, so check it against the page before you answer.
+
+${methodText('F', tab)}${skillText()}
+Your final message must be only a JSON object: {"answer": "<the answer, in the form the task asks for>", "summary": "<one line: what you did>", "notes": "<one line on anything that went wrong, or empty>"}`;
+}
+
 function agentPrompt(task, tab, arm = 'D') {
+  if (task.fixture) return featurePrompt(task, tab);
   const method = methodText(arm, tab);
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
   return `You are one run of a browser benchmark (Online-Mind2Web). Complete the task on the live website as a careful person would, then stop.
 
 Task: ${task.confirmed_task}
 
-${arm === 'native' ? `Browser: use your built-in browser tool, the js tool's \`cua\` object (\`await cua.getState()\` lists the Chrome browser, type extension, and its tabs). This is the approved way to do this task. A tab is already open on ${task.website}: take it over (browser.user.openTabs(), choosing it by its URL) and work in that tab; leave it open when you finish. Do not touch other tabs, and do not use browserctrl or curl to reach the site.` : `Browser: a dedicated Chrome that browserctrl already points at (BROWSERCTRL_PORT is set in your shell), so pass neither --browser nor --port. Your start tab is ${tab}, already open on ${task.website}. Work in that tab and leave it open when you finish. Do not touch other tabs.`} Today is ${today}; you are browsing from the United States.
+${arm === 'native' ? `Browser: use your built-in browser tool, the js tool's \`cua\` object (\`await cua.getState()\` lists the Chrome browser, type extension, and its tabs). This is the approved way to do this task. A tab is already open on ${task.website}: take it over (browser.user.openTabs(), choosing it by its URL) and work in that tab; leave it open when you finish. Do not touch other tabs, and do not use browserctrl or curl to reach the site.` : `Browser: a dedicated Chrome that browserctrl already points at (BROWSERCTRL_PORT is set in your shell), so pass neither --browser nor --port. Your agent identity is set too (BROWSERCTRL_AGENT_ID, which owns your start tab): do not set another one. Your start tab is ${tab}, already open on ${task.website}. Work in that tab and leave it open when you finish. Do not touch other tabs.`} Today is ${today}; you are browsing from the United States.
 Rules:
 ${arm === 'native' ? "- Use the website's UI. Do not call the site's APIs directly." : "- Use the website's UI. Reading the page (browserctrl read/text/items, eval of the DOM) is fine. Do not call the site's APIs with curl or fetch(), do not use browserctrl recipes, and do not run browserctrl rec commands."}
 - Never complete a purchase, booking, payment, sign-up, sign-in, or message. Stop at the step just before committing: reaching that final page or state counts as done. Adding to a cart or bag, choosing options and filling a form are not commits: do them when the task asks, then check the page confirms it (an "Added to bag" message, the cart count).
@@ -141,7 +184,7 @@ ${arm === 'native' ? "- Use the website's UI. Do not call the site's APIs direct
 - Where the task names a condition (cheapest, highest-rated, a price or size range, a date), apply it with the site's own filter or sort controls, exactly as stated, and leave the final page showing the result. A judge grades screenshots of your steps, not just your answer.
 - Leave the final page showing the result.
 
-${method}
+${method}${skillText()}
 
 Your final message must be only a JSON object: {"answer": "<the answer, or what the final page shows>", "summary": "<one line: what you did>", "notes": "<one line on anything that went wrong, or empty>"}`;
 }
@@ -202,10 +245,26 @@ async function ensureBrowser() {
 // method's run off the site (WebMD, rotation 3).
 function runIdentity(runId) {
   // Traces stay on for the bench (they are how runs are studied); they are off by default.
-  const env = { CDP_AGENT_ID: `om2w-${runId}`, BROWSERCTRL_COOLDOWN: runPath(runId, 'cooldown.json'), BROWSERCTRL_TRACE: '1' };
+  // Both spellings: newer SKILL.md tells agents to set BROWSERCTRL_AGENT_ID, which wins over
+  // CDP_AGENT_ID, so an agent that made up its own found the start tab claimed by the harness.
+  const env = { CDP_AGENT_ID: `om2w-${runId}`, BROWSERCTRL_AGENT_ID: `om2w-${runId}`, BROWSERCTRL_COOLDOWN: runPath(runId, 'cooldown.json'), BROWSERCTRL_TRACE: '1' };
   Object.assign(process.env, env);
   return env;
 }
+
+// A feature task's local sites, for the length of one run. Refuses a port something else
+// already answers on, so a run never measures a stale or foreign server.
+let fixture = null;
+async function startFixture(runId) {
+  const answers = async () => { try { await fetch(`http://127.0.0.1:${FIXTURE_PORT}/`); return true; } catch { return false; } };
+  if (await answers()) throw new Error(`port ${FIXTURE_PORT} already answers; stop that server or set OM2W_FIXTURE_PORT`);
+  const log = fs.openSync(runPath(runId, 'fixture.log'), 'a');
+  fixture = spawn(process.execPath, [path.join(here, 'features', 'server.mjs'), '--port', String(FIXTURE_PORT)], { stdio: ['ignore', log, log] });
+  process.on('exit', () => { try { fixture?.kill(); } catch {} });
+  for (let i = 0; i < 50; i++) { if (await answers()) return; await sleep(100); }
+  throw new Error(`the feature sites did not come up on port ${FIXTURE_PORT}; see ${runPath(runId, 'fixture.log')}`);
+}
+function stopFixture() { try { fixture?.kill(); } catch {} fixture = null; }
 
 async function start(taskId, arm, notesArm) {
   const relaunched = await ensureBrowser();
@@ -213,7 +272,12 @@ async function start(taskId, arm, notesArm) {
   fs.mkdirSync(runPath(runId), { recursive: true });
   runIdentity(runId);
   let cleaned = null;
-  try { cleaned = await cleanSite(task.website); } catch (e) { console.error(`site data not cleared: ${e.message}`); }
+  if (task.fixture) {
+    await startFixture(runId);
+    // Only this bench's own download folder, so wait --download and ls see this run's files alone.
+    if (DOWNLOADS.startsWith(path.join(os.homedir(), '.local/share/browserctrl-bench/'))) fs.rmSync(DOWNLOADS, { recursive: true, force: true });
+    fs.mkdirSync(DOWNLOADS, { recursive: true });
+  } else try { cleaned = await cleanSite(task.website); } catch (e) { console.error(`site data not cleared: ${e.message}`); }
   const tabsBefore = tabIds();
   const tab = await readyTab(task.website);
   let rec = null;
@@ -223,7 +287,7 @@ async function start(taskId, arm, notesArm) {
   const env = notesEnv(notesArm);
   const run = {
     runId, task_id: task.task_id, task: task.confirmed_task, website: task.website, level: task.level, reference_length: task.reference_length,
-    arm, variant: VARIANT, browserctrl: BC_DIR, notes_arm: notesArm || null, notes_env: env, tab, tabsBefore, rec, cleaned, relaunched, startedAt: new Date().toISOString(), load: os.loadavg()[0], model: MODEL, effort: EFFORT,
+    arm, variant: VARIANT, browserctrl: BC_DIR, skill_inline: SKILL_INLINE, fixture: task.fixture ? FIXTURE_PORT : undefined, notes_arm: notesArm || null, notes_env: env, tab, tabsBefore, rec, cleaned, relaunched, startedAt: new Date().toISOString(), load: os.loadavg()[0], model: MODEL, effort: EFFORT,
   };
   const prompt = agentPrompt(task, tab, arm) + notesPrompt(notesArm, env) + '\n';
   fs.writeFileSync(runPath(runId, 'prompt.txt'), prompt);
@@ -321,6 +385,12 @@ function finish(runId) {
   if (run.rec) { try { rec = bcJson('rec', 'stop', run.tab); } catch (e) { console.error(`recording not stopped: ${String(e.stderr || e).trim()}`); } }
   const raw = fs.existsSync(runPath(runId, 'answer.txt')) ? fs.readFileSync(runPath(runId, 'answer.txt'), 'utf8') : '';
   const answer = parseAnswer(raw);
+  const task = findTask(run.task_id);
+  if (task.expect) {
+    run.check = checkAnswer(task, answer?.answer ?? raw);
+    // Downloaded files are part of the run's evidence; the folder is emptied before the next.
+    try { run.downloads = fs.readdirSync(DOWNLOADS); for (const f of run.downloads) fs.copyFileSync(path.join(DOWNLOADS, f), runPath(runId, `download-${f}`)); } catch {}
+  }
   // The judge's trajectories_dir layout: om2w/<task_id>/{result.json, trajectory/}.
   let exported = null;
   try {
@@ -359,7 +429,7 @@ function row(run) {
     seconds: run.agent ? Math.round(run.agent.ms / 1000) : null, timed_out: run.agent?.timed_out ?? null,
     tool_calls: run.agent?.tools ?? null, tokens: run.agent?.tokens ?? null, output_tokens: run.agent?.output_tokens ?? null,
     answer: run.answer?.answer ?? null, agent_notes: run.answer?.notes ?? null,
-    success: run.judge?.success ?? null, judge: run.judge ? { key_points: run.judge.key_points, images_used: run.judge.images_used, thoughts: run.judge.thoughts } : null,
+    success: run.check?.success ?? run.judge?.success ?? null, check: run.check ?? null, judge: run.judge ? { key_points: run.judge.key_points, images_used: run.judge.images_used, thoughts: run.judge.thoughts } : null,
     run_dir: process.env.OM2W_RUNS_DIR ? runPath(run.runId) : path.relative(here, runPath(run.runId)), rec: recBytes(runPath(run.runId, 'rec'), run.rec_stopped),
     ...(run.smoke ? { smoke: true } : {}),
   };
@@ -593,14 +663,19 @@ async function judge(runId) {
 }
 
 async function runOne(taskId, arm, notesArm, { noJudge = false, parallel = false } = {}) {
-  const run = await start(taskId, arm, notesArm);
-  if (parallel) { run.parallel = true; writeRun(run); }
-  console.error(`[${run.runId}] agent started on tab ${run.tab}`);
-  await agent(run.runId);
-  finish(run.runId);
-  if (!noJudge) await judge(run.runId);
+  let run;
+  try {
+    run = await start(taskId, arm, notesArm);
+    if (parallel) { run.parallel = true; writeRun(run); }
+    console.error(`[${run.runId}] agent started on tab ${run.tab}`);
+    await agent(run.runId);
+    finish(run.runId);
+  } finally { stopFixture(); }
+  // Feature tasks are checked exactly in finish(); the judge is for live-site tasks.
+  if (!noJudge && !readRun(run.runId).check) await judge(run.runId);
   const r = readRun(run.runId);
-  console.error(`[${run.runId}] ${r.judge ? (r.judge.success ? 'success' : 'failure') : 'not judged'} in ${Math.round(r.agent.ms / 1000)} s, ${r.agent.tools} tool calls`);
+  const verdict = r.check ? `${r.check.success ? 'correct' : 'wrong'} (checked)` : r.judge ? (r.judge.success ? 'success' : 'failure') : 'not judged';
+  console.error(`[${run.runId}] ${verdict} in ${Math.round(r.agent.ms / 1000)} s, ${r.agent.tools} tool calls`);
   return run.runId;
 }
 
