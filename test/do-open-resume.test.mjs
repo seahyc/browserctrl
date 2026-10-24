@@ -12,6 +12,7 @@ import * as ops from '../lib/ops.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { remainingSteps, replacements, resumeLines } from '../lib/do/resume.mjs';
 import { fakeJev, optionWith } from './fake-jev.mjs';
+import { UNAVAILABLE } from '../lib/judge.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 
 // One agent identity for the test's own calls and its CLI calls, so they share tab claims.
@@ -42,7 +43,8 @@ const t = (name, fn) => test(name, { skip: !haveBrowser && 'no Chromium-family b
 });
 const run = (tab, plan, jev, opts = {}) => runSteps(conn, tab, plan, { ...(jev ? { jev } : {}), noNotes: true, prefetch: false, ...opts });
 const ranked = (rules = {}) => fakeJev({
-  noul: (q, id) => id.endsWith('.eligible') || id === 'prev_expect' || id === 'extract_verify' ? .95 : .04,
+  // Price rankings ask whether an item says it is sold out, answered as the inverse of eligibility.
+  noul: (q, id) => { const p = id.endsWith('.eligible') || id === 'prev_expect' || id === 'extract_verify' ? .95 : .04; return q.instructions?.startsWith(UNAVAILABLE) ? 1 - p : p; },
   choice: (q, id) => id.endsWith('.key') ? Object.keys(q.criteria).find(k => k !== 'none') || 'none' : id === 'extract' ? optionWith(q, '4.6') : 'none',
   ...rules,
 });
