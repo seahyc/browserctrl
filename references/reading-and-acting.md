@@ -318,6 +318,26 @@ browserctrl do <tab> 'fill "the search box" = "herman miller aeron"' 'key Enter'
 - Intent targets, expectations, `--until` and `--dismiss` need `TYPESAFE_API_KEY` (see
   [Jev](#jev)). Exact names work without it; overlay checks are then skipped.
 
+### Compare, rank or check several items
+
+Read this when the task compares list items and the site can't sort or filter by what it asks.
+Put the comparison in the plan, after the steps that reach the list:
+
+| The task asks for | Plan form |
+| --- | --- |
+| The cheapest, newest, highest-rated… when the site cannot sort by it | `'pick "lowest nightly price" top 1 as $h' 'answer "${h.title}"'` |
+| Details of the first few results | `'for top 3 { extract "price"; extract "cancellation policy" }'` |
+| The first result that meets a condition you can only see on its page | `'try pick "free cancellation" up to 3 => "free cancellation"'` |
+| Every result that meets a condition | `'each "nonstop and under 6 hours" up to 10 { extract "price" }'` |
+| Something only if the page shows it | `'if "the page lists refurbished models" { pick "largest discount" top 1 as $m } else { answer "none listed" }'` |
+| A value compared with a limit | `'extract "total price" as number as $p' 'if $p < 200 { answer "under: ${p}" } else { answer "over: ${p}" }'` |
+
+Each item opens in a background tab and closes after; nothing in a loop commits. A ranked
+pick's `${x}` renders the whole item row; `${x.title}`, `${x.link}` and `${x.key}` render its
+title, link or sort value, and later steps can use them (`nav ${x.link}`, `click "${x.title}"`)
+as literal values. `pick "first" top 2` takes the main list in page order. When the site
+already sorts by the criterion, sort there and read the top item instead.
+
 ### Whole-task plans: `extract`, `pick`, `if` and alternatives
 
 Each agent turn costs seconds of model time, so the fastest run is the one with the fewest
