@@ -9,7 +9,17 @@ once, +1 for the final answer), browserctrl and do calls, steps per do plan, pla
 exceeded its own reported work by more than 60 s, or that never returned). Per arm: medians
 over runs. Paired: each task's mean over its repeats, arm minus base, with a two-sided sign
 test over tasks and a bootstrap 95% CI (tasks resampled, then repeats within each task).
-Flags runs that started at load >= the gate, stalled, timed out, or needed a retry."""
+Flags runs that started at load >= the gate, stalled, timed out, or needed a retry.
+
+Per run, from the BROWSERCTRL_CLIENT_TIMING files run.mjs writes (client-timing.jsonl for the
+agent's commands, watcher-timing.jsonl for the harness's 4 s reads): the slowest command, the
+longest wait to reach the daemon (connect), the longest wait after a command's work (post: a
+recording still, exit), the browser's share of IPC time (what the daemon did not spend before
+sending), and how many agent commands overlapped a watcher read. Matched against the rollout:
+launch lag (Codex's call to the CLI process starting) and return lag (the process exiting to
+Codex returning its output; Codex yields a running command after about 31 s, so a cell still
+running then counts until that yield), and calls that never started a process. A command over
+20 s, or a lag over 20 s, is flagged with its breakdown."""
 import argparse, glob, json, math, os, random, re, statistics, sys
 from datetime import datetime
 
@@ -91,6 +101,77 @@ def metrics(row):
     return out
 
 
+SLOW_S = 20
+
+
+def read_jsonl(f):
+    try: return [json.loads(l) for l in open(f) if l.strip()]
+    except (OSError, ValueError): return []
+
+
+def breakdown(c):
+    """Where one CLI process's wall time went, in seconds."""
+    m, ipc = c.get('marks') or {}, c.get('ipc') or {}
+    total = m.get('exit', 0) / 1000
+    connect = (m['connect_done'] - m['connect_start']) / 1000 if 'connect_done' in m and 'connect_start' in m else 0
+    post = (m['exit'] - m['command_done']) / 1000 if 'command_done' in m and 'exit' in m else 0
+    ipc_s, prep = ipc.get('totalMs', 0) / 1000, (ipc.get('prepMs') or 0) / 1000
+    start = datetime.fromisoformat(c['at'].replace('Z', '+00:00')).timestamp() if c.get('at') else None
+    return {'cmd': c.get('argv', '?'), 'total': total, 'startup': m.get('imports_done', 0) / 1000, 'connect': connect,
+            'probes': (c.get('daemon') or {}).get('attempts'), 'spawned': (c.get('daemon') or {}).get('spawned'),
+            'ipc': ipc_s, 'prep': prep, 'browser': max(0.0, ipc_s - prep), 'post': post,
+            'slowest_ipc': ipc.get('max'), 'slowest_ipc_s': ipc.get('maxMs', 0) / 1000, 'slowest_ipc_prep_s': (ipc.get('maxPrepMs') or 0) / 1000,
+            'start': start, 'end': start + total if start is not None else None}
+
+
+def match_calls(calls, cmds):
+    """Pairs each browserctrl call in the rollout with the CLI process it started: the first
+    unmatched process of the same subcommand that started after the call."""
+    used, out = set(), []
+    for c in calls:
+        m = re.search(r'browserctrl\s+((?:--\S+\s+)*)([\w-]+)', c['input'])
+        if not m: continue
+        sub = m.group(2) if not m.group(1) else m.group(1).split()[0]
+        hit = next((i for i, x in enumerate(cmds) if i not in used and x['start'] is not None and x['start'] >= c['t_call'] - 1
+                    and x['cmd'].split(' ')[0] == sub), None)
+        if hit is None: out.append({'call': c, 'cmd': None}); continue
+        used.add(hit)
+        x = cmds[hit]
+        done = 't_out' in c and 'Script running' not in c.get('output', '')
+        out.append({'call': c, 'cmd': x, 'launch': x['start'] - c['t_call'], 'ret': (c['t_out'] - x['end']) if done else None, 'yielded': not done})
+    return out
+
+
+def timing(run_dir, rollout=None):
+    """Client timing summary for one run, or None when the run has no timing file."""
+    if not run_dir: return None
+    cmds = [breakdown(c) for c in read_jsonl(os.path.join(run_dir, 'client-timing.jsonl'))]
+    if not cmds: return None
+    calls = parse_rollout(rollout)[0] if rollout and os.path.exists(rollout) else []
+    pairs = match_calls(calls, cmds)
+    started = [p for p in pairs if p['cmd']]
+    watch = [breakdown(c) for c in read_jsonl(os.path.join(run_dir, 'watcher-timing.jsonl'))]
+    def overlaps(c): return any(w['start'] is not None and c['start'] is not None and w['start'] < c['end'] and c['start'] < w['end'] for w in watch)
+    over = [c['total'] for c in cmds if overlaps(c)]
+    clear = [c['total'] for c in cmds if not overlaps(c)]
+    ipc = sum(c['ipc'] for c in cmds)
+    slow = max(cmds, key=lambda c: c['total'])
+    return {'commands': len(cmds), 'slowest': slow, 'connect_max': max(c['connect'] for c in cmds), 'post_max': max(c['post'] for c in cmds),
+            'browser_share': (sum(c['browser'] for c in cmds) / ipc) if ipc else None, 'watcher_reads': len(watch),
+            'overlapped': len(over), 'overlapped_median': statistics.median(over) if over else None, 'clear_median': statistics.median(clear) if clear else None,
+            'over_20s': [c for c in cmds if c['total'] > SLOW_S],
+            'calls': len(pairs), 'never_started': [p['call']['input'][-90:] for p in pairs if not p['cmd']],
+            'launch_max': max((p['launch'] for p in started), default=None), 'launch_median': statistics.median([p['launch'] for p in started]) if started else None,
+            'return_max': max((p['ret'] for p in started if p['ret'] is not None), default=None),
+            'lagged': [p for p in started if p['launch'] > SLOW_S or (p['ret'] or 0) > SLOW_S]}
+
+
+def describe(c):
+    return (f"{c['cmd']} {c['total']:.1f} s = startup {c['startup']:.1f} + connect {c['connect']:.1f} ({c['probes']} probe{'s' if c['probes'] != 1 else ''}"
+            f"{', spawned' if c['spawned'] else ''}) + ipc {c['ipc']:.1f} (daemon {c['prep']:.1f}, browser {c['browser']:.1f}; slowest {c['slowest_ipc']} {c['slowest_ipc_s']:.1f} s)"
+            f" + post {c['post']:.1f}")
+
+
 def sign_test(diffs):
     """Two-sided exact binomial p over non-zero differences."""
     pos, neg = sum(d > 0 for d in diffs), sum(d < 0 for d in diffs)
@@ -153,7 +234,8 @@ def main():
     if base not in arms: ap.error(f'--base {base}: arms are {", ".join(arms)}')
     runs = []
     for k, r in final.items():
-        runs.append({**r, **metrics(r)})
+        rollout = r.get('rollout') if r.get('rollout') and os.path.exists(r['rollout']) else (find_rollout(r['run_dir']) if r.get('run_dir') else None)
+        runs.append({**r, **metrics(r), 'timing': timing(r.get('run_dir'), rollout)})
     runs.sort(key=lambda r: (r['arm'], r['task_id'], r['repeat']))
 
     arm_list = ', '.join('%s=%s' % (a['label'], a['sha'][:7]) for a in meta.get('arms', []))
@@ -198,11 +280,33 @@ def main():
             out['paired'][a][k] = {'tasks': len(diffs), 'mean_diff': statistics.mean(diffs), 'median_diff': statistics.median(diffs), 'lower': neg, 'higher': pos, 'sign_p': p, 'ci95': ci}
         print()
 
+    timed = [r for r in runs if r.get('timing')]
+    if timed:
+        print('client timing (per run): commands, slowest, max connect wait, max post-command wait, browser share of IPC, agent commands overlapping a watcher read')
+        for r in timed:
+            t = r['timing']
+            share = '-' if t['browser_share'] is None else f"{100 * t['browser_share']:.0f}%"
+            ov = f"{t['overlapped']}/{t['commands']} (median {fmt(t['overlapped_median'], 1)} s vs {fmt(t['clear_median'], 1)} s clear, {t['watcher_reads']} watcher reads)"
+            print(f"  {r['arm']:12} {r['task_id'][:8]} r{r['repeat']}: {t['commands']} cmds, slowest {t['slowest']['cmd']} {t['slowest']['total']:.1f} s, "
+                  f"connect max {t['connect_max']:.1f} s, post max {t['post_max']:.1f} s, browser {share}, overlapped {ov}")
+            if t['calls']:
+                print(f"    rollout: {t['calls']} browserctrl calls; launch lag median {fmt(t['launch_median'], 1)} s, max {fmt(t['launch_max'], 1)} s; "
+                      f"return lag max {fmt(t['return_max'], 1)} s; never started {len(t['never_started'])}")
+            for c in t['over_20s']: print(f"    > {SLOW_S} s: {describe(c)}")
+            for p in t['lagged']:
+                print(f"    lag: {p['cmd']['cmd']}: launched {p['launch']:.1f} s after Codex's call, ran {p['cmd']['total']:.1f} s, "
+                      + (f"returned {p['ret']:.1f} s after exiting" if p['ret'] is not None else "Codex had already yielded the cell as still running"))
+            for x in t['never_started']: print(f"    never started a CLI process: {x!r}")
+        print()
+    else: print('client timing: none recorded (runs before BROWSERCTRL_CLIENT_TIMING)\n')
+
     flags = []
     for r in runs:
         why = []
         if (r.get('start_load') or 0) >= gate: why.append(f"start load {r['start_load']:.1f} >= gate {gate}")
         if r.get('stalls'): why.append(f"{r['stalls']} stalled command(s)")
+        if r.get('timing') and r['timing']['over_20s']: why.append(f"{len(r['timing']['over_20s'])} command(s) over {SLOW_S} s by client timing")
+        if r.get('timing') and r['timing']['lagged']: why.append(f"{len(r['timing']['lagged'])} command(s) waited over {SLOW_S} s outside browserctrl (launch or return lag)")
         if r.get('timed_out'): why.append('agent timed out')
         if (r['arm'], r['task_id'], r['repeat']) in retried: why.append('retried after a harness error')
         if r.get('turns') is None: why.append('no Codex rollout found (turns unknown)')

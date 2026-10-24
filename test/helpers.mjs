@@ -28,6 +28,10 @@ if (!process.env.BROWSERCTRL_HOME) {
 // daemon-run.mjs and started after the log line, never by matching a pattern.
 const daemonLog = process.env.BROWSERCTRL_TEST_DAEMON_LOG = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-daemons-')) + '/spawned.jsonl';
 process.on('exit', () => {
+  // For test/daemon-leak.test.mjs, which runs test files in a child and checks afterwards
+  // that every daemon they started is gone: the spawn log goes to that file first.
+  const audit = process.env.BROWSERCTRL_TEST_DAEMON_AUDIT;
+  if (audit) try { fs.appendFileSync(audit, fs.readFileSync(daemonLog, 'utf8')); } catch {}
   stopLoggedDaemons();
   try { fs.rmSync(path.dirname(daemonLog), { recursive: true, force: true }); } catch {}
   if (ownHome) try { fs.rmSync(ownHome, { recursive: true, force: true }); } catch {}

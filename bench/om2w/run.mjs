@@ -14,7 +14,7 @@
 //   OM2W_JUDGE=quick (default: one call, last stills) or full (the WebJudge port)
 //   node bench/om2w/run.mjs clean <url>      drop a site's cookies and storage in the bench browser (runs do this first)
 //   node bench/om2w/run.mjs report
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -232,9 +232,10 @@ async function start(taskId, arm, notesArm) {
 }
 
 // Codex, non-interactive: JSONL events to events.jsonl, final message to answer.txt.
-function codex(args, { input, cwd, timeoutMs, eventsFile, env }) {
+function codex(args, { input, cwd, timeoutMs, eventsFile, env, onSpawn }) {
   return new Promise((resolve) => {
     const child = spawn('codex', ['exec', '-m', MODEL, '-c', `model_reasoning_effort="${EFFORT}"`, '--skip-git-repo-check', ...args, '-'], { cwd, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...(env || {}) } });
+    onSpawn?.(child);
     const out = eventsFile ? fs.createWriteStream(eventsFile) : null;
     let stdout = '', stderr = '';
     child.stdout.on('data', (d) => { stdout += d; out?.write(d); });
@@ -267,21 +268,42 @@ async function agent(runId) {
   // Codex's own browser tool acts without browserctrl, so nothing would add judge stills:
   // read the tab quietly every few seconds (a read adds a still only when the page changed).
   // Both arms get the same stills: none inside the agent's own commands (BROWSERCTRL_REC_STILLS
-  // =off below), and this timer from outside the agent's path.
-  let watching = true, busy = false;
-  const watch = watching && setInterval(() => {
-    if (busy || !watching) return;
+  // =off below), and this timer from outside the agent's path. The judge needs these stills
+  // (they are the export's only screenshots between start and finish), so the watcher keeps
+  // taking them, but by default only while no agent browserctrl command is running: its
+  // settle and screenshot on the agent's tab would otherwise compete with the agent's own
+  // command. OM2W_WATCHER=always restores the old every-4-s timer.
+  // Both write BROWSERCTRL_CLIENT_TIMING files to the run folder (compare.py reads them).
+  const gated = (process.env.OM2W_WATCHER || 'gated') !== 'always';
+  const watcher = { mode: gated ? 'gated' : 'always', runs: 0, deferred: 0 };
+  let watching = true, busy = false, last = 0, codexPid = null;
+  const watcherEnv = { ...process.env, BROWSERCTRL_CLIENT_TIMING: runPath(runId, 'watcher-timing.jsonl') };
+  const agentBusy = () => new Promise((resolve) => {
+    if (!codexPid) return resolve(false);
+    execFile('/bin/ps', ['-Ao', 'pid=,ppid=,command='], { encoding: 'utf8', maxBuffer: 16 << 20 }, (err, out) => {
+      if (err) return resolve(false);
+      const procs = out.split('\n').map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/)).filter(Boolean).map((m) => ({ pid: +m[1], ppid: +m[2], cmd: m[3] }));
+      const mine = new Set([codexPid]);
+      for (let grew = true; grew;) { grew = false; for (const p of procs) if (!mine.has(p.pid) && mine.has(p.ppid)) { mine.add(p.pid); grew = true; } }
+      resolve(procs.some((p) => mine.has(p.pid) && p.pid !== codexPid && /\/bin\/browserctrl(\.mjs)?(\s|$)/.test(p.cmd) && !/(^|\/)(zsh|bash|sh)$/.test(p.cmd.split(' ')[0])));
+    });
+  });
+  const watch = setInterval(async () => {
+    if (busy || !watching || Date.now() - last < 4000) return;
     busy = true;
-    const p = spawn('browserctrl', ['text', run.tab, '--no-wait', '--port', PORT], { stdio: 'ignore' });
+    if (gated && await agentBusy()) { watcher.deferred++; busy = false; return; }
+    last = Date.now(); watcher.runs++;
+    const p = spawn('browserctrl', ['text', run.tab, '--no-wait', '--port', PORT], { stdio: 'ignore', env: watcherEnv });
     p.on('close', () => { busy = false; });
-  }, 4000);
+  }, gated ? 500 : 4000);
   const r = await codex(['--json', '-s', 'danger-full-access', '-o', runPath(runId, 'answer.txt')],
     { input: fs.readFileSync(runPath(runId, 'prompt.txt'), 'utf8'), cwd: os.tmpdir(), timeoutMs: AGENT_TIMEOUT_MS, eventsFile: runPath(runId, 'agent-events.jsonl'),
+      onSpawn: (child) => { codexPid = child.pid; },
       // Set once for the agent's shell: long per-command prefixes measurably slow the model.
-      env: { BROWSERCTRL_PORT: String(PORT), BROWSERCTRL_REC_STILLS: 'off', ...runIdentity(runId), ...(run.notes_env || {}) } });
+      env: { BROWSERCTRL_PORT: String(PORT), BROWSERCTRL_REC_STILLS: 'off', BROWSERCTRL_CLIENT_TIMING: runPath(runId, 'client-timing.jsonl'), ...runIdentity(runId), ...(run.notes_env || {}) } });
   watching = false;
-  if (watch) clearInterval(watch);
-  run.agent = { ms: Date.now() - t0, exit: r.code, timed_out: r.timedOut, ...codexStats(runPath(runId, 'agent-events.jsonl')) };
+  clearInterval(watch);
+  run.agent = { ms: Date.now() - t0, exit: r.code, timed_out: r.timedOut, watcher, ...codexStats(runPath(runId, 'agent-events.jsonl')) };
   if (r.stderr.trim()) fs.writeFileSync(runPath(runId, 'agent-stderr.txt'), r.stderr);
   writeRun(run);
   return run;

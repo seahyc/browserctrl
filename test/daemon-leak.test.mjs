@@ -117,22 +117,34 @@ test('the harness stops a frozen daemon it started, by PID', options, async t =>
   assert.ok(await waitFor(() => !alive(pid), 5000));
 });
 
-// The leak this guards against: one overnight run left 34 daemons on the test port.
+// The leak this guards against: one overnight run left 34 daemons on the test port. Two short
+// files that each start a browser and a daemon on the same port, one after the other: the
+// first file's daemon used to reattach to the second file's browser and outlive the run.
 test('a run of daemon-using test files leaves no daemon behind', options, async () => {
   const port = await freePort();
-  const files = ['find-and-fields', 'read-snapshot', 'thaw', 'plan-use3-notices'].map(name => `test/${name}.test.mjs`);
-  const env = { ...process.env, BROWSERCTRL_TEST_PORT: String(port) };
+  const files = ['thaw', 'plan-use3-extract'].map(name => `test/${name}.test.mjs`);
+  const audit = path.join(fs.mkdtempSync('/tmp/bc-audit-'), 'spawned.jsonl');
+  const env = { ...process.env, BROWSERCTRL_TEST_PORT: String(port), BROWSERCTRL_TEST_DAEMON_AUDIT: audit };
   // NODE_TEST_CONTEXT would make the inner run report to this runner instead of printing.
   for (const key of ['NODE_TEST_CONTEXT', 'BROWSERCTRL_HOME', 'BROWSERCTRL_TEST_DAEMON_LOG', 'BROWSERCTRL_AGENT_ID', 'BROWSERCTRL_BROWSER']) delete env[key];
   let output = '';
   try {
     ({ stdout: output } = await exec(process.execPath, ['--import', './test/helpers.mjs', '--test', '--test-concurrency=1', '--test-reporter=tap', ...files],
-      { cwd: ROOT, env, maxBuffer: 64 * 1024 * 1024, timeout: 540000 }));
+      { cwd: ROOT, env, maxBuffer: 64 * 1024 * 1024, timeout: 240000 }));
   } catch (error) { output = `${error.stdout}\n${error.stderr}`; }
-  const left = await waitFor(() => daemonPids(port).length === 0, 15000) ? [] : daemonPids(port);
-  // On failure, stop what the run left, by the PIDs found on this run's private port.
-  for (const pid of left) { try { process.kill(pid, 'SIGCONT'); process.kill(pid, 'SIGKILL'); } catch {} }
-  assert.deepEqual(left, [], `daemons left on port ${port}`);
-  // Only that the files ran: their own failures are theirs to report, not a leak.
-  assert.ok(Number(output.match(/^# tests (\d+)/m)?.[1]) > 0, output.slice(-4000));
+  let spawned = [];
+  try { spawned = fs.readFileSync(audit, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line).pid); } catch {}
+  fs.rmSync(path.dirname(audit), { recursive: true, force: true });
+  assert.ok(Number(output.match(/^# tests (\d+)/m)?.[1]) > 0, `the files did not run:\n${output.slice(-4000)}`);
+  assert.ok(spawned.length >= files.length, `expected a daemon per file, the run logged ${JSON.stringify(spawned)}`);
+  // Every daemon the run started, by PID, plus anything else on its private port.
+  const watched = () => [...new Set([...spawned.filter(alive), ...daemonPids(port)])];
+  const ok = await waitFor(() => watched().length === 0, 10000);
+  const left = watched().map(pid => {
+    let ps = '';
+    try { ps = execFileSync('/bin/ps', ['-p', String(pid), '-o', 'stat=,lstart=,command='], { encoding: 'utf8' }).trim(); } catch {}
+    return `${pid} ${ps}`;
+  });
+  for (const line of left) { const pid = Number(line.split(' ')[0]); try { process.kill(pid, 'SIGCONT'); process.kill(pid, 'SIGKILL'); } catch {} }
+  assert.ok(ok, `daemons outlived the run (pid stat start command):\n${left.join('\n')}`);
 });
