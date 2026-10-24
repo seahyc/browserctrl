@@ -9,9 +9,10 @@ try {
   for await(const chunk of process.stdin){size+=chunk.length;if(size>32768)throw Error();chunks.push(chunk);}
   clearTimeout(timer);
   const recover=process.argv.length===3 && process.argv[2]==='--recover';
-  if(process.argv.length!==2 && !recover)throw Error();
+  const continuation=process.argv.length===3 && process.argv[2]==='--continue';
+  if(process.argv.length!==2 && !recover && !continuation)throw Error();
   const request=JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  // Version 2 fills one field; version 1 (and recovery) keep the original contract.
-  const result=!recover && request?.version===2 ? await submitVaultFill(request) : await submitVaultEntry(request,{recover});
+  // Version 2 fills one field; version 1, recovery and workflow continuation keep the original contract.
+  const result=!recover && !continuation && request?.version===2 ? await submitVaultFill(request) : await submitVaultEntry(request,{recover,continuation});
   process.stdout.write(JSON.stringify(result)+'\n');
 }catch{process.stdout.write(JSON.stringify(failed)+'\n');}
