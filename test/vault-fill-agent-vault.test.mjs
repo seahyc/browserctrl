@@ -12,8 +12,8 @@ import {connect} from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import {chromeBinary, startHeadlessBrowser, TEST_PORT} from './helpers.mjs';
 
-const AGENT_VAULT = process.env.AGENT_VAULT_WORKTREE || '/Users/yingcong/Code/agent-vault/.worktrees/browser-fill';
-const PYTHON = process.env.AGENT_VAULT_PYTHON || '/Users/yingcong/Code/agent-vault/.venv-ci311/bin/python';
+const AGENT_VAULT = process.env.AGENT_VAULT_WORKTREE || path.resolve(import.meta.dirname, '../../agent-vault');
+const PYTHON = process.env.AGENT_VAULT_PYTHON || path.join(AGENT_VAULT, '.venv/bin/python');
 const DRIVER = fileURLToPath(new URL('../bin/browserctrl-vault.mjs', import.meta.url));
 const missing = !fs.existsSync(path.join(AGENT_VAULT, 'src', 'agent_vault', 'adapters', 'protected.py')) ? `agent-vault worktree not found at ${AGENT_VAULT}`
   : !fs.existsSync(PYTHON) ? `agent-vault python not found at ${PYTHON}` : !chromeBinary() ? 'no Chrome for the isolated browser' : false;
