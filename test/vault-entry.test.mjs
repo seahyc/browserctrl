@@ -36,17 +36,17 @@ test('uncertain transport and unverified cleanup leave durable phase block',asyn
   const g=createVaultGate(p,options), result=await g.run(request());assert.equal(result.status,'indeterminate');assert.ok(!JSON.stringify(result).includes('private-password'));
   assert.equal(g.blocked(),true);assert.equal(createVaultGate(p,options).blocked(),true);
 });
-test('cleanup clears all fields without dispatching credential-bearing events',()=>{
+test('cleanup clears all fields without dispatching credential-bearing events',async()=>{
   const r=request(); const input={v:'secret'}; class HTMLInputElement {};
   Object.setPrototypeOf(input,HTMLInputElement.prototype);Object.defineProperty(HTMLInputElement.prototype,'value',{get(){return this.v;},set(v){this.v=v;}});
   const context={location:{origin:r.destination.origin},window:{},document:{querySelector:()=>null,querySelectorAll:()=>[input]},HTMLInputElement};context.window.top=context.window;
-  assert.equal(vm.runInNewContext(entryExpression(r,true),context).ok,true);assert.equal(input.value,'');
+  assert.equal((await vm.runInNewContext(entryExpression(r,true),context)).ok,true);assert.equal(input.value,'');
 });
-test('origin mismatch, frames, ambiguous fields and expired request cannot enter',()=>{
+test('origin mismatch, frames, ambiguous fields and expired request cannot enter',async()=>{
   const r=request();let input=0;
   const context={location:{origin:'https://wrong.test'},window:{},document:{querySelector:()=>null,querySelectorAll:()=>{input++;return [];}},HTMLInputElement:class{}};context.window.top=context.window;
-  assert.equal(vm.runInNewContext(entryExpression(r),context).ok,false);assert.equal(input,0);
-  context.location.origin=r.destination.origin;context.document.querySelector=()=>({});assert.equal(vm.runInNewContext(entryExpression(r),context).ok,false);assert.equal(input,0);
+  assert.equal((await vm.runInNewContext(entryExpression(r),context)).ok,false);assert.equal(input,0);
+  context.location.origin=r.destination.origin;context.document.querySelector=()=>({});assert.equal((await vm.runInNewContext(entryExpression(r),context)).ok,false);assert.equal(input,0);
 });
 
 test('stdio adapter rejects malformed and oversized secret-bearing requests without echoes',async()=>{
@@ -75,4 +75,38 @@ test('owner recovery requires exact persisted target and trusted proof it is abs
 test('empty same-document inputs do not release retained JS credential state',async()=>{
   const g=gate({evaluate:async(_target,_expression,meta)=>meta.cleanup?{ok:true}:{ok:true,attempted:true,submitted:true}});
   const result=await g.run(request());assert.equal(result.code,'cleanup_unverified');assert.equal(g.blocked(),true);
+});
+
+test('email-code continuation binds the protected target and verifies reload cleanup before release',async()=>{
+  const r=request();let calls=0,finished=0;
+  const g=gate({evaluate:async(_t,_e,meta)=>{calls++;return meta.cleanup?{ok:false}:{ok:true,attempted:true,submitted:true};},finishTarget:async (target,meta)=>{assert.equal(target,r.destination.tab_id);assert.ok(meta.forbidden.includes(r.fields.password));assert.ok(meta.forbidden.includes('123456'));finished++;return true;}});
+  assert.equal((await g.run(r,()=>{},'owner')).code,'cleanup_unverified');
+  const next={...r,request_id:crypto.randomUUID(),destination:{...r.destination,fields:{totp:'#email-code'},submit:'@auto'},fields:{totp:'123456'}};
+  const before=calls;
+  assert.equal((await g.continue(next,()=>{},'different')).code,'recovery_mismatch');
+  assert.equal(calls,before);assert.equal(finished,0);
+  assert.equal((await g.continue({...next,destination:{...next.destination,origin:'https://other.test'}},()=>{},'owner')).code,'recovery_mismatch');
+  assert.equal((await g.continue({...next,fields:{totp:'not-a-code'}},()=>{},'owner')).code,'invalid_request');
+  assert.equal((await g.continue(next,()=>{},'owner')).status,'completed');
+  assert.equal(finished,1);assert.equal(g.blocked(),false);
+  assert.equal((await g.continue(next,()=>{},'owner')).code,'continuation_unavailable');
+});
+
+test('email-code continuation retains protection when document cleanup fails',async()=>{
+  const r=request();const g=gate({evaluate:async(_t,_e,meta)=>meta.cleanup?{ok:false}:{ok:true,attempted:true,submitted:true},finishTarget:async()=>false});
+  await g.run(r,()=>{},'owner');
+  const next={...r,request_id:crypto.randomUUID(),destination:{...r.destination,fields:{totp:'#code'},submit:'@auto'},fields:{totp:'123456'}};
+  assert.equal((await g.continue(next,()=>{},'owner')).code,'cleanup_unverified');
+  assert.equal(g.blocked(),true);
+  assert.equal((await g.continue(next,()=>{},'owner')).code,'request_already_used');
+});
+
+test('restarted daemon cannot continue without prior secrets for its cleanup scan',async()=>{
+  const p=++port,r=request();
+  const options={recording:()=>false,busy:()=>false,reset:()=>{},evaluate:async(_t,_e,meta)=>meta.cleanup?{ok:false}:{ok:true,attempted:true,submitted:true},finishTarget:async()=>true};
+  await createVaultGate(p,options).run(r,()=>{},'owner');
+  const next={...r,request_id:crypto.randomUUID(),destination:{...r.destination,fields:{totp:'#code'},submit:'@auto'},fields:{totp:'123456'}};
+  const restarted=createVaultGate(p,options);
+  assert.equal((await restarted.continue(next,()=>{},'owner')).code,'continuation_context_lost');
+  assert.equal(restarted.blocked(),true);
 });

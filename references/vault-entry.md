@@ -159,3 +159,24 @@ and origin, then queries Chromium itself to prove the target is absent. An
 active entry, present target, missing marker, mismatch or failed query keeps the
 block. `code: closed_target_recovered` confirms release. The marker retains only
 coordination metadata and selectors, never passwords or TOTP values.
+
+## Authentication workflows
+
+`bin/browserctrl-auth.mjs` is the private workflow driver. It accepts only fixed
+policy envelopes over stdin and supports begin, safe status, one email-code
+submission, bounded resend, and verified cleanup. Ordinary observation remains
+blocked between steps. Matching tab ownership is renewed only after checking the
+saved workflow owner, origin, tab, ID and policy.
+
+Sites configure selectors and a read-only JSON session endpoint; the driver does
+not run caller-provided JavaScript. Status returns enum states and booleans, not
+page text. Resend checks the declared button and cooldown and cannot be repeated
+beyond the approved limit. Codes may use a single field and Verify button or a
+split-input component that submits automatically.
+
+On finish the trusted driver navigates to the approved same-origin cleanup path,
+verifies a new document, scans for known secrets and clears generated navigation
+history. The authentication tab stays open. If cleanup or session binding cannot
+be verified, protection remains active and owner recovery is still required.
+The agent-vault workflow executor provides the scoped mail source and sequencing;
+this driver does not grant vault or mailbox access by itself.

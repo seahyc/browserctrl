@@ -11,7 +11,7 @@ import {SOCK,agentId} from '../lib/env.mjs';
 import {chromeBinary,startHeadlessBrowser} from './helpers.mjs';
 
 function raw(port,request,op='vault-entry') {return new Promise((resolve,reject)=>{const s=net.connect(SOCK(port));let b='';s.setTimeout(15000,()=>{s.destroy();reject(Error('timeout'));});s.on('connect',()=>s.write(JSON.stringify({reqId:1,op,owner:agentId(),request})+'\n'));s.on('data',c=>{b+=c;if(b.includes('\n')){s.destroy();resolve(JSON.parse(b.split('\n')[0]));}});s.on('error',reject);});}
-test('isolated HTTPS Chromium: POST navigation, TOTP gate, reflection refusal and recovery', {skip:!chromeBinary(),timeout:60000}, async t=>{
+test('isolated HTTPS Chromium: POST navigation, TOTP gate, reflection refusal and recovery', {skip:!chromeBinary(),timeout:90000}, async t=>{
   const dir=fs.mkdtempSync('/tmp/bc-vault-tls-');
   execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(dir,'key.pem'),'-out',path.join(dir,'cert.pem'),'-subj','/CN=localhost','-days','1'],{stdio:'ignore'});
   const server=https.createServer({key:fs.readFileSync(path.join(dir,'key.pem')),cert:fs.readFileSync(path.join(dir,'cert.pem'))},(q,r)=>{
@@ -25,12 +25,13 @@ test('isolated HTTPS Chromium: POST navigation, TOTP gate, reflection refusal an
         setTimeout(()=>r.end(output),150);
       });return;
     }
+    if(q.url==='/after-code?reflect=1'){r.end('<p>synthetic-private-password</p>');return;}
     r.end(`<form method="POST" onsubmit="window.retainedCode=document.querySelector('#code').value" action="/done${q.url.includes('?')?q.url.slice(q.url.indexOf('?')):''}"><input id="username" name="username"><input id="password" name="password" type="password"><input id="code" name="code" type="text"><button id="submit" onclick="console.log(document.querySelector('#code').value);const end=Date.now()+200;while(Date.now()<end){}">Sign in</button></form>`);
   });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const reserve=net.createServer();await new Promise(r=>reserve.listen(0,'127.0.0.1',r));const port=reserve.address().port;await new Promise(r=>reserve.close(r));
   process.env.BROWSERCTRL_CAPTURE='0';const browser=await startHeadlessBrowser(port);let client;
-  t.after(async()=>{try{await client?.stop();}catch{}client?.close();await browser.close();await new Promise(r=>server.close(r));fs.rmSync(dir,{recursive:true,force:true});});
+  t.after(async()=>{try{await client?.stop();}catch{}client?.close();await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));fs.rmSync(dir,{recursive:true,force:true});});
   client=await connect(port);await client.browser('Security.setIgnoreCertificateErrors',{ignore:true});
   const origin=`https://127.0.0.1:${server.address().port}`;
   async function tab(suffix='') {
@@ -63,6 +64,20 @@ test('isolated HTTPS Chromium: POST navigation, TOTP gate, reflection refusal an
   const restored=await client.send(targetId,'Runtime.evaluate',{expression:"({path:location.pathname,code:!!document.querySelector('#code'),retained:window.retainedCode=== '654321'})",returnByValue:true});
   assert.deepEqual(restored.result.value,{path:'/done',code:false,retained:false});
 
+  const gatedTarget=await tab();
+  await client.send(gatedTarget,'Runtime.evaluate',{expression: "const button=document.querySelector('#submit');button.disabled=true;document.querySelector('#code').addEventListener('input',()=>setTimeout(()=>button.disabled=false,50));"});
+  assert.equal((await raw(port,request(gatedTarget))).result.status,'completed');
+  for(const mode of ['disabled','replaced']) {
+    const gated=await tab();
+    await client.send(gated,'Runtime.evaluate',{expression: mode==='disabled'
+      ? "document.querySelector('#submit').disabled=true;document.querySelector('form').onsubmit=()=>{throw Error('must not submit');};"
+      : "const button=document.querySelector('#submit');button.disabled=true;document.querySelector('#code').addEventListener('input',()=>setTimeout(()=>{const replacement=button.cloneNode(true);replacement.disabled=false;button.replaceWith(replacement);},50));"});
+    const rejected=await raw(port,request(gated));
+    assert.equal(rejected.result.code,'cleanup_unverified');
+    assert.equal(rejected.result.input_attempted,true);
+    assert.equal((await client.status()).sensitivePhaseBlocked,true);
+    await closeAndRecover(gated);
+  }
   assert.equal((await raw(port,normal)).result.code,'request_already_used');assert.ok(!JSON.stringify(await client.events(targetId)).includes('654321'));
   const usedTarget=await tab();
   await client.send(usedTarget,'Page.navigate',{url:origin+'/used'});
@@ -80,6 +95,27 @@ test('isolated HTTPS Chromium: POST navigation, TOTP gate, reflection refusal an
   assert.equal((await raw(port,request(wrongTarget))).result.code,'cleanup_unverified');
   await assert.rejects(client.send(wrongTarget,'Runtime.evaluate',{expression:'window.retainedCode',returnByValue:true}),/sensitive_phase_blocked/);
   await closeAndRecover(wrongTarget);
+  const continuationTarget=await tab();
+  await client.send(continuationTarget,'Runtime.evaluate',{expression:`document.querySelector('form').onsubmit=e=>{e.preventDefault();window.retainedPassword=document.querySelector('#password').value;document.body.innerHTML='<div id="email-code">'+Array(6).fill('<input inputmode="numeric">').join('')+'</div>';document.querySelector('#email-code').onpaste=e=>{e.preventDefault();const code=e.clipboardData.getData('text');const form=document.createElement('form');form.method='POST';form.action='/done';for(const [name,value] of Object.entries({password:window.retainedPassword,code})){const input=document.createElement('input');input.name=name;input.value=value;form.append(input);}document.body.append(form);form.submit();};};`});
+  assert.equal((await raw(port,request(continuationTarget))).result.code,'cleanup_unverified');
+  await assert.rejects(client.send(continuationTarget,'Runtime.evaluate',{expression:'document.body.innerText',returnByValue:true}),/sensitive_phase_blocked/);
+  const continuation={...request(continuationTarget),destination:{browser:'dia',tab_id:continuationTarget,origin,fields:{totp:'#email-code'},submit:'@auto'},fields:{totp:'654321'}};
+  assert.equal((await raw(port,{...continuation,destination:{...continuation.destination,origin:'https://wrong.test'}},'vault-continue')).result.code,'recovery_mismatch');
+  const continued=await raw(port,continuation,'vault-continue');
+  assert.equal(continued.result.status,'completed',JSON.stringify(continued));
+  assert.ok(!JSON.stringify(continued).includes('654321'));
+  assert.equal((await client.status()).sensitivePhaseBlocked,false);
+  assert.ok((await client.browser('Target.getTargets')).targetInfos.some(t=>t.targetId===continuationTarget));
+  assert.equal((await client.send(continuationTarget,'Page.getNavigationHistory',{})).entries.length,1);
+  assert.equal((await client.send(continuationTarget,'Runtime.evaluate',{expression:'window.retainedPassword===undefined',returnByValue:true})).result.value,true);
+  assert.ok((await client.browser('Target.getTargets')).targetInfos.some(t=>t.targetId===targetId));
+  const reflectedContinuation=await tab();
+  await client.send(reflectedContinuation,'Runtime.evaluate',{expression:`document.querySelector('form').onsubmit=e=>{e.preventDefault();document.body.innerHTML='<div id="email-code">'+Array(6).fill('<input inputmode="numeric">').join('')+'</div>';document.querySelector('#email-code').onpaste=e=>{e.preventDefault();location.href='/after-code?reflect=1';};};`});
+  assert.equal((await raw(port,request(reflectedContinuation))).result.code,'cleanup_unverified');
+  const reflectedStep={...request(reflectedContinuation),destination:{browser:'dia',tab_id:reflectedContinuation,origin,fields:{totp:'#email-code'},submit:'@auto'},fields:{totp:'654321'}};
+  assert.equal((await raw(port,reflectedStep,'vault-continue')).result.code,'cleanup_unverified');
+  assert.equal((await client.status()).sensitivePhaseBlocked,true);
+  await closeAndRecover(reflectedContinuation);
   for(const mode of ['text','attribute','input']) {
     const reflectedTarget=await tab('?mode='+mode);
     const reflected=await raw(port,request(reflectedTarget));
