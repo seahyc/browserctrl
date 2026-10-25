@@ -50,6 +50,22 @@ if (q.has('gh')) {
     </li>`).join('') + '</ul><p style="height:1200px"></p>';
   addEventListener('hashchange', () => state('opened ' + location.hash.slice(1)));
 }
+if (q.has('twofa')) {
+  /* GitHub's two-factor page: "More options" says aria-expanded but names no panel
+     (no aria-controls, no aria-haspopup), and its links sit beside the button's row,
+     not right after the button. */
+  root.innerHTML = `<h1>Two-factor authentication</h1><p>Enter the code from your app.</p>
+    <div class="more"><div class="more-row"><button type="button" id="more2" aria-expanded="false">More options</button></div>
+    <div class="more-list" hidden><a href="#webauthn">Passkey</a> <a href="#sms">Text message</a></div></div>`;
+  const b = document.getElementById('more2');
+  b.addEventListener('click', () => {
+    const open = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(open));
+    root.querySelector('.more-list').hidden = !open;
+    state(open ? 'options open' : 'options closed');
+  });
+  addEventListener('hashchange', () => state('chose ' + location.hash.slice(1)));
+}
 if (q.has('ups')) {
   root.innerHTML = `<h1>Flat Rate Shipping with UPS Simple Rate</h1>
     <div role="tablist"><button role="tab" aria-selected="true" id="t-s">Small: Starting at $15.80</button><button role="tab" aria-selected="false" id="t-m">Medium: Starting at $18.95</button></div>
