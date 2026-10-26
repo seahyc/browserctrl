@@ -126,6 +126,28 @@ test('a stale DevToolsActivePort file does not report a dead browser as debuggab
   await assert.rejects(() => browserWsUrl(9), /No browser is debuggable/);
 });
 
+test('toggle mode on another port than the usual one is found through DevToolsActivePort', async () => {
+  const net = await import('node:net');
+  const os = await import('node:os');
+  const fs = await import('node:fs');
+  const { browserWsUrl } = await import('../lib/discovery.mjs');
+  const { BROWSERS } = await import('../lib/env.mjs');
+  const server = net.createServer(s => s.destroy());
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const { port: actual } = server.address();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-activeport-'));
+  const saved = BROWSERS.edge.dataDirs;
+  try {
+    fs.writeFileSync(path.join(dir, 'DevToolsActivePort'), `${actual}\n/devtools/browser/abc\n`);
+    BROWSERS.edge.dataDirs = [dir];
+    assert.equal(await browserWsUrl(BROWSERS.edge.port), `ws://127.0.0.1:${actual}/devtools/browser/abc`);
+  } finally {
+    BROWSERS.edge.dataDirs = saved;
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('an unknown command names the nearest one instead of printing all of help', async () => {
   const { execFile } = await import('node:child_process');
   const run = (c) => new Promise(res => execFile(process.execPath, [fileURLToPath(new URL('../bin/browserctrl.mjs', import.meta.url)), c], (e, so, se) => res(se)));

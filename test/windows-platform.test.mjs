@@ -25,6 +25,7 @@ test('browser profile data paths match supported Windows, macOS, and Linux locat
   assert.equal(browserDataDirs('chrome', 'win32', 'C:\\Users\\u', 'C:\\Users\\u\\AppData\\Local')[0], path.win32.join('C:\\Users\\u\\AppData\\Local', 'Google', 'Chrome', 'User Data'));
   assert.equal(browserDataDirs('edge', 'win32', 'C:\\Users\\u', 'C:\\Local')[0], path.win32.join('C:\\Local', 'Microsoft', 'Edge', 'User Data'));
   assert.equal(browserDataDirs('chrome', 'darwin', '/Users/u')[0], path.posix.join('/Users/u', 'Library', 'Application Support', 'Google', 'Chrome'));
+  assert.equal(browserDataDirs('dia', 'darwin', '/Users/u')[0], path.posix.join('/Users/u', 'Library', 'Application Support', 'Dia', 'User Data'));
   assert.deepEqual(browserDataDirs('chrome', 'linux', '/home/u'), [
     '/home/u/.config/google-chrome',
     '/home/u/.var/app/com.google.Chrome/config/google-chrome',
