@@ -9,7 +9,7 @@ Part of the [browserctrl skill](../SKILL.md). Project source and issues:
 Select the browser explicitly. Chromium uses the existing CDP commands on macOS,
 Linux and Windows. Windows uses named pipes and a PowerShell lock adapter, not
 AppleScript. Relaunching the real profile and screen video remain macOS-only; on Linux and
-Windows `browserctrl launch` starts a separate profile instead. Firefox is not supported. See
+Windows `browserctrl launch` starts a separate profile instead. Firefox and Camoufox work over WebDriver BiDi (see below). See
 [compatibility and test evidence](../docs/compatibility.md) before promising support.
 
 For Safari 27+ on macOS, use `--browser safari` and the separate Apple MCP adapter.
@@ -119,6 +119,34 @@ starts a separate instance on its own profile in the data folder (`profiles/<bro
 `--user-data-dir <dir>`, with the debug port on. If something already answers on that port,
 nothing is started. Do the same by hand with
 `--remote-debugging-port=9222 --user-data-dir=<a new folder>`, then use `--port 9222`.
+
+## Firefox and Camoufox (WebDriver BiDi)
+
+Firefox and Camoufox (a Firefox-based browser built to look like ordinary users) are driven over
+WebDriver BiDi, the W3C protocol Firefox speaks instead of CDP:
+
+```sh
+browserctrl launch camoufox --headless --port 9341      # its own profile; --stop ends it
+t=$(browserctrl open https://example.com --id --browser camoufox --port 9341)
+browserctrl read "$t" --browser camoufox --port 9341     # ref_1 … for interactive elements
+browserctrl click "$t" ref_1 --browser camoufox --port 9341
+```
+
+- Commands: tabs, open, use, close, focus, nav, read, text, html, eval, shot, click, hover,
+  fill, type, key, select, scroll, wait, status, stop. Recipes, `do` plans, recordings,
+  claims, tab groups and raw CDP are Chromium-only.
+- A small daemon per port keeps the browser's one BiDi session (Camoufox renumbers tabs per
+  session), runs commands one at a time and exits after `BROWSERCTRL_BIDI_IDLE_MS` idle.
+  `browserctrl stop --browser camoufox` ends it; tab ids from before are then stale on
+  Camoufox, so list them again.
+- `launch firefox|camoufox` finds the program (`BROWSERCTRL_FIREFOX_BIN`,
+  `BROWSERCTRL_CAMOUFOX_BIN`, the usual install places, PATH) and starts a separate instance
+  with `--remote-debugging-port`; `--headless`, `--user-data-dir`, `--foreground` and
+  `--stop` work as for Chromium. Default ports: 9337 (Firefox), 9338 (Camoufox).
+- Clicks and typing are real input events. After a click or key, a navigation that starts
+  within about a second is waited for; use `wait --url` for a later redirect.
+- Pass `--browser firefox|camoufox` on each command (or `BROWSERCTRL_BROWSER`); a bare
+  `--port` means a Chromium debug port.
 
 ## Tests
 

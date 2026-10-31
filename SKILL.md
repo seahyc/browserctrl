@@ -1,6 +1,6 @@
 ---
 name: browserctrl
-description: Control explicitly selected Chromium browsers or Safari 27+ from the terminal. Use for page automation, browser QA, multi-step research, long forms and multi-screen flows, admin consoles and data export, or tab organization; macOS Dia supports dormant tabs. Safari uses Apple's separate automation session.
+description: Control explicitly selected Chromium browsers, Firefox/Camoufox (WebDriver BiDi) or Safari 27+ from the terminal. Use for page automation, browser QA, multi-step research, long forms and multi-screen flows, admin consoles and data export, or tab organization; macOS Dia supports dormant tabs. Safari uses Apple's separate automation session.
 ---
 
 # browserctrl
@@ -17,6 +17,9 @@ Use the `browserctrl` CLI on PATH. `browserctrl help` lists every command and fl
 - Open your own background tab: `t=$(browserctrl open <url> --id)`. `open` also makes it your
   current tab, so later commands can leave the tab out or write `.`; `browserctrl use <tab>`
   switches. Respect other agents' claims. Never stop the daemon, restart the browser or open your own CDP or Playwright session.
+- Firefox and Camoufox: `--browser firefox|camoufox --port <N>` on every command (start one with
+  `browserctrl launch camoufox --headless --port <N>`). The shared commands only; see
+  [connecting.md](references/connecting.md#firefox-and-camoufox-webdriver-bidi).
 
 ## Output and exit codes
 
@@ -166,7 +169,7 @@ lease expiry does not log out the website.
 | [sites.md](references/sites.md), [recipes.md](references/recipes.md) | recipes, flow notes, captchas |
 | [recording.md](references/recording.md) | recordings, replay, video |
 | [tabs-and-browser.md](references/tabs-and-browser.md) | tabs, claims, profiles, handing over to the user, the extension |
-| [connecting.md](references/connecting.md) | browsers, launching, Safari, diagnostics |
+| [connecting.md](references/connecting.md) | browsers, launching, Safari, Firefox/Camoufox (BiDi), diagnostics |
 | [activity.md](references/activity.md), [dia-native.md](references/dia-native.md) | agent activity, Dia dormant tabs |
 | [vault-fill.md](references/vault-fill.md), [vault-entry.md](references/vault-entry.md) | protected credential fill, taint and recovery |
 | [settings.md](references/settings.md), [architecture.md](references/architecture.md) | every `BROWSERCTRL_*` setting, the Jev key, the CLI and daemon |

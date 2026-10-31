@@ -13,11 +13,15 @@ Most people set none of these. The ones worth knowing are `BROWSERCTRL_BROWSER` 
 
 | Name | Default | What it does |
 | --- | --- | --- |
-| `BROWSERCTRL_BROWSER` | none | Browser every command uses when it has no `--browser` (`dia`, `chrome`, `brave`, `edge`, `chromium`, `arc`, `safari`). |
+| `BROWSERCTRL_BROWSER` | none | Browser every command uses when it has no `--browser` (`dia`, `chrome`, `brave`, `edge`, `chromium`, `arc`, `safari`, `firefox`, `camoufox`). |
 | `BROWSERCTRL_PORT` | none | Debug port every command uses when it has no `--port`. Wins over `BROWSERCTRL_BROWSER`. |
 | `BROWSERCTRL_AGENT_ID` | `pid:<parent pid>` | Identity that owns tab claims. Keep one per agent task. A claim whose owner process is gone counts as released. |
 | `BROWSERCTRL_AGENT_LABEL` | `codex`, `claude-code` or `shell` | Name shown for the agent in `browserctrl activity`. |
-| `BROWSERCTRL_<BROWSER>_BIN` | found in the usual install places, then PATH | Path to a browser program for `browserctrl launch`, for example `BROWSERCTRL_CHROME_BIN` or `BROWSERCTRL_BRAVE_BIN`. |
+| `BROWSERCTRL_<BROWSER>_BIN` | found in the usual install places, then PATH | Path to a browser program for `browserctrl launch`, for example `BROWSERCTRL_CHROME_BIN`, `BROWSERCTRL_FIREFOX_BIN` or `BROWSERCTRL_CAMOUFOX_BIN`. |
+| `BROWSERCTRL_FIREFOX_PORT` | 9337 | WebDriver BiDi port for `--browser firefox` when no `--port` is given. |
+| `BROWSERCTRL_CAMOUFOX_PORT` | 9338 | WebDriver BiDi port for `--browser camoufox` when no `--port` is given. |
+| `BROWSERCTRL_BIDI_IDLE_MS` | 600000 | How long the WebDriver BiDi daemon for a port keeps its session with no requests before it exits. |
+| `BROWSERCTRL_BIDI_DEBUG` | off | Set to 1 to print each WebDriver BiDi call and its time to stderr (method names only, no arguments). |
 
 There is no default browser. See [connecting.md](connecting.md).
 
