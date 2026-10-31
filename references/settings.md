@@ -17,7 +17,7 @@ Most people set none of these. The ones worth knowing are `BROWSERCTRL_BROWSER` 
 | `BROWSERCTRL_PORT` | none | Debug port every command uses when it has no `--port`. Wins over `BROWSERCTRL_BROWSER`. |
 | `BROWSERCTRL_AGENT_ID` | `pid:<parent pid>` | Identity that owns tab claims. Keep one per agent task. A claim whose owner process is gone counts as released. |
 | `BROWSERCTRL_AGENT_LABEL` | `codex`, `claude-code` or `shell` | Name shown for the agent in `browserctrl activity`. |
-| `BROWSERCTRL_<BROWSER>_BIN` | found in the usual install places, then PATH | Path to a browser program for `browserctrl launch`, for example `BROWSERCTRL_CHROME_BIN` or `BROWSERCTRL_BRAVE_BIN`. |
+| `BROWSERCTRL_<BROWSER>_BIN` | found in the usual install places, then PATH (Linux `chromium`: then Playwright's builds) | Path to a browser program for `browserctrl launch`, for example `BROWSERCTRL_CHROME_BIN` or `BROWSERCTRL_BRAVE_BIN`. |
 
 There is no default browser. See [connecting.md](connecting.md).
 
