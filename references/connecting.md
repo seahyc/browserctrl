@@ -9,7 +9,7 @@ Part of the [browserctrl skill](../SKILL.md). Project source and issues:
 Select the browser explicitly. Chromium uses the existing CDP commands on macOS,
 Linux and Windows. Windows uses named pipes and a PowerShell lock adapter, not
 AppleScript. Relaunching the real profile and screen video remain macOS-only; on Linux and
-Windows `browserctrl launch` starts a separate profile instead. Firefox and Camoufox work over WebDriver BiDi (see below). See
+Windows `browserctrl launch` starts a separate profile instead (`--headless` for servers; see Server browsers below). Firefox and Camoufox work over WebDriver BiDi (see below). See
 [compatibility and test evidence](../docs/compatibility.md) before promising support.
 
 For Safari 27+ on macOS, use `--browser safari` and the separate Apple MCP adapter.
@@ -119,6 +119,34 @@ starts a separate instance on its own profile in the data folder (`profiles/<bro
 `--user-data-dir <dir>`, with the debug port on. If something already answers on that port,
 nothing is started. Do the same by hand with
 `--remote-debugging-port=9222 --user-data-dir=<a new folder>`, then use `--port 9222`.
+
+### Server browsers (`--headless`)
+
+On a machine without a screen, `browserctrl launch <browser> --headless` starts a separate
+browser for agents, on its own profile:
+
+| Mode | What runs | When |
+| --- | --- | --- |
+| `--headless=virtual` | the full browser on a private Xvfb display (`apt install xvfb`) | the default on Linux when Xvfb is installed. Pages see a normal desktop browser, and a VNC viewer can attach to the display for a human handoff |
+| `--headless=new` | Chromium's headless mode, with `Headless` taken out of the user agent | elsewhere, or when asked. Some sites still recognise it and show a bot check |
+
+- `--port N` picks the debug port (default: the browser's usual port); use the same `--port`
+  for later commands.
+- `--foreground` keeps the launch attached until the browser exits and stops the browser (and
+  its display) on SIGTERM: run it this way under systemd. A detached launch prints a
+  `--stop` command; `browserctrl launch <browser> --stop --user-data-dir <dir>` ends exactly
+  the browser and display it started.
+- `--vnc` (virtual mode) shares the display through x11vnc on 127.0.0.1 with no password, for a
+  person to log in or solve a captcha; reach it only through an authenticated tunnel or relay.
+  `--vnc-info <file>` writes `{"port","display","ts"}` there for such a relay and removes it on stop.
+- Ubuntu 23.10+ blocks the user namespaces Chromium's sandbox needs. A launch that fails on
+  this says so, writes an AppArmor profile for that browser program next to the profile
+  folder and prints the two commands that install it. `--no-sandbox` runs without the
+  sandbox, and only when you pass it.
+- On Linux, `launch chromium` also finds a Chromium build Playwright downloaded
+  (`~/.cache/ms-playwright`, or `PLAYWRIGHT_BROWSERS_PATH`).
+- The browser's output goes to `browserctrl-launch.log` in its profile folder; a browser that
+  exits before its debug port opens is explained from that log.
 
 ## Firefox and Camoufox (WebDriver BiDi)
 

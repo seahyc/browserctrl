@@ -134,7 +134,9 @@ const MUTATING = new Set([
 
 // Flags that never take a value, so `--json <tab>` or `-q <tab>` keeps the word that follows.
 // --count takes one only when it is a number (click --count 2; find … --count).
-const SWITCHES = new Set(['quiet', 'json', 'jsonl', 'enabled', 'no-dedupe', 'id', 'csv', 'commit']);
+const SWITCHES = new Set(['quiet', 'json', 'jsonl', 'enabled', 'no-dedupe', 'id', 'csv', 'commit', 'headless', 'no-sandbox', 'foreground', 'stop', 'vnc']);
+// Flags written as --name=value (the rest take their value as the next word).
+const EQUALS = new Set(['headless']);
 
 function parseArgs(argv) {
   const flags = {};
@@ -142,7 +144,10 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '-q') flags.quiet = true;
-    else if (a.startsWith('--')) {
+    else if (a.startsWith('--') && EQUALS.has(a.slice(2).split('=')[0]) && a.includes('=')) {
+      const [name, ...value] = a.slice(2).split('=');
+      flags[name] = value.join('=');
+    } else if (a.startsWith('--')) {
       const name = a.slice(2);
       const next = argv[i + 1];
       if (next === undefined || next.startsWith('--') || SWITCHES.has(name) || (name === 'count' && !/^\d+$/.test(next))) flags[name] = true;
@@ -209,6 +214,11 @@ function usage() {
     browserctrl migrate [--apply]                       move an earlier version's folders to this OS's (shows the plan first)
     browserctrl where                                    the install folder and the data, config, state and runtime folders
     browserctrl launch <browser> [--user-data-dir D]     relaunch with its debug port; waits until ready (D = separate instance)
+    browserctrl launch <browser> --headless[=virtual|new] [--port N] [--user-data-dir D] [--foreground] [--no-sandbox]
+                       [--vnc [--vnc-info FILE]]    share the virtual display over VNC on 127.0.0.1 for a human handoff
+    browserctrl launch <browser> --stop [--user-data-dir D]   stop a server browser that launch started (detached)
+                                             a separate server browser: virtual = full browser on its own Xvfb display (Linux
+                                             default), new = Chromium headless mode; --foreground stays attached (systemd)
     browserctrl tabs --browser dia [--json|--jsonl|--ids]  tabs, with who has claimed them (--ids: one id per line, for xargs)
     browserctrl native-tabs --browser dia                all Dia tabs, including dormant tabs
     browserctrl native-focus <native UUID> --browser dia  select and wake a native Dia tab
@@ -377,22 +387,80 @@ function usage() {
   Add --steal to take a tab another agent has claimed.`;
 }
 
+// Linux and Windows, and --headless anywhere: start a separate instance on its own profile;
+// the user's running browser is left alone. --headless runs it on a virtual display (Linux)
+// or in Chromium's headless mode; --foreground keeps it attached (for systemd and the like).
+async function launchSeparate(key, meta) {
+  if (flags.stop) {
+    const { stopLaunched } = await import('../lib/launch.mjs');
+    const dir = flags['user-data-dir'] ? path.resolve(String(flags['user-data-dir'])) : planDirectLaunch({ key, meta, exists: () => true, which: () => null, playwright: () => ['/x'] }).userDataDir;
+    return stopLaunched(dir);
+  }
+  const server = await import('../lib/server-browser.mjs');
+  const headless = server.resolveHeadlessMode(flags.headless);
+  const port = flags.port ? Number(flags.port) : meta.port;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`--port must be a TCP port, got "${flags.port}"`);
+  const ext = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'extension');
+  const noSandbox = Boolean(flags['no-sandbox']);
+  let plan = planDirectLaunch({
+    key, meta, port, headless, noSandbox,
+    userDataDir: flags['user-data-dir'] ? path.resolve(String(flags['user-data-dir'])) : null,
+    extension: !headless && !flags['no-extension'] && fs.existsSync(ext) ? ext : null,
+  });
+  if (headless === 'new') plan = planDirectLaunch({ key, meta, port, headless, noSandbox, userDataDir: plan.userDataDir, version: server.browserVersion(plan.exe) });
+  fs.mkdirSync(plan.userDataDir, { recursive: true });
+  plan.logFile = path.join(plan.userDataDir, 'browserctrl-launch.log');
+  const probe = () => httpGetJson(port, '/json/version', 1000);
+  const foreground = Boolean(flags.foreground);
+  let display = null;
+  if (headless === 'virtual' && !(await probe().catch(() => null))) {
+    display = await server.startVirtualDisplay({ detached: !foreground });
+    plan.env = { DISPLAY: display.display };
+  }
+  let r;
+  let vnc = null;
+  const vncInfo = flags['vnc-info'] ? path.resolve(String(flags['vnc-info'])) : null;
+  const cleanup = () => {
+    for (const p of [vnc?.process, display?.process]) { try { p?.kill('SIGTERM'); } catch {} }
+    if (vncInfo) { try { fs.rmSync(vncInfo, { force: true }); } catch {} }
+  };
+  try {
+    r = await startDetached({ plan, probe, foreground });
+    if (flags.vnc && display) {
+      vnc = await server.startVnc({ display: display.display, detached: !foreground });
+      if (vncInfo) server.writeVncInfo(vncInfo, { port: vnc.port, display: display.display });
+    } else if (flags.vnc && !r.alreadyRunning) {
+      throw new Error('--vnc needs --headless=virtual (a display to share)');
+    }
+  } catch (e) {
+    try { r?.child?.kill('SIGTERM'); } catch {}
+    cleanup();
+    throw e;
+  }
+  const report = { launched: meta.label, port, ready: r.ready, browser: r.version.Browser, waited_ms: r.waitedMs, profile: plan.userDataDir,
+    ...(headless ? { headless } : {}), ...(display ? { display: display.display } : {}), ...(noSandbox ? { sandbox: 'off (--no-sandbox)' } : {}),
+    ...(vnc ? { vnc: { port: vnc.port, listen: '127.0.0.1', ...(vncInfo ? { info: vncInfo } : {}) } } : {}),
+    note: r.alreadyRunning ? `something already answers on port ${port}; nothing was started` : `started a separate ${meta.label} on its own profile; your normal ${meta.label} was not touched` };
+  if (!foreground && !r.alreadyRunning && headless) {
+    const { recordLaunch } = await import('../lib/launch.mjs');
+    recordLaunch(plan.userDataDir, { pid: r.child?.pid, displayPid: display?.process.pid ?? null, vncPid: vnc?.process.pid ?? null, vncInfo, display: display?.display ?? null, port, exe: plan.exe, started: new Date().toISOString() });
+    report.stop = `browserctrl launch ${key} --stop --user-data-dir ${plan.userDataDir}`;
+  }
+  if (!foreground || r.alreadyRunning) return report;
+  // Foreground: report readiness, then live as long as the browser; a stop signal ends both.
+  out(report);
+  const stop = () => { try { r.child.kill('SIGTERM'); } catch {} };
+  process.once('SIGTERM', stop);
+  process.once('SIGINT', stop);
+  const code = await new Promise(res => r.child.once('exit', (c, sig) => res(c ?? (sig ? 0 : 1))));
+  cleanup();
+  process.exit(code);
+}
+
 async function launch(name) {
   const meta = BROWSERS[String(name).toLowerCase()];
   if (!meta) throw new Error(`Unknown browser "${name}". Known: ${Object.keys(BROWSERS).join(', ')}`);
-  if (process.platform !== 'darwin') {
-    // Linux and Windows: only ever start a separate instance on its own profile; the running browser is left alone.
-    const key = String(name).toLowerCase();
-    const ext = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'extension');
-    const plan = planDirectLaunch({
-      key, meta, userDataDir: flags['user-data-dir'] ? path.resolve(String(flags['user-data-dir'])) : null,
-      extension: !flags['no-extension'] && fs.existsSync(ext) ? ext : null,
-    });
-    fs.mkdirSync(plan.userDataDir, { recursive: true });
-    const r = await startDetached({ plan, probe: () => httpGetJson(meta.port, '/json/version', 1000) });
-    return { launched: meta.label, port: meta.port, ready: r.ready, browser: r.version.Browser, waited_ms: r.waitedMs, profile: plan.userDataDir,
-      note: r.alreadyRunning ? `something already answers on port ${meta.port}; nothing was started` : `started a separate ${meta.label} on its own profile; your normal ${meta.label} was not touched` };
-  }
+  if (process.platform !== 'darwin' || flags.headless !== undefined || flags.stop) return launchSeparate(String(name).toLowerCase(), meta);
   const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, e => (e ? rej(e) : res())));
   // Load the handoff extension alongside the debug port, so a browser started
   // this way has both halves: CDP for the agent, extension UI for the human.
