@@ -382,6 +382,8 @@ function usage() {
   Chromium commands take --browser <${Object.keys(BROWSERS).join('|')}> or --port <n>, or set
   BROWSERCTRL_BROWSER / BROWSERCTRL_PORT once in the environment of the agent that runs them.
   Safari commands take --browser safari and an explicit full native handle.
+  Firefox and Camoufox (WebDriver BiDi) take --browser firefox|camoufox [--port N]; start one with
+    browserctrl launch firefox|camoufox [--headless] [--port N] [--user-data-dir D]   (--stop ends it)
   Add --steal to take a tab another agent has claimed.`;
 }
 
@@ -799,6 +801,28 @@ const main = async () => {
     const near = suggestCommand(cmd);
     if (near !== null) throw new Error(`Unknown command "${cmd}".${near ? ` Did you mean "${near}"?` : ''} Run browserctrl help for the list.`);
   }
+  // ---- Firefox-family browsers over WebDriver BiDi (lib/bidi) --------------------------
+  {
+    const { isBidiBrowser } = await import('../lib/bidi/launch.mjs');
+    const bidiBrowser = isBidiBrowser(flags.browser) ? String(flags.browser).toLowerCase()
+      : cmd === 'launch' && isBidiBrowser(positional[1]) ? String(positional[1]).toLowerCase() : null;
+    if (bidiBrowser) {
+      const { bidiCommand } = await import('../lib/bidi/cli.mjs');
+      let result;
+      try {
+        result = await bidiCommand(cmd, positional, flags, { browser: bidiBrowser });
+      } catch (e) {
+        if (['USAGE', 'TAB_REQUIRED', 'TAB_AMBIGUOUS'].includes(e.code)) e.exitCode = EXIT.USAGE;
+        if (e.code === 'ECONNREFUSED') e.exitCode = EXIT.UNAVAILABLE;
+        throw e;
+      }
+      if (result.exitCode !== undefined) process.exitCode = result.exitCode;
+      if (result.text !== undefined) return out(result.text);
+      if (flags.jsonl && Array.isArray(result.data)) return outLines(result.data);
+      return out(result.data === undefined ? null : result.data);
+    }
+  }
+  // ---------------------------------------------------------------------------------------
   if (flags.browser === 'safari' || cmd === 'safari') {
     if (flags.port) throw new Error('Safari uses native automation without a CDP port.');
     const safari = await import('../lib/safari.mjs');
