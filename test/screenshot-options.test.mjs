@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {screenshot, parseViewport, parseScale, parseMasks} from '../lib/ops.mjs';
+import {screenshot, parseViewport, parseScale, parseMasks, parseMaskBlur} from '../lib/ops.mjs';
 
 test('shot option parsers accept the documented forms and reject the rest', () => {
   assert.deepEqual(parseViewport('1440x900'), {width: 1440, height: 900});
@@ -17,6 +17,15 @@ test('shot option parsers accept the documented forms and reject the rest', () =
   assert.deepEqual(parseMasks('.name; img.avatar, .photo ;'), ['.name', 'img.avatar, .photo']);
   assert.deepEqual(parseMasks(['.a', '.b;.c']), ['.a', '.b', '.c']);
   assert.deepEqual(parseMasks(undefined), []);
+  assert.equal(parseMaskBlur(undefined), 12);
+  assert.equal(parseMaskBlur('20'), 20);
+  for (const bad of ['-5', '0.1', '0', 'abc', '500']) assert.throws(() => parseMaskBlur(bad), /between 4 and 100/, bad);
+});
+
+test('a blur radius that would leave the mask readable refuses before touching the tab', async () => {
+  const {conn, calls} = fakeConn();
+  await assert.rejects(screenshot(conn, 'T'.repeat(16), {mask: ['.name'], maskBlur: -5}), /between 4 and 100/);
+  assert.deepEqual(calls, []);
 });
 
 function fakeConn({counts = {'.name': 2}, captureFails = false} = {}) {

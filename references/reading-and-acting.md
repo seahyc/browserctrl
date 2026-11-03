@@ -688,7 +688,7 @@ browserctrl shot <tab> out.png --viewport 1440x900 --scale 2 \
   included) for the capture only, then removes the blur. The report counts matches per
   selector, and a selector that matched nothing is a warning. With `--require-mask` it is an
   error and nothing is written: use it for personal data, so a changed page cannot slip an
-  unmasked image through. `--mask-blur` sets the radius (12 px).
+  unmasked image through. `--mask-blur` sets the radius (12 px; 4 to 100).
 - `--pad N` adds a margin around a `--ref` or `--selector` crop.
 - Masking text by selector cannot reach pixels inside an image or canvas; cover those with
   your own overlay before the capture.
