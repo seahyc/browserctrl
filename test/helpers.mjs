@@ -100,6 +100,15 @@ export { loadFactor, scaled, describeLoad } from './load.mjs';
 if (!(process.env.NODE_OPTIONS || '').includes(LOAD_IMPORT)) process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS || ''} ${LOAD_IMPORT}`.trim();
 if (loadFactor() > 1) console.log(`# test timing stretched by ${describeLoad()}`);
 
+// Where tests leave sample transcripts for a person to read afterwards (formatSteps output and
+// the like): BROWSERCTRL_TEST_SAMPLES, else codex-bc under /tmp (os.tmpdir() on Windows).
+// The folder is created on first use, so a fresh CI machine has it too.
+export function sampleFile(name) {
+  const dir = process.env.BROWSERCTRL_TEST_SAMPLES || path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', 'codex-bc');
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, name);
+}
+
 const CHROME_CANDIDATES = [
   ...[process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean).flatMap(root => [
     path.join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
@@ -210,7 +219,8 @@ document.addEventListener('mouseup', () => { if (!down) return; down = false;
     if (req.url.startsWith('/fixtures/')) {
       const file = path.join(HERE, 'fixtures', path.basename(new URL(req.url, 'http://x').pathname));
       if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      // The CSV is a download (cli-panes.html's "Download CSV"); served as HTML, Chrome may save it as downloads.html.
+      res.writeHead(200, { 'Content-Type': file.endsWith('.csv') ? 'text/csv; charset=utf-8' : 'text/html; charset=utf-8' });
       res.end(fs.readFileSync(file));
       return;
     }

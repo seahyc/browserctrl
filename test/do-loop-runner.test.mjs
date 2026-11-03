@@ -7,7 +7,7 @@ import * as ops from '../lib/ops.mjs';
 import * as notes from '../lib/notes.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { fakeJev, optionWith } from './fake-jev.mjs';
-import { startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startHeadlessBrowser, chromeBinary, TEST_PORT, sampleFile } from './helpers.mjs';
 let server, browser, conn, base;
 const haveBrowser = Boolean(chromeBinary());
 const hits = [];
@@ -59,7 +59,7 @@ t('three linked details batch extraction with pending checks and preserve source
     assert.ok(r.item_loops[0].items.every(item => item.bindings.length === 2));
     assert.equal(r.item_loops[0].items[2].extracted[0].value, 'SGD 300');
     assert.ok(r.steps.some(row => row.path === '1.item[3].3'));
-    fs.writeFileSync('/tmp/codex-bc/dsl-b-loop-samples.txt', formatSteps(r) + '\n\n');
+    fs.writeFileSync(sampleFile('dsl-b-loop-samples.txt'), formatSteps(r) + '\n\n');
     assert.match(formatSteps(r).trim().split('\n').at(-1), /^✓ done:/);
   } finally { await ops.closeTab(conn, other); }
 });
@@ -164,7 +164,7 @@ t('failure on item two preserves partial records, closes owned tabs and final st
   assert.deepEqual(await source(tab), before);
   assert.deepEqual((await ops.tabs(conn)).map(t => t.id).sort(), tabs);
   assert.deepEqual(r.owned_tabs, []);
-  fs.appendFileSync('/tmp/codex-bc/dsl-b-loop-samples.txt', formatSteps(r) + '\n');
+  fs.appendFileSync(sampleFile('dsl-b-loop-samples.txt'), formatSteps(r) + '\n');
   assert.match(formatSteps(r).trim().split('\n').at(-1), /^✗ stopped at step/);
 });
 

@@ -238,6 +238,68 @@ t('failed viewport capture returns null without sending images', async () => {
     null,
   );
 });
+// A browser whose first screenshot times out, as headless Chrome on Linux does for a
+// background tab; it answers once more. `info` is what SystemInfo.getInfo returns.
+const stalledCapture = (info, version = { product: 'Chrome/156.0.0.0', userAgent: 'Mozilla/5.0 Chrome/156.0.0.0' }) => {
+  const calls = [];
+  let shots = 0, evals = 0;
+  const conn = {
+    send: async (targetId, method) => {
+      calls.push(method);
+      if (method === 'Runtime.evaluate')
+        return { result: { value: evals++ === 0 ? { width: 800, height: 600, dpr: 1, x: 0, y: 0 } : { width: 800, height: 600, blank: false } } };
+      if (method === 'Page.captureScreenshot') {
+        if (shots++ === 0) throw new Error('Page.captureScreenshot timed out after 3000ms. Its outcome is uncertain; it was not replayed.');
+        return { data: 'c2hvdA==' };
+      }
+      return {};
+    },
+    browser: async (method) => {
+      calls.push(method);
+      if (method === 'SystemInfo.getInfo') { if (info instanceof Error) throw info; return info; }
+      if (method === 'Browser.getVersion') return version;
+      return {};
+    },
+  };
+  return { conn, calls };
+};
+test('a headless browser whose capture times out brings the tab to front and captures once more', async () => {
+  for (const commandLine of ['/opt/chrome --headless=new --remote-debugging-port=9333', '/opt/chrome --headless --user-agent=Mozilla/5.0']) {
+    const { conn, calls } = stalledCapture({ commandLine });
+    const shot = await ops.captureViewport(conn, 'tab');
+    assert.ok(shot, commandLine);
+    assert.equal(shot.data, 'c2hvdA==');
+    assert.deepEqual(calls.filter(m => m !== 'Runtime.evaluate'), ['Page.captureScreenshot', 'SystemInfo.getInfo', 'Page.bringToFront', 'Page.captureScreenshot']);
+  }
+  // No command line to read: a HeadlessChrome user agent says headless.
+  const { conn, calls } = stalledCapture(new Error('not allowed'), { product: 'Chrome/156.0.0.0', userAgent: 'Mozilla/5.0 HeadlessChrome/156.0.0.0' });
+  assert.ok(await ops.captureViewport(conn, 'tab'));
+  assert.equal(calls.filter(m => m === 'Page.bringToFront').length, 1);
+  assert.equal(calls.filter(m => m === 'Page.captureScreenshot').length, 2);
+});
+test('a headful browser whose capture times out is never brought to front', async () => {
+  for (const info of [
+    { commandLine: '/Applications/Dia.app/Contents/MacOS/Dia --remote-debugging-port=9223' },
+    { commandLine: '/usr/bin/chrome --headless-mode-note=x --app=https://example.com' },
+    new Error('SystemInfo unavailable'),
+    {},
+  ]) {
+    const { conn, calls } = stalledCapture(info);
+    assert.equal(await ops.captureViewport(conn, 'tab'), null);
+    assert.equal(calls.includes('Page.bringToFront'), false, JSON.stringify(String(info)));
+    assert.equal(calls.filter(m => m === 'Page.captureScreenshot').length, 1);
+  }
+});
+test('a capture that fails without timing out never asks whether the browser is headless', async () => {
+  const { conn, calls } = stalledCapture({ commandLine: 'chrome --headless=new' });
+  conn.send = async (targetId, method) => {
+    calls.push(method);
+    if (method === 'Runtime.evaluate') return { result: { value: { width: 800, height: 600, dpr: 1, x: 0, y: 0 } } };
+    throw new Error('Target closed');
+  };
+  assert.equal(await ops.captureViewport(conn, 'tab'), null);
+  assert.deepEqual(calls.filter(m => m !== 'Runtime.evaluate'), ['Page.captureScreenshot']);
+});
 t(
   'named visual pick at high confidence needs no uncertainty marker',
   async () => {

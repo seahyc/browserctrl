@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { spawnSync } from 'node:child_process';
-import { chromeBinary, startHeadlessBrowser, TEST_PORT } from './helpers.mjs';
+import { chromeBinary, startHeadlessBrowser, TEST_PORT, sampleFile } from './helpers.mjs';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as rec from '../lib/rec.mjs';
@@ -250,13 +250,12 @@ test('a still write failure still removes child instrumentation and closes the o
 
 test('fixture loop renders a video and four sample frames', { skip: !haveBrowser || !haveFfmpeg }, async () => {
   assert.ok(loopDir, 'loop recording was created');
-  const out = '/tmp/codex-bc/rec-tabs-loop.mp4';
-  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const out = sampleFile('rec-tabs-loop.mp4');
   const rendered = await renderVideo([loopDir], { out, fps: 2, width: 640, trace: true });
   assert.ok(fs.statSync(out).size > 0);
   for (let i = 0; i < 4; i++) {
     const at = rendered.seconds * (i + .5) / 4;
-    const frame = `/tmp/codex-bc/rec-tabs-loop-frame-${i + 1}.jpg`;
+    const frame = sampleFile(`rec-tabs-loop-frame-${i + 1}.jpg`);
     const extraction = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(at), '-i', out, '-frames:v', '1', frame], { encoding: 'utf8' });
     assert.equal(extraction.status, 0, extraction.stderr);
     assert.ok(fs.statSync(frame).size > 0);
