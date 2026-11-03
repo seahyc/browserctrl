@@ -156,7 +156,7 @@ test('startDetached spawns once, waits for the port, and leaves a running browse
   await assert.rejects(startDetached({ plan, ...c, readyTimeoutMs: 1000, spawnFn: fake, probe: async () => null }), /did not answer/);
 });
 
-import { alertCommands } from '../lib/captcha.mjs';
+import { alertCommands, focusClick } from '../lib/captcha.mjs';
 
 test('notifications pick the right tool per system without running anything', () => {
   const mac = alertCommands('hi', { platform: 'darwin', env: {} });
@@ -171,4 +171,22 @@ test('notifications pick the right tool per system without running anything', ()
   assert.equal(win[0][0], 'powershell');
   assert.ok(!win[0][1].join(' ').includes('ZZQ'), 'message travels in the environment, not the script');
   assert.equal(win[0][2].BROWSERCTRL_ALERT_TEXT, 'say "x"; ZZQ');
+});
+
+test('on macOS a handoff notification with agent-notify opens the tab when clicked', () => {
+  const click = focusClick(9223, 'ABCDEF0123456789', { node: '/opt/node', owner: 'agent-7', bin: '/b/browserctrl.mjs' });
+  assert.deepEqual(click, {
+    argv: ['/usr/bin/env', 'BROWSERCTRL_AGENT_ID=agent-7', '/opt/node', '/b/browserctrl.mjs', 'focus', 'ABCDEF0123456789', '--port', '9223'],
+    activate: 'company.thebrowser.dia',
+  });
+  const [first, sound] = alertCommands('hi', { platform: 'darwin', env: {}, has: n => n === 'agent-notify', click });
+  assert.equal(first[0], 'agent-notify');
+  assert.deepEqual(first[1].slice(first[1].indexOf('--activate')), ['--activate', 'company.thebrowser.dia', '--run', ...click.argv]);
+  assert.equal(first[3][0], 'osascript', 'AppleScript is the fallback when agent-notify fails');
+  assert.equal(sound[0], 'afplay');
+  // Without agent-notify, or without a tab to open, nothing changes.
+  assert.deepEqual(alertCommands('hi', { platform: 'darwin', env: {}, has: () => false, click }).map(c => c[0]), ['osascript', 'afplay']);
+  assert.deepEqual(alertCommands('hi', { platform: 'darwin', env: {}, has: () => true }).map(c => c[0]), ['osascript', 'afplay']);
+  assert.equal(focusClick(undefined, 'T'), null);
+  assert.equal(focusClick(9999, 'T', { owner: 'a' }).activate, null, 'an unknown browser is selected but not raised');
 });
