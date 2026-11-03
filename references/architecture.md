@@ -88,10 +88,13 @@ connection setup verifies its recorded PID, process start time, and socket owner
 before terminating it. Unverifiable ownership fails without killing a process.
 A daemon can also outlive its socket and owner file while still holding the port lock,
 when its event loop is blocked and neither SIGTERM nor its socket watchdog can run. The
-next daemon to start finds the lock holder with `lsof`, checks that it runs this port's
-`daemon-run.mjs`, is at least 30 seconds old, and that the socket and owner file are still
-missing, then sends SIGTERM and, after two seconds, SIGKILL. If the holder can't be
-identified, the client fails at once instead of waiting out the approval timeout.
+next daemon to start finds the lock holder (with `lsof`, or on Linux through `/proc/<pid>/fd`
+when `lsof` is missing), checks that it runs this port's `daemon-run.mjs`, is at least 30
+seconds old, and that the socket and owner file are still missing. It first saves a stack
+sample of the stuck process under the data folder's `diagnostics/` (macOS `sample`, or the
+Linux `/proc` wait state), then sends SIGTERM and, after two seconds, SIGKILL. If the holder
+can't be identified, the client fails at once instead of waiting out the approval timeout.
+A daemon's stderr goes to `daemon-<port>.stderr.log` in the runtime folder (restarted past 1 MB).
 Timed-out or interrupted actions are never replayed. Use `reconnect()` and make a
 fresh observation before deciding whether an action needs repeating.
 

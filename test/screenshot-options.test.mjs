@@ -80,3 +80,52 @@ test('element crops add --pad around the element', async t => {
   const cap = calls.find(c => c.method === 'Page.captureScreenshot').params;
   assert.deepEqual(cap.clip, {x: 0, y: 4, width: 126, height: 82, scale: 1});
 });
+
+// A capture that stalls the first time, as headless Chrome on Linux does for a background tab.
+function stallingConn({commandLine, firstError = 'Page.captureScreenshot timed out after 5000ms'}) {
+  const calls = [];
+  let captures = 0;
+  const conn = {
+    async browser(method) {
+      calls.push({method});
+      if (method === 'SystemInfo.getInfo') return {commandLine};
+      return {product: 'Chrome/156.0.0.0', userAgent: 'Mozilla/5.0 Chrome/156.0.0.0'};
+    },
+    async send(target, method, params, timeout) {
+      calls.push({method, timeout});
+      if (method === 'Page.captureScreenshot' && captures++ === 0) throw new Error(firstError);
+      if (method === 'Page.captureScreenshot') return {data: Buffer.from('owned test image').toString('base64')};
+      if (method === 'Runtime.evaluate') return {result: {value: 1}};
+      return {};
+    },
+  };
+  return {conn, calls};
+}
+
+test('a headless capture that stalls is retried once in front with the full deadline', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-headless-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  const {conn, calls} = stallingConn({commandLine: '/opt/chrome --headless=new --remote-debugging-port=9333'});
+  const shot = await screenshot(conn, 'T'.repeat(16), {path: path.join(dir, 'a.png')});
+  assert.ok(fs.statSync(shot.path).size > 0);
+  const captureCalls = calls.filter(c => c.method === 'Page.captureScreenshot' || c.method === 'Page.bringToFront');
+  assert.deepEqual(captureCalls.map(c => [c.method, c.timeout]), [
+    ['Page.captureScreenshot', 5000], ['Page.bringToFront', 5000], ['Page.captureScreenshot', 30000],
+  ]);
+});
+
+test('a headful capture keeps one full attempt and is never brought to front', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-headful-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  const {conn, calls} = stallingConn({commandLine: '/Applications/Dia.app/Contents/MacOS/Dia --remote-debugging-port=9223', firstError: 'Page.captureScreenshot timed out after 30000ms'});
+  await assert.rejects(screenshot(conn, 'T'.repeat(16), {path: path.join(dir, 'a.png')}), /timed out/);
+  assert.deepEqual(calls.filter(c => c.method.startsWith('Page.')).map(c => [c.method, c.timeout]), [['Page.captureScreenshot', 30000]]);
+});
+
+test('a headless capture that fails without stalling is not retried', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-fail-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  const {conn, calls} = stallingConn({commandLine: 'chrome --headless=new', firstError: 'Target closed'});
+  await assert.rejects(screenshot(conn, 'T'.repeat(16), {path: path.join(dir, 'a.png')}), /Target closed/);
+  assert.equal(calls.filter(c => c.method === 'Page.bringToFront').length, 0);
+});
