@@ -97,6 +97,8 @@ export const TEST_PORT = Number(process.env.BROWSERCTRL_TEST_PORT || 9333); // o
 // stretched to match, here and in every node process a test starts (see test/load.mjs).
 import { loadFactor, describeLoad, LOAD_IMPORT } from './load.mjs';
 export { loadFactor, scaled, describeLoad } from './load.mjs';
+// A test run never posts real desktop notices (agent-notify); notice tests inject their runner.
+process.env.BROWSERCTRL_NOTIFY ??= '0';
 if (!(process.env.NODE_OPTIONS || '').includes(LOAD_IMPORT)) process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS || ''} ${LOAD_IMPORT}`.trim();
 if (loadFactor() > 1) console.log(`# test timing stretched by ${describeLoad()}`);
 

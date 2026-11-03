@@ -10,7 +10,7 @@ import path from 'node:path';
 import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import * as cooldown from '../lib/cooldown.mjs';
-import { solve, handoff, ping } from '../lib/captcha.mjs';
+import { solve, handoff, ping, observe, flagNotice, flagKey, withdrawFlagNotice } from '../lib/captcha.mjs';
 import { runSteps } from '../lib/steps.mjs';
 import { runRecipe } from '../lib/recipes.mjs';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, clearAfterFocus, scaled, describeLoad } from './helpers.mjs';
@@ -141,4 +141,42 @@ t('a recipe hands its challenge to the human, then runs; with handoff off it fai
   assert.ok(Date.now() - started < scaled(15000), describeLoad());
   assert.equal(cooldown.active(local).kind, 'unknown-challenge');
   await assert.rejects(runRecipe(conn, blocked, {}, {}), /refusing to run fixture\/blocked against it/);
+});
+
+test('a block for unusual traffic tells the person (once), leaves the agent flow alone, and is withdrawn when clean', { skip: !haveBrowser }, async () => {
+  const posts = [], withdrawn = [];
+  const hooks = {
+    notify: (port, tab, url, kind) => flagNotice(port, tab, url, kind, { post: args => (posts.push(args), true) }),
+    unnotify: url => withdrawn.push(flagKey(url)) && withdrawFlagNotice(url, { clear: () => true }),
+  };
+  cooldown.clear(fixture.url);
+  const tab = await open('fixtures/unusual-traffic.html');
+  assert.equal(await observe(conn, tab, hooks), null, 'not a captcha: the agent flow is unchanged');
+  assert.equal(posts.length, 1);
+  assert.ok(posts[0].includes('--if-new'), 'agent-notify alerts once while the block stays');
+  assert.match(posts[0][posts[0].indexOf('--message') + 1], /blocked the browser as unusual traffic/);
+  assert.equal(cooldown.active(fixture.url), null, 'a block does not start a captcha cool-down');
+  await ops.evaluate(conn, tab, "document.getElementById('msg').textContent = 'Results'; document.title = 'Search'; document.querySelector('h1').textContent = 'Results'");
+  assert.equal(await observe(conn, tab, hooks), null);
+  assert.deepEqual(withdrawn, [flagKey(fixture.url)], 'clean again: the notice is withdrawn');
+  await observe(conn, tab, hooks);
+  assert.equal(withdrawn.length, 1, 'nothing left to withdraw on the next clean load');
+});
+
+test('a long article that mentions "access denied" is not a block page', { skip: !haveBrowser }, async () => {
+  const tab = await open('fixtures/article-access-denied.html');
+  const notices = [];
+  assert.equal(await observe(conn, tab, { notify: () => notices.push(1), unnotify: () => {} }), null);
+  assert.deepEqual(notices, []);
+});
+
+test('the flag notice names the site, opens the tab and shares the handoff key', () => {
+  const posted = [];
+  flagNotice(9223, 'ABCDEF0123456789', 'https://www.google.com/sorry/index', 'blocked', { post: args => (posted.push(args), true), mark: () => {} });
+  const args = posted[0];
+  assert.equal(args[args.indexOf('--title') + 1], 'google.com needs you');
+  assert.match(args[args.indexOf('--message') + 1], /blocked the browser as unusual traffic/);
+  assert.equal(args[args.indexOf('--key') + 1], flagKey('https://www.google.com/sorry/index'));
+  assert.deepEqual(args.slice(args.indexOf('--activate'), args.indexOf('--activate') + 3), ['--activate', 'company.thebrowser.dia', '--run']);
+  assert.ok(args.includes('focus') && args.includes('ABCDEF0123456789'));
 });
