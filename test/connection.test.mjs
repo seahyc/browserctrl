@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, test } from 'node:test';
 
 import { codeVersion, connect } from '../lib/daemon.mjs';
@@ -13,7 +15,7 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()();
 });
 
-async function fakeDaemon(handle) {
+async function fakeDaemon(handle, health = () => ({ ok: true, connected: true, browser: 'Fake/1', code: codeVersion() })) {
   const port = 30000 + (process.pid % 10000) + sequence++;
   const socketPath = SOCK(port);
   try {
@@ -35,7 +37,7 @@ async function fakeDaemon(handle) {
           socket.write(
             JSON.stringify({
               reqId: request.reqId,
-              result: { ok: true, connected: true, browser: 'Fake/1', code: codeVersion() },
+              result: health(),
             }) + '\n',
           );
         } else {
@@ -133,4 +135,86 @@ test('explicit reconnect can replace a healthy socket for subsequent requests', 
   assert.equal(await client.status(), 1);
   await client.reconnect();
   assert.equal(await client.status(), 2);
+});
+
+const compatibleOldDaemon = () => ({
+  ok: true, connected: true, code: 'older', pid: 1234,
+  cooperativeUpgrade: 1, vaultEntry: 1, vaultFill: 1,
+});
+
+async function withDeferredUpgrade(value, run) {
+  const old = process.env.BROWSERCTRL_DEFER_UPGRADE;
+  if (value === undefined) delete process.env.BROWSERCTRL_DEFER_UPGRADE;
+  else process.env.BROWSERCTRL_DEFER_UPGRADE = value;
+  try { await run(); }
+  finally {
+    if (old === undefined) delete process.env.BROWSERCTRL_DEFER_UPGRADE;
+    else process.env.BROWSERCTRL_DEFER_UPGRADE = old;
+  }
+}
+
+test('explicit deferred upgrade reuses only the protected compatible daemon', async () => {
+  await withDeferredUpgrade('1', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-transport-'));
+    const spawnLog = path.join(directory, 'spawn.jsonl');
+    const oldLog = process.env.BROWSERCTRL_TEST_DAEMON_LOG;
+    process.env.BROWSERCTRL_TEST_DAEMON_LOG = spawnLog;
+    cleanups.push(async () => {
+      if (oldLog === undefined) delete process.env.BROWSERCTRL_TEST_DAEMON_LOG;
+      else process.env.BROWSERCTRL_TEST_DAEMON_LOG = oldLog;
+      fs.rmSync(directory, {recursive: true, force: true});
+    });
+    const fake = await fakeDaemon(({request, socket}) => {
+      socket.write(JSON.stringify({reqId: request.reqId, result: {from: 'existing'}}) + '\n');
+    }, compatibleOldDaemon);
+    const client = await connect(fake.port, {owner: 'test-owner', label: 'test', mediated: true});
+    cleanups.push(async () => client.close());
+    assert.deepEqual(await client.status(), {from: 'existing'});
+    assert.deepEqual(fake.seen.map(r => r.op), ['status', 'status']);
+    assert.equal(fake.seen[1].owner, 'test-owner');
+    assert.equal(fake.seen[1].label, 'test');
+    assert.equal(fake.seen.some(r => ['upgrade', 'stop', 'vault-fill', 'browser'].includes(r.op)), false);
+    assert.equal(fs.existsSync(spawnLog), false, 'no replacement daemon was spawned');
+    assert.equal(fake.seen.some(r => Object.keys(r).some(k => /bypass|ignore.*gate|disable.*protect/i.test(k))), false);
+  });
+});
+
+test('without explicit opt-in a drifted daemon still receives a cooperative upgrade request', async () => {
+  await withDeferredUpgrade(undefined, async () => {
+    const fake = await fakeDaemon(({request, socket}) => {
+      socket.write(JSON.stringify({reqId: request.reqId, result: 'busy'}) + '\n');
+    }, compatibleOldDaemon);
+    await assert.rejects(connect(fake.port), /Daemon upgrade deferred/);
+    assert.deepEqual(fake.seen.map(r => r.op), ['status', 'upgrade']);
+  });
+});
+
+test('opt-in does not reuse an old daemon without both protection capabilities', async () => {
+  for (const missing of ['vaultEntry', 'vaultFill', 'cooperativeUpgrade']) {
+    await withDeferredUpgrade('1', async () => {
+      const fake = await fakeDaemon(({request, socket}) => {
+        socket.write(JSON.stringify({reqId: request.reqId, result: 'busy'}) + '\n');
+      }, () => ({...compatibleOldDaemon(), [missing]: 0}));
+      await assert.rejects(connect(fake.port), /Daemon upgrade deferred|does not support a safe cooperative upgrade/);
+      assert.equal(fake.seen[0].op, 'status');
+      assert.equal(fake.seen.some(r => r.op === 'browser'), false);
+      if (missing === 'cooperativeUpgrade') assert.deepEqual(fake.seen.map(r => r.op), ['status']);
+      else assert.deepEqual(fake.seen.map(r => r.op), ['status', 'upgrade']);
+    });
+  }
+});
+
+test('opt-in never reuses an unhealthy daemon', async () => {
+  await withDeferredUpgrade('1', async () => {
+    let probes = 0;
+    const fake = await fakeDaemon(({request, socket}) => {
+      socket.write(JSON.stringify({reqId: request.reqId, result: 'healthy'}) + '\n');
+    }, () => ++probes === 1 ? {...compatibleOldDaemon(), ok: false, starting: true} :
+      {ok: true, code: codeVersion()});
+    const client = await connect(fake.port);
+    cleanups.push(async () => client.close());
+    assert.equal(await client.status(), 'healthy');
+    assert.equal(probes, 2);
+    assert.deepEqual(fake.seen.map(r => r.op), ['status', 'status', 'status']);
+  });
 });
