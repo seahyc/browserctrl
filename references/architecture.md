@@ -86,6 +86,12 @@ recording clients before starting a new recording.
 A subsequent connection creates a replacement. If the daemon itself stops answering,
 connection setup verifies its recorded PID, process start time, and socket ownership
 before terminating it. Unverifiable ownership fails without killing a process.
+A daemon can also outlive its socket and owner file while still holding the port lock,
+when its event loop is blocked and neither SIGTERM nor its socket watchdog can run. The
+next daemon to start finds the lock holder with `lsof`, checks that it runs this port's
+`daemon-run.mjs`, is at least 30 seconds old, and that the socket and owner file are still
+missing, then sends SIGTERM and, after two seconds, SIGKILL. If the holder can't be
+identified, the client fails at once instead of waiting out the approval timeout.
 Timed-out or interrupted actions are never replayed. Use `reconnect()` and make a
 fresh observation before deciding whether an action needs repeating.
 

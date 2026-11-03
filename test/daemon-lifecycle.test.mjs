@@ -131,6 +131,33 @@ test('a frozen daemon is replaced on demand using verified process ownership', p
 });
 
 
+test('a frozen daemon whose socket and owner file are gone is retired so a new one can start', posixOptions, async t => {
+  const previous = process.env.BROWSERCTRL_TEST_ORPHAN_MIN_AGE_MS;
+  process.env.BROWSERCTRL_TEST_ORPHAN_MIN_AGE_MS = '1';
+  t.after(() => {
+    if (previous === undefined) delete process.env.BROWSERCTRL_TEST_ORPHAN_MIN_AGE_MS;
+    else process.env.BROWSERCTRL_TEST_ORPHAN_MIN_AGE_MS = previous;
+  });
+  const { port } = await fixture(t);
+  const client = await connect(port);
+  t.after(() => client.close());
+  const { pid } = await client.health();
+  await new Promise(resolve => setTimeout(resolve, 1100)); // ps reports age in whole seconds
+  // The observed state: a daemon that can no longer run JavaScript (SIGTERM and its own
+  // socket watchdog never fire) still holds the port lock after its socket went away.
+  process.kill(pid, 'SIGSTOP');
+  fs.unlinkSync(SOCK(port));
+  fs.unlinkSync(`${SOCK(port)}.owner.json`);
+  const started = Date.now();
+  const replacement = await connect(port);
+  t.after(() => replacement.close());
+  const health = await replacement.health();
+  assert.notEqual(health.pid, pid);
+  assert.ok(Date.now() - started < 30000, `took ${Date.now() - started} ms`);
+  assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+  await assertSoleDaemon(port, health.pid);
+});
+
 test('browser restart shares the existing daemon recovery instead of retiring it', options, async t => {
   const { port, browser } = await fixture(t);
   const client = await connect(port);
