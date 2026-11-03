@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { formatSteps } from '../lib/steps.mjs';
 
@@ -59,8 +60,14 @@ test('resume keeps embedded newlines on one physical command line', () => {
   const step = 'fill Search = "first\nsecond\rthird"';
   const text = formatSteps(report({ plan: ['click First', step], ...noCandidates }));
   const command = resumeLine(text).replace('resume: browserctrl do ', 'set -- ');
-  const args = execFileSync('/bin/zsh', ['-c', command + '\nprintf "%s\\0" "$@"'], { encoding: 'utf8' }).split('\0').slice(0,-1);
-  assert.deepEqual(args, ['tab-1', step]);
+  // The line is pasted into an interactive shell: zsh on macOS, bash on Linux. Check each one
+  // this machine has (dash, the Linux /bin/sh, has no $'…' quoting and is not one of them).
+  const shells = ['/bin/zsh', '/bin/bash'].filter(sh => fs.existsSync(sh));
+  assert.ok(shells.length, 'neither zsh nor bash is installed');
+  for (const sh of shells) {
+    const args = execFileSync(sh, ['-c', command + '\nprintf "%s\\0" "$@"'], { encoding: 'utf8' }).split('\0').slice(0,-1);
+    assert.deepEqual(args, ['tab-1', step], sh);
+  }
 });
 
 test('the printed replacement runs in a shell as one argument per step', () => {

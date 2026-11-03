@@ -44,7 +44,7 @@ jobs:
         env:
           CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
           CHROME_TEST_NO_SANDBOX: "1"
-        run: node test/windows-screenshot-probe.mjs
+        run: node --import ./test/helpers.mjs test/windows-screenshot-probe.mjs
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:

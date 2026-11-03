@@ -6,7 +6,7 @@ import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { fakeJev, optionWith } from './fake-jev.mjs';
-import { startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startHeadlessBrowser, chromeBinary, TEST_PORT, sampleFile } from './helpers.mjs';
 let server, browser, conn, base;
 const haveBrowser = Boolean(chromeBinary());
 before(async () => {
@@ -30,7 +30,7 @@ const inputs = tab => ops.evaluate(conn, tab, 'inputs');
 t('stable exact form fills once each without target model questions', async tab => {
   const j = good(), r = await run(tab, j);
   assert.equal(r.done, true, JSON.stringify(r.stopped));
-  fs.writeFileSync('/tmp/codex-bc/dsl-b-samepage-sample.txt', formatSteps(r) + '\n');
+  fs.writeFileSync(sampleFile('dsl-b-samepage-sample.txt'), formatSteps(r) + '\n');
   assert.deepEqual(await inputs(tab), ['first', 'last']);
   assert.equal(j.calls.some(c => Object.keys(c.questions).some(k => k.startsWith('target.'))), false);
 });

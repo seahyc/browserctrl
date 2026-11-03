@@ -6,7 +6,7 @@ import { connect } from '../lib/daemon.mjs';
 import * as ops from '../lib/ops.mjs';
 import { runSteps, formatSteps } from '../lib/steps.mjs';
 import { fakeJev, optionWith } from './fake-jev.mjs';
-import { startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
+import { startHeadlessBrowser, chromeBinary, TEST_PORT, sampleFile } from './helpers.mjs';
 let server, browser, conn, base;
 const hits = [];
 const haveBrowser = Boolean(chromeBinary());
@@ -54,7 +54,7 @@ t('frozen distribution tries wrong detail then correct and closes owned tabs',as
   assert.equal(r.owned_tabs.length,1);
   assert.deepEqual((await ops.tabs(conn)).map(t=>t.targetId).filter(id=>!r.owned_tabs.includes(id)).sort(),tabs);
   for(const id of r.owned_tabs) await ops.closeTab(conn,id);
-  fs.writeFileSync('/tmp/codex-bc/dsl-b-try-samples.txt',formatSteps(r));
+  fs.writeFileSync(sampleFile('dsl-b-try-samples.txt'),formatSteps(r));
 });
 
 t('exhaustion and none keep source unchanged',async tab=>{
@@ -134,7 +134,7 @@ for (const [label, attrs, expected] of [
   assert.match(r.stopped.reason,expected);
   assert.equal(await ops.evaluate(conn,tab,'inputs'),0);
   assert.equal(r.candidate_attempts||0,0);
-  if(label==='Send message') fs.appendFileSync('/tmp/codex-bc/dsl-b-try-samples.txt','\n\n'+formatSteps(r));
+  if(label==='Send message') fs.appendFileSync(sampleFile('dsl-b-try-samples.txt'),'\n\n'+formatSteps(r));
 });
 
 t('accepted owned detail remains current for following extraction',async tab=>{
