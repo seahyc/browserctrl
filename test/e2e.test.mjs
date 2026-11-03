@@ -164,6 +164,44 @@ t('full-page screenshot captures below the fold', async () => {
   assert.ok(full.bytes > viewport.bytes, 'full page should capture more than the viewport');
 });
 
+// Decode a capture in the page and read one pixel (image px), so tests need no PNG library.
+async function pixelOf(shot, x, y) {
+  return ops.evaluate(conn, tabId, `(async()=>{ const im = new Image(); im.src = 'data:image/png;base64,${shot.base64}';
+    await im.decode(); const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const g = c.getContext('2d'); g.drawImage(im, 0, 0); const d = g.getImageData(${x}, ${y}, 1, 1).data;
+    return { w: im.naturalWidth, h: im.naturalHeight, rgb: [d[0], d[1], d[2]] }; })()`);
+}
+
+t('shot --viewport/--scale captures at that size and restores the tab afterwards', async () => {
+  await ops.navigate(conn, tabId, fixture.url, { waitUntil: 'load' });
+  const before = await ops.evaluate(conn, tabId, '({w: innerWidth, d: devicePixelRatio})');
+  const shot = await ownedScreenshot({ viewport: { width: 640, height: 400 }, scale: 2, path: path.join(os.tmpdir(), 'cdp-test-scale.png') });
+  const px = await pixelOf(shot, 0, 0);
+  assert.deepEqual([px.w, px.h], [1280, 800]);
+  assert.deepEqual(await ops.evaluate(conn, tabId, '({w: innerWidth, d: devicePixelRatio})'), before);
+});
+
+t('shot crops a centred position:fixed modal on a scroll-locked page, and --mask blurs only during the capture', async () => {
+  await ops.navigate(conn, tabId, fixture.url, { waitUntil: 'load' });
+  await ops.evaluate(conn, tabId, `(() => { document.body.style.minHeight = '4000px'; scrollTo(0, 1500); document.body.style.overflow = 'hidden';
+    const m = document.createElement('div'); m.id = 'fixed-modal';
+    m.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:200px;height:120px;background:rgb(255,0,0);z-index:99';  // centred like a real modal
+    const s = document.createElement('span'); s.id = 'secret'; s.textContent = 'Budi Santoso';
+    s.style.cssText = 'display:block;width:200px;height:60px;background:rgb(0,0,255)'; m.appendChild(s);
+    document.body.appendChild(m); })()`);
+  const plain = await ownedScreenshot({ selector: '#fixed-modal', path: path.join(os.tmpdir(), 'cdp-test-modal.png') });
+  const red = await pixelOf(plain, 100, 100);
+  assert.deepEqual([red.w, red.h], [200, 120]);
+  assert.deepEqual(red.rgb, [255, 0, 0], 'the crop shows the fixed modal, not the page under it');
+  const masked = await ownedScreenshot({ selector: '#fixed-modal', mask: ['#secret'], maskBlur: 20, path: path.join(os.tmpdir(), 'cdp-test-masked.png') });
+  assert.deepEqual(masked.masked, { '#secret': 1 });
+  const edge = await pixelOf(masked, 100, 58);   // the blue span's bottom edge bleeds into red when blurred
+  assert.notDeepEqual(edge.rgb, [0, 0, 255]);
+  assert.equal(await ops.evaluate(conn, tabId, "document.querySelectorAll('[data-browserctrl-mask], #browserctrl-shot-mask-style').length"), 0);
+  await assert.rejects(ownedScreenshot({ selector: '#fixed-modal', mask: ['#nope'], requireMask: true, path: path.join(os.tmpdir(), 'cdp-test-never.png') }), /matched nothing/);
+  await ops.evaluate(conn, tabId, "document.getElementById('fixed-modal').remove(); document.body.style.minHeight = ''; document.body.style.overflow = ''; scrollTo(0, 0)");
+});
+
 t('diagnostics buffer console output and failed requests', async () => {
   await ops.navigate(conn, tabId, fixture.url, { waitUntil: 'load' });
   const snap = await ops.readPage(conn, tabId);

@@ -54,6 +54,7 @@ First `browserctrl site <site or URL>`: its recipes (the site's own API) and flo
 | Every page of a paged list or log | one `do` with `--repeat 'click "Next"' --collect rows --out /tmp/rows.jsonl` |
 | The same steps on several tabs | `do --each-tab <id,id\|all-mine> '<step>' …` |
 | A file upload | `upload "$t" "Resume" ~/cv.pdf` |
+| A screenshot for a deck, with personal data blurred | `shot "$t" out.png --viewport 1440x900 --scale 2 --mask '<css>;<css>' --require-mask` ([details](references/reading-and-acting.md#screenshots-for-a-deck-or-document)) |
 | Details from several list items | `visit <links> --grep "<label>"` |
 | Controls whose names you can't guess | `read "$t"` once, then plan from the names it shows |
 

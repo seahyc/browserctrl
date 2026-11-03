@@ -655,7 +655,7 @@ messages read. `tabs` tags it `rendering` and never reports it as `←you`.
 ## See what happened
 
 ```bash
-browserctrl shot <tab> /tmp/out.png            # add --full, or --ref ref_3 / --selector css
+browserctrl shot <tab> /tmp/out.png            # add --full, or --ref ref_3 / --selector css; --viewport/--scale/--mask below
 browserctrl console <tab>                      # console output + uncaught errors
 browserctrl network <tab> --failed             # 4xx/5xx and failed requests
 browserctrl cookies <tab>
@@ -672,6 +672,26 @@ browserctrl eval <tab> "location.href"
 
 Console and network are buffered by the daemon from the moment it attaches to
 a tab, so reload after attaching if you need the events from page load.
+
+## Screenshots for a deck or document
+
+```bash
+browserctrl shot <tab> out.png --viewport 1440x900 --scale 2 \
+  --mask '.candidate-name;img.avatar' --require-mask --selector '.panel' --pad 16
+```
+
+- `--viewport WxH` and `--scale N` (device pixel ratio) apply only for the capture and are
+  cleared afterwards, so a 1440x900 page at `--scale 2` is a 2880x1800 PNG. The page re-lays
+  itself out at that size first: a site that swaps components at a breakpoint can close an open
+  menu or modal, so check the image.
+- `--mask` blurs what each selector matches (`;` separates selectors, open shadow roots
+  included) for the capture only, then removes the blur. The report counts matches per
+  selector, and a selector that matched nothing is a warning. With `--require-mask` it is an
+  error and nothing is written: use it for personal data, so a changed page cannot slip an
+  unmasked image through. `--mask-blur` sets the radius (12 px).
+- `--pad N` adds a margin around a `--ref` or `--selector` crop.
+- Masking text by selector cannot reach pixels inside an image or canvas; cover those with
+  your own overlay before the capture.
 
 ## Background screenshot frames
 

@@ -134,7 +134,7 @@ const MUTATING = new Set([
 
 // Flags that never take a value, so `--json <tab>` or `-q <tab>` keeps the word that follows.
 // --count takes one only when it is a number (click --count 2; find … --count).
-const SWITCHES = new Set(['quiet', 'json', 'jsonl', 'enabled', 'no-dedupe', 'id', 'csv', 'commit', 'headless', 'no-sandbox', 'foreground', 'stop', 'vnc']);
+const SWITCHES = new Set(['quiet', 'json', 'jsonl', 'enabled', 'no-dedupe', 'id', 'csv', 'commit', 'headless', 'no-sandbox', 'foreground', 'stop', 'vnc', 'require-mask']);
 // Flags written as --name=value (the rest take their value as the next word).
 const EQUALS = new Set(['headless']);
 
@@ -347,6 +347,9 @@ function usage() {
 
   See what happened:
     browserctrl shot <tab> [file] [--full] [--emulate-focus] [--ref ref_3] [--selector css]
+                       [--viewport 1440x900] [--scale 2]   capture at that CSS size and device pixel ratio, then restore
+                       [--mask "css;css"] [--mask-blur 12] [--require-mask]   blur matches during the capture only;
+                       --require-mask refuses to capture when a mask matches nothing   [--pad 16] margin around --ref/--selector
     browserctrl console <tab> [--limit 50] [--clear]
     browserctrl network <tab> [--failed]
     browserctrl cookies <tab>
@@ -1703,9 +1706,18 @@ const main = async () => {
           fullPage: Boolean(flags.full), emulateFocus: Boolean(flags['emulate-focus']),
           ref: flags.ref,
           selector: flags.selector,
+          viewport: ops.parseViewport(flags.viewport),
+          scale: ops.parseScale(flags.scale),
+          mask: ops.parseMasks(flags.mask),
+          maskBlur: flags['mask-blur'],
+          requireMask: Boolean(flags['require-mask']),
+          pad: Number(flags.pad || 0),
         });
-        if (flags.json) return out({ path: res.path, bytes: res.bytes, dpr: res.dpr });
-        return out(`Saved ${res.path} (${Math.round(res.bytes / 1024)} KB, DPR=${res.dpr}; CSS px = image px / DPR)`);
+        const zero = Object.entries(res.masked || {}).filter(([, n]) => !n).map(([s]) => s);
+        if (zero.length) console.error(`warning: --mask matched nothing for: ${zero.join(' ; ')} (add --require-mask to refuse the capture instead)`);
+        if (flags.json) return out({ path: res.path, bytes: res.bytes, dpr: res.dpr, ...(res.masked ? { masked: res.masked } : {}), ...(res.viewport ? { viewport: res.viewport } : {}) });
+        const maskNote = res.masked ? `; masked ${Object.entries(res.masked).map(([s, n]) => `${n}×${s}`).join(', ')}` : '';
+        return out(`Saved ${res.path} (${Math.round(res.bytes / 1024)} KB, DPR=${res.dpr}${res.viewport ? `, viewport ${res.viewport.width}x${res.viewport.height}` : ''}${maskNote}; CSS px = image px / DPR)`);
       }
       case 'console': {
         const d = await ops.diagnostics(conn, targetId, { limit: Number(flags.limit || 50), clear: Boolean(flags.clear) });
