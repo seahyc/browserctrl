@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { connect } from '../lib/daemon.mjs';
+import { connect, lockHolders } from '../lib/daemon.mjs';
 import { SOCK } from '../lib/env.mjs';
 import { startHeadlessBrowser, chromeBinary, stopLoggedDaemons } from './helpers.mjs';
 
@@ -156,6 +156,13 @@ test('a frozen daemon whose socket and owner file are gone is retired so a new o
   assert.ok(Date.now() - started < 30000, `took ${Date.now() - started} ms`);
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
   await assertSoleDaemon(port, health.pid);
+  if (['darwin', 'linux'].includes(process.platform)) {
+    const { dirs } = await import('../lib/config.mjs');
+    const diagnostics = path.join(dirs.data, 'diagnostics');
+    const samples = fs.existsSync(diagnostics) ? fs.readdirSync(diagnostics).filter(f => f.startsWith(`stuck-daemon-${port}-${pid}-`)) : [];
+    assert.equal(samples.length, 1, 'a stack sample of the stuck daemon was saved before it was retired');
+    assert.ok(fs.statSync(path.join(diagnostics, samples[0])).size > 0);
+  }
 });
 
 test('browser restart shares the existing daemon recovery instead of retiring it', options, async t => {
@@ -251,4 +258,20 @@ test('a live legacy daemon is left running until an owner coordinates safe upgra
   assert.equal(legacy.exitCode,null);
   assert.doesNotMatch(output,/stopped/);
   assert.doesNotMatch(output,/unexpected browser health/);
+});
+
+test('without lsof, Linux finds a lock holder through /proc', { skip: process.platform !== 'linux' }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lock-holders-'));
+  const file = path.join(dir, 'held.lock');
+  const fd = fs.openSync(file, 'a');
+  try {
+    const found = await lockHolders(file, { lsofPaths: [] });
+    assert.equal(found.unverifiable, undefined);
+    assert.ok(found.pids.includes(process.pid), JSON.stringify(found));
+    fs.closeSync(fd);
+    assert.equal((await lockHolders(file, { lsofPaths: [] })).pids.includes(process.pid), false);
+  } finally {
+    try { fs.closeSync(fd); } catch {}
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -329,7 +329,9 @@ t('wait --download prints the path of the file a click downloaded; nothing new e
   const conn = await connect(TEST_PORT);
   try { await conn.browser('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dir }); } finally { conn.close(); }
   const tab = await open('cli-panes.html');
-  const click = await run(['click', tab, 'Download CSV']);
+  // By selector: this test is about wait --download, not name lookup, which once missed the
+  // link on CI Ubuntu ("not an exact name on the page") and never reproduced elsewhere.
+  const click = await run(['click', tab, 'a[download]']);
   assert.equal(click.code, 0, click.stdout + click.stderr);
   const wait = await run(['wait', '--download', dir, '--timeout', '20000'], { port: null });
   assert.equal(wait.code, 0, wait.stderr);
