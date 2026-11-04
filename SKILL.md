@@ -33,14 +33,30 @@ Use the `browserctrl` CLI on PATH. `browserctrl help` lists every command and fl
 | 5 | refused (claimed tab, cool-down, a committing control, a protected tab) |
 | 6 | other failure (timeout, closed tab, page error) |
 
-- Read reports in full. Don't pipe browserctrl through `tail`, `head` or `grep`, and don't send
-  it to `/dev/null`: that hides the stop reason and the exit code. Use `-q` for quiet output
-  and test the exit code: `browserctrl find "$t" "Next" --enabled -q && …`.
+- Read reports in full. Don't cut an action's or a `do` plan's report with `| tail`, `| head` or
+  `| grep`, and don't send it to `/dev/null`: that hides the stop reason and the exit code. Use
+  `-q` for quiet output and test the exit code: `browserctrl find "$t" "Next" --enabled -q && …`.
 - `--json` on read commands gives one object, `--jsonl` one record per line.
-- Shell habits work without a pipe: `grep "$t" 'Total|Due' -i`, `head "$t" -n 40`, `tail "$t" -n 40`,
-  `cat "$t"`, `ls`, `pwd "$t"`, `back "$t"`, `--agent-id NAME`, `--name=value`. A flag a command
-  doesn't take exits 2 and says what it takes; `wait` takes a condition, never `--ms`.
-  Details: [scripting](references/scripting.md).
+- Page text works like a file, through the commands' own Unix spellings. Their stdout is only
+  the lines, so they pipe cleanly (`| wc -l`, `| sort`, `| xargs`), and notices go to stderr:
+
+  | Typed | Means |
+  | --- | --- |
+  | `grep "$t" 'Total\|Due' [-i -v -n -c -F -q]` | matching lines; case-sensitive unless `-i`; exit 1 when none |
+  | `head "$t" -n 40`, `tail "$t" -n 40` | the first or last lines (`text --head/--tail`) |
+  | `cat "$t"` | `text` |
+  | `ls`, `ls --ids` | `tabs` |
+  | `cd "$t"`, `pwd` | `use "$t"`; the current tab's address (`url "$t"` for any tab) |
+  | `back "$t"`, `forward "$t"` | history, as the browser's buttons (`--then text` works) |
+  | `whoami` | the identity tab claims belong to |
+
+- `--agent-id NAME` on any command sets the identity for that call; `--tab "$t"` names the tab;
+  `--name=value` and `--` work as in getopt.
+- A flag a command doesn't take exits 2 and says what it takes. Known synonyms are taken with a
+  note on stderr (`--max-chars` as `--max-text`, `--limit` as `--max`, `--first`/`--last` as
+  `--head`/`--tail`), and so are typos in a command that only looks (`txet`, `--tali`); a typo in
+  an action is still an error, so nothing is clicked on a guess. `wait` takes a condition,
+  never `--ms`. Details: [scripting](references/scripting.md).
 
 ## Fastest way through a task
 

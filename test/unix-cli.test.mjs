@@ -6,11 +6,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT } from './helpers.mjs';
 import { EXIT } from '../lib/exit-codes.mjs';
-import { resolve, checkFlags, parseArgs, GLOBAL, ACTION_FLAGS, ACTION_COMMON, COMMAND_FLAGS, THEN_FLAGS } from '../lib/cli-flags.mjs';
+import { resolve, checkFlags, parseArgs, autocorrect, GLOBAL, ACTION_FLAGS, ACTION_COMMON, COMMAND_FLAGS, THEN_FLAGS } from '../lib/cli-flags.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-unix-cli-'));
@@ -123,7 +123,7 @@ test('--tab names the tab, --at a point, and spellings agents use map to the fla
 
 test('a flag any command would ignore is a usage error that says what it takes', () => {
   usageError(() => check(['wait', 'ABCDEF12', '--ms', '2000']), /not for a time.*sleep in the shell/);
-  usageError(() => check(['text', 'ABCDEF12', '--max-chars', '1000']), /text does not take --max-chars\. Did you mean --max-text\?/);
+  usageError(() => check(['text', 'ABCDEF12', '--bogus-thing', '1000']), /text does not take --bogus-thing\. It takes --tail/);
   usageError(() => check(['read', 'ABCDEF12', '--grep', 'Sign in']), /read does not take --grep; text does: browserctrl text <tab> --grep 'Sign in'|read does not take --grep; items does/);
   usageError(() => check(['read', 'ABCDEF12', '--tail', '25']), /read does not take --tail; text does: browserctrl text <tab> --tail 25/);
   usageError(() => check(['find', 'ABCDEF12', 'video', '--role', 'video']), /find does not take --role\. It takes --max/);
@@ -137,6 +137,36 @@ test('a flag any command would ignore is a usage error that says what it takes',
     ['do', 'x', 'click "A"', '--then', 'items', '--grep', 'y'], ['click', 'x', 'Save', '--then', 'text', '--head', '3'],
     ['back', 'x', '--then', 'text', '--tail', '3'], ['wait', 'x', '--text', 'Saved', '--timeout', '100'], ['tabs', '--ids', '-q'],
     ['url', 'x'], ['whoami', '--json']]) check(argv);
+});
+
+test('synonyms are taken on any command; typos only on commands that just look', () => {
+  const r = (argv) => { const x = resolve(argv, {}); checkFlags(x.cmd, x.flags, x.positional); return x; };
+  let x = r(['text', 'ABCDEF12', '--max-chars', '1000']);
+  assert.deepEqual([x.flags['max-text'], x.notes], ['1000', ['(took --max-chars as --max-text)']]);
+  assert.equal(r(['items', 'ABCDEF12', '--limit', '5']).flags.max, '5');
+  assert.equal(r(['console', 'ABCDEF12', '--limit', '5']).flags.limit, '5', 'a real flag stays');
+  assert.equal(r(['text', 'ABCDEF12', '--first', '3']).flags.head, '3');
+  assert.equal(r(['text', 'ABCDEF12', '--tali', '5']).flags.tail, '5', 'a swap of two letters is one typo');
+  assert.equal(r(['find', 'ABCDEF12', 'Next', '--enabeld']).flags.enabled, true);
+  assert.equal(r(['tabs', '--jsno']).flags.json, true);
+  x = r(['shot', 'ABCDEF12', '--ful', 'a.png']);
+  assert.deepEqual([x.flags.full, x.positional], [true, ['shot', 'ABCDEF12', 'a.png']], 'a mistyped switch gives back the word it took');
+  // An action keeps the error: a guess there could act on the wrong thing.
+  usageError(() => r(['click', 'ABCDEF12', 'Save', '--comit']), /click does not take --comit\. Did you mean --commit\?/);
+  usageError(() => r(['do', 'ABCDEF12', 'click "A"', '--repaet', 'click "Next"']), /Did you mean --repeat\?/);
+  // A real flag of another command is not "corrected": the error says which command takes it.
+  usageError(() => r(['read', 'ABCDEF12', '--grep', 'x']), /read does not take --grep; text does/);
+  // Two equally close flags: no guess.
+  assert.deepEqual(autocorrect('table', { maxx: '3', mxa: '1' }, []).length <= 1, true);
+});
+
+test('a misspelt command that only looks runs as the one meant; an action does not', () => {
+  let x = resolve(['txet', 'ABCDEF12', '--tail', '2'], {});
+  assert.deepEqual([x.cmd, x.notes[0]], ['text', '(ran "txet" as text)']);
+  assert.equal(resolve(['--browser', 'dia', 'tabss'], {}).cmd, 'tabs');
+  assert.equal(resolve(['whoamii'], {}).cmd, 'whoami');
+  assert.equal(resolve(['clik', 'ABCDEF12', 'Save'], {}).cmd, 'clik', 'click changes the page: still an unknown command');
+  assert.equal(resolve(['fil', 'ABCDEF12', 'a', 'b'], {}).cmd, 'fil');
 });
 
 // Every flag the CLI reads is in some command's list, so a new flag cannot be rejected by mistake.
@@ -254,3 +284,109 @@ t('url and pwd print the address; back and forward walk the history', async () =
   r = await run(['forward', tab]);
   assert.equal(r.code, EXIT.NO);
 });
+
+// A shell pipeline against the test browser: the command line as an agent writes it.
+function sh(script) {
+  const r = spawnSync('/bin/sh', ['-c', script], {
+    env: { ...BASE_ENV, BROWSERCTRL_PORT: String(TEST_PORT), BC: `${process.execPath} ${path.join(ROOT, 'bin/browserctrl.mjs')}` },
+    encoding: 'utf8', timeout: 120000,
+  });
+  return { code: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+t('output works in pipes: exact lines, early close, xargs and grep -q', async () => {
+  const tab = await open();
+  let r = sh(`$BC head ${tab} -n 2 | wc -l`);
+  assert.equal(r.stdout.trim(), '2', r.stderr);
+  r = sh(`$BC grep ${tab} -i beta | wc -l`);
+  assert.equal(r.stdout.trim(), '2', r.stderr);
+  // A reader that stops early is not an error: the pipeline's status is head's, and ours is 0.
+  r = sh(`$BC cat ${tab} | head -1; echo "status=$?"`);
+  assert.match(r.stdout, /^alpha one\nstatus=0$/m, r.stderr);
+  assert.doesNotMatch(r.stderr, /EPIPE|Error/);
+  r = sh(`$BC ls --ids | grep -x ${tab} | xargs -n1 $BC url`);
+  assert.equal(r.stdout.trim(), `${fixture.url}fixtures/unix-cli.html`, r.stderr);
+  r = sh(`if $BC grep ${tab} gamma -q; then echo yes; else echo no; fi; if $BC grep ${tab} zzz -q; then echo yes; else echo no; fi`);
+  assert.equal(r.stdout, 'yes\nno\n', r.stderr);
+  r = sh(`$BC tail ${tab} -n 3 | LC_ALL=C sort | head -1`);
+  assert.equal(r.stdout.trim(), 'Next page', r.stderr);
+});
+
+t('typos in a look are corrected with a note on stderr, stdout stays the data', async () => {
+  const tab = await open();
+  const r = await run(['txet', tab, '--tali', '1']);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout.trim(), 'Next page');
+  assert.match(r.stderr, /\(ran "txet" as text\)/);
+  assert.match(r.stderr, /\(took --tali as --tail\)/);
+  const q = await run(['txet', tab, '--tali', '1', '-q']);
+  assert.equal(q.stderr, '', '-q drops the notes');
+  const bad = await run(['click', tab, '#next', '--comit']);
+  assert.equal(bad.code, EXIT.USAGE, bad.stderr);
+});
+
+t('ls, cd, pwd and --agent-id: the current tab follows the identity', async () => {
+  // The tab belongs to the identity that opens it; cd under another one would be refused.
+  const o = await run(['open', `${fixture.url}fixtures/unix-cli.html`, '--agent-id', 'unix-agent-a']);
+  assert.equal(o.code, 0, o.stderr);
+  const tab = JSON.parse(o.stdout).id;
+  let r = await run(['ls', '--ids']);
+  assert.ok(r.stdout.split('\n').includes(tab), r.stdout);
+  r = await run(['cd', tab, '--agent-id', 'unix-agent-a']);
+  assert.equal(r.code, 0, r.stderr);
+  assert.doesNotMatch(r.stderr, /BROWSERCTRL_AGENT_ID is not set/, 'the flag set the identity');
+  r = await run(['pwd', '--agent-id', 'unix-agent-a']);
+  assert.equal(r.stdout.trim(), `${fixture.url}fixtures/unix-cli.html`, 'no tab given: the current tab of that agent');
+  r = await run(['head', '-n', '1', '--agent-id', 'unix-agent-a']);
+  assert.equal(r.stdout.trim(), 'alpha one');
+  r = await run(['pwd', '--agent-id', 'unix-agent-b']);
+  assert.notEqual(r.code, 0, 'another identity has no current tab');
+  r = await run(['release', '--all', '--agent-id', 'unix-agent-a']);
+  assert.equal(r.code, 0, r.stderr);
+});
+
+t('screenshot -o, goto, press, snapshot, fill --text and click --at do what they name', async () => {
+  const tab = await open();
+  const png = path.join(TMP, 'shot.png');
+  let r = await run(['screenshot', tab, '-o', png]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(fs.statSync(png).size > 1000);
+  r = await run(['snapshot', tab]);
+  assert.match(r.stdout, /ref_\d+/);
+  r = await run(['fill', tab, '--selector', '#q', '--text', 'hello', '--no-diff']);
+  assert.equal(r.code, 0, r.stderr);
+  r = await run(['eval', tab, 'document.querySelector("#q").value']);
+  assert.equal(r.stdout.trim(), 'hello');
+  r = await run(['press', tab, 'Tab', '--no-diff']);
+  assert.equal(r.code, 0, r.stderr);
+  const box = JSON.parse((await run(['eval', tab, 'JSON.stringify((r => [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)])(document.querySelector("#next").getBoundingClientRect()))'])).stdout.trim().replace(/^"|"$/g, '').replace(/\\"/g, '"'));
+  r = await run(['click', tab, '--at', `${box[0]},${box[1]}`, '--no-diff']);
+  assert.equal(r.code, 0, r.stderr);
+  await run(['wait', tab, '--url', 'page.html']);
+  r = await run(['url', tab]);
+  assert.match(r.stdout.trim(), /fixtures\/page\.html$/);
+  r = await run(['goto', tab, `${fixture.url}fixtures/unix-cli.html`]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(JSON.parse(r.stdout).url, /unix-cli\.html$/);
+});
+
+// Last: a challenge starts a cool-down for the fixture's site, cleared at the end.
+t('on a challenge page, head and grep keep stdout to the lines and say so on stderr', async () => {
+  const env = { BROWSERCTRL_CAPTCHA_PLUGINS: path.join(ROOT, 'test/fixtures/fake-solver.mjs'), FAKE_SOLVER_OFF: '1' };
+  const url = `${fixture.url}fixtures/fake-challenge.html`;
+  try {
+    const o = await run(['open', url, '--force'], { env });
+    assert.equal(o.code, 0, o.stderr);
+    const tab = JSON.parse(o.stdout).id;
+    let r = await run(['head', tab, '-n', '1', '--force'].filter(a => a !== '--force'), { env });
+    assert.equal(r.stdout, 'Please wait\n', r.stdout);
+    assert.match(r.stderr, /verification challenge|challenge/i);
+    r = await run(['grep', tab, 'Content'], { env });
+    assert.equal(r.stdout, 'Content behind the challenge.\n');
+    r = await run(['cat', tab], { env });
+    assert.match(r.stdout, /^⚠ /, 'the whole text still leads with the notice');
+  } finally {
+    await run(['cooldown', 'clear', url], { env });
+  }
+});
+

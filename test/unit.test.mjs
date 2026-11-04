@@ -153,7 +153,7 @@ test('an unknown command names the nearest one instead of printing all of help',
   const run = (c) => new Promise(res => execFile(process.execPath, [fileURLToPath(new URL('../bin/browserctrl.mjs', import.meta.url)), c], (e, so, se) => res(se)));
   // screenshot, snapshot, goto, ls, cat… are aliases now (lib/cli-flags.mjs); other near words still get a pointer.
   assert.match(await run('type_text'), /Unknown command "type_text"\. Did you mean "type"\?/);
-  assert.match(await run('shto'), /Did you mean "shot"\?/);
+  assert.match(await run('clik'), /Did you mean "click"\?/);   // a misspelt look (shto) runs instead
   assert.match(await run('zzqqxx'), /Unknown command "zzqqxx"\. Run browserctrl help/);
 });
 

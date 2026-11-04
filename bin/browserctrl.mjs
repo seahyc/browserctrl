@@ -365,6 +365,8 @@ function usage() {
     browserctrl pwd <tab> | url <tab>          the tab's address       browserctrl cd <tab>    = use <tab>
     browserctrl whoami                         the agent identity claims belong to (--agent-id NAME sets it for one call)
     --name=value works for every flag, -- ends the options, and a flag a command does not take is a usage error (exit 2).
+    Synonyms (--max-chars, --limit, --first, --last) are taken with a note on stderr, and so are typos in a command that
+    only looks (txet, --tali); a typo in an action stays exit 2, so nothing acts on a guess. Line output pipes cleanly.
 
   Scripting (references/scripting.md): data goes to stdout; hints, warnings and progress to stderr.
     -q/--quiet drops those; find, text --match, wait, ready and check --expect then print nothing (as grep -q).
@@ -511,6 +513,8 @@ process.on('exit', code => usageLog.finishUsage(code));
 const quiet = Boolean(flags.quiet);
 const say = console.error.bind(console);
 if (quiet) console.error = () => {};
+// Synonyms and typos taken as the flag or command meant (lib/cli-flags.mjs autocorrect).
+for (const note of resolved.notes || []) console.error(note);
 // A reader that stopped early (| head) is not an error.
 process.stdout.on('error', e => { if (e.code === 'EPIPE') process.exit(process.exitCode || 0); throw e; });
 // The browser is never guessed, but whoever launches an agent can choose it once:
@@ -858,7 +862,12 @@ async function observeCommand(kind, conn, port, targetId, flags, tabArg) {
       const clipped = limit > 0 && selected.length > limit;
       const text = clipped ? `${selected.slice(0, limit)}\n\n[truncated ${selected.length - limit} characters]` : selected;
       const blocked = source.length < 3000 ? await captcha.notice(conn, targetId, tabArg) : null;
-      return out(flags.json ? { text, textLength: selected.length, truncated: clipped, ...(blocked ? { challenge: blocked } : {}) } : (blocked ? `${blocked}\n\n${text}` : text));
+      if (flags.json) return out({ text, textLength: selected.length, truncated: clipped, ...(blocked ? { challenge: blocked } : {}) });
+      // Lines asked for by count or pattern (head, tail, grep) are exactly those lines on stdout,
+      // so a pipe gets only page text; a challenge notice goes to stderr then.
+      const lineShaped = ['head', 'tail', 'match', 'line-number'].some(k => flags[k] !== undefined);
+      if (blocked && lineShaped) { console.error(blocked); return out(text); }
+      return out(blocked ? `${blocked}\n\n${text}` : text);
     }
     case 'table': {
       // The page's main table or grid as header-keyed rows (the code do --collect rows uses).

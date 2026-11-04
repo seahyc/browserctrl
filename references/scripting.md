@@ -94,10 +94,20 @@ Options follow getopt's habits:
 - `--agent-id NAME` (or `--agent NAME`) on any command sets `BROWSERCTRL_AGENT_ID` for that call.
 - `--tab <tab>` names the tab on any command that takes one first.
 - A flag a command would ignore is a usage error (exit 2) that names what it takes, with a
-  "did you mean" when one is close: `text --max-chars` points to `--max-text`, `read --grep`
-  to `text`, and `click … --tail 40` to `--then text --tail 40`. Synonyms that are unambiguous
+  "did you mean" when one is close: `read --grep` points to `text`, and `click … --tail 40` to
+  `--then text --tail 40`. Synonyms that are unambiguous
   are accepted: `--grep`/`--match` on `text`, `items`, `visit` and `do`; `fill --text` for
   `--value`; `shot --out FILE` or `-o FILE`; `click --at x,y`; `release --all` for `--mine`.
+- Corrections that save a turn: a known synonym is taken on any command, with a note on stderr
+  (`(took --max-chars as --max-text)`; also `--limit`, `--first`, `--last`, `--chars`, `--filter`,
+  `--pattern`, `--output`, `--css`). A typo (one clear nearest flag or command) is taken only by a
+  command that just looks (`text`, `read`, `items`, `table`, `fields`, `find`, `tabs`, `shot`,
+  `wait`, `url`…): `txet <tab> --tali 3` runs `text --tail 3` and says so. On an action (`click`,
+  `fill`, `do`, `nav`…) a typo is still exit 2 with "did you mean", so nothing acts on a guess.
+  `-q` drops the notes.
+- Pipes: the line commands (`grep`, `head`, `tail`, `text --match/--head/--tail`) print only
+  page lines on stdout; a challenge notice goes to stderr then (plain `text`/`cat` still lead
+  with it). A reader that stops early (`| head -1`) is not an error.
 - `wait` waits for a condition, never a time: `wait --ms 2000` is a usage error. nav, click and
   do steps already wait for the page to settle; for a fixed pause, `sleep` in the shell.
 

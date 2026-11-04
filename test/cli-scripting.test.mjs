@@ -72,9 +72,10 @@ test('errors map to the documented exit codes', () => {
 });
 
 test('usage errors exit 2 and a missing browser exits 4, before any page is touched', async () => {
-  const unknown = await run(['fnd'], { port: null });
+  // A misspelt action is a usage error (a misspelt look runs as the one meant: test/unix-cli.test.mjs).
+  const unknown = await run(['clik'], { port: null });
   assert.equal(unknown.code, 2);
-  assert.match(unknown.stderr, /Did you mean "find"/);
+  assert.match(unknown.stderr, /Did you mean "click"/);
   assert.equal(unknown.stdout, '');
   const none = await run(['tabs'], { port: 1 });
   assert.equal(none.code, 4, none.stderr);
