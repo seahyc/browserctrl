@@ -386,6 +386,15 @@ receipt. It never clicks Save or makes a payment. Source and destination frames 
 protected from screenshots, recordings and raw reads while they contain card data.
 See agent-vault's payment-card transfer workflow for policy registration and limits.
 
+Agent-vault's `transfer-plan` generalises this to independent source and destination
+adapters. The v6 private driver captures named browser values; v7 consumes a typed
+snapshot from an approved source, including vault/API/generated providers. Generic
+fields and payment cards share the same frame, focus, private readback, redaction
+and capture-protection engine. Card v4/v5 calls remain compatible. A provider
+snapshot can fill another browser or owner without a live source page; source
+authority is checked by the pinned broker/provider, and destination authority is
+checked here. Values never pass through ordinary browser fill or the clipboard.
+
 Protected username/password/TOTP entry is supported in a fresh owned Safari automation tab. It closes that tab after submission and keeps console/network inspection private for the native session. See [Safari credential entry](references/vault-entry.md#safari-27) for setup, session continuity and recovery limits.
 
 
