@@ -71,6 +71,18 @@ browserctrl replay DIR --video run.mp4 --gif run.gif   # real-time video: plain-
 browserctrl replay --side-by-side DIR_A DIR_B --labels "Without,With" --video ab.mp4 --gif ab.gif   # one clock, "Done in m:ss"
 ```
 
+New `rec start` recordings belong to the initiating agent and stop after 15 minutes
+without that agent's browser activity. Set `BROWSERCTRL_REC_IDLE_MIN` to change the
+idle timeout (minimum one minute). Automatic stop verifies recorder teardown and
+preserves the recording; if it cannot verify teardown, the recording stays active.
+Legacy recordings and recordings with child tracks retain their existing explicit-stop behavior.
+If an idle managed recording’s exact target has closed, the daemon finalizes the
+received data and labels the final batch unverified.
+If a managed start or teardown becomes indeterminate, close only that recorded tab,
+then run `browserctrl rec recover <full-target-id> --browser dia` as its owner. The
+daemon verifies the exact target is absent; the saved result marks its final batch
+as unverified. An open or ambiguously replaced target remains blocked.
+
 A recording is rrweb DOM events (`rrweb.ndjson.br`, brotli) plus one 1280-px JPEG
 still per action (`trajectory/`, listed in `steps.jsonl`). Every acting command (and
 `do`, per step) takes a still after waiting (up to 4 s) for the page to stop loading;

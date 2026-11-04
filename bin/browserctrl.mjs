@@ -1354,10 +1354,12 @@ const main = async () => {
     }
     if (cmd === 'rec') {
       const sub = positional[1];
-      if (!['start', 'stop'].includes(sub) || !positional[2]) throw new Error('Usage: browserctrl rec start|stop <tab> [--out DIR] [--label L]  (also: rec status, rec om2w, replay)');
+      if (!['start', 'stop', 'recover'].includes(sub) || !positional[2]) throw new Error('Usage: browserctrl rec start|stop <tab> [--out DIR] [--label L]; rec recover <full-closed-target-id>');
+      if (sub === 'recover') return out(await conn.recording('recover', positional[2]));
       const t = await resolveTabArg(conn, port, positional[2]);
-      if (sub === 'start') return out(await rec.start(conn, t.targetId, { out: flags.out, label: flags.label === true ? null : flags.label }));
-      const res = await rec.stop(conn, t.targetId);
+      if (sub === 'start') return out(await conn.recording('start', t.targetId, { out: flags.out, label: flags.label === true ? null : flags.label }));
+      const row = rec.get(t.targetId);
+      const res = row?.managed ? await conn.recording('stop', t.targetId) : await rec.stop(conn, t.targetId);
       return out({ ...res, replay: `browserctrl replay ${res.recording}` });
     }
     if (cmd === 'open') {
