@@ -125,6 +125,17 @@ test('protected field fill v2 in isolated HTTPS Chromium', {skip: !chromeBinary(
   });
 
   // A tab the user opened, here through the browser's own endpoint rather than the daemon.
+  await t.test('bulk insertion transformed by a page retries through trusted character input', async t => {
+    const id = await tab('/password');
+    t.after(() => raw.browser('Target.closeTarget', {targetId: id}).catch(() => {}));
+    await ops.evaluate(conn, id, "(()=>{const e=document.querySelector('#pw');e.addEventListener('input',v=>{if(v.data?.length>1)e.value+='x';});})()");
+    const result = await fill(id, '#pw', 'password', PASSWORD);
+    assert.equal(result.status, 'completed');
+    await ops.click(conn, id, {selector: '#submit'});
+    await until(id, "location.pathname==='/done' && document.readyState==='complete'", true);
+    assert.equal(posted.at(-1), PASSWORD);
+  });
+
   for (const [name, script, code] of [
     ['emptied', "e.value=''", 'fill_value_empty'],
     ['shortened', 'e.value=e.value.slice(0,-1)', 'fill_value_shortened'],
