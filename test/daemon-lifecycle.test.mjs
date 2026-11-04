@@ -260,6 +260,78 @@ test('a live legacy daemon is left running until an owner coordinates safe upgra
   assert.doesNotMatch(output,/unexpected browser health/);
 });
 
+// A stand-in daemon that is healthy but running a different code version, so a normal
+// connect would ask it to cooperatively upgrade. It defers that upgrade (as a stuck vault
+// taint would) and logs every op it receives, so a test can prove which ops reached it.
+function startFakeUpgradeableDaemon(port, { blocker }) {
+  const socketPath = SOCK(port);
+  const child = spawn(process.execPath, ['--input-type=module', '-e', `
+    import net from 'node:net'; import fs from 'node:fs'; import {execFileSync} from 'node:child_process';
+    const socketPath=${JSON.stringify(socketPath)};
+    const status={ok:true,pid:process.pid,port:${port},code:'legacy-fake',starting:false,recovering:false,retiring:false,attached:[],cooperativeUpgrade:1,vaultEntry:1,vaultFill:1,taintedTabs:1};
+    const server=net.createServer(sock=>sock.on('data',data=>{
+      for(const line of data.toString().trim().split('\\n')){
+        if(!line)continue; const req=JSON.parse(line); console.log('OP '+req.op);
+        if(req.op==='status'||req.op==='health') sock.write(JSON.stringify({reqId:req.reqId,result:status})+'\\n');
+        else if(req.op==='upgrade') sock.write(JSON.stringify({reqId:req.reqId,result:{deferred:true,blocker:${JSON.stringify(blocker)}}})+'\\n');
+        else if(req.op==='heal') sock.write(JSON.stringify({reqId:req.reqId,result:{prunedOrphans:['GONE'],prunedTaints:[],taintedTabs:0,blockedBy:null}})+'\\n');
+        else if(req.op==='stop'){console.log('STOPPED');sock.write(JSON.stringify({reqId:req.reqId,result:'stopping'})+'\\n');try{fs.unlinkSync(socketPath);fs.unlinkSync(socketPath+'.owner.json');}catch{}process.exit(0);}
+        else sock.write(JSON.stringify({reqId:req.reqId,error:'unexpected'})+'\\n');
+      }
+    }));
+    server.listen(socketPath,()=>{
+      fs.writeFileSync(socketPath+'.owner.json',JSON.stringify({pid:process.pid,ino:fs.statSync(socketPath).ino,processStart:execFileSync('/bin/ps',['-p',String(process.pid),'-o','lstart='],{encoding:'utf8'})}));
+      console.log('ready');
+    });
+  `], { stdio: ['ignore', 'pipe', 'inherit'] });
+  return child;
+}
+
+test('lifecycle commands reuse a version-mismatched daemon instead of deferring on an upgrade', posixOptions, async t => {
+  const { port } = await fixture(t);
+  const fake = startFakeUpgradeableDaemon(port, { blocker: 'a vault taint is held on tab 6C4D0950' });
+  t.after(() => fake.kill('SIGKILL'));
+  let out = ''; fake.stdout.on('data', d => out += d);
+  await new Promise(resolve => fake.stdout.once('data', resolve));
+  // A lifecycle connection reaches the running daemon whatever its code version, and never
+  // triggers the cooperative upgrade that would otherwise be deferred.
+  const client = await connect(port, { lifecycle: true });
+  t.after(() => client.close());
+  assert.equal((await client.status()).pid, fake.pid);
+  assert.ok(!out.split('\n').includes('OP upgrade'), `lifecycle connect must not request an upgrade; saw ops:\n${out}`);
+  // heal reaches it too and reports what it pruned.
+  assert.deepEqual((await client.heal()).prunedOrphans, ['GONE']);
+});
+
+test('a deferred upgrade names the blocker and points at the no-kill recovery', posixOptions, async t => {
+  const { port } = await fixture(t);
+  const fake = startFakeUpgradeableDaemon(port, { blocker: 'a vault taint is held on tab 6C4D0950' });
+  t.after(() => fake.kill('SIGKILL'));
+  await new Promise(resolve => fake.stdout.once('data', resolve));
+  // A normal (non-lifecycle) connect still attempts the upgrade; when deferred it surfaces the
+  // specific blocker and the recovery path, rather than the old generic sentence.
+  await assert.rejects(connect(port), e =>
+    /vault taint is held on tab 6C4D0950/.test(e.message) && /doctor --fix|browserctrl stop/.test(e.message));
+});
+
+test('heal prunes a taint left for a tab that is no longer live', options, async t => {
+  const { port } = await fixture(t);
+  const { runtimePath } = await import('../lib/env.mjs');
+  const gone = 'A1B2C3D4E5F600112233445566778899';
+  // Seed the marker as the reported deadlock had it, before the daemon starts, so its fill gate
+  // loads this closed tab as an orphan taint. runtimePath resolves under the test's isolated home.
+  const marker = runtimePath(`vault-taint-${port}.json`);
+  fs.mkdirSync(path.dirname(marker), { recursive: true });
+  fs.writeFileSync(marker, JSON.stringify({ version: 2, tabs: { [gone]: { browser: 'dia', owner: 'agent-vault-fill', origins: ['https://dash.cloudflare.com'] } } }));
+  const client = await connect(port);
+  t.after(() => client.close());
+  assert.equal((await client.status()).taintedTabs, 1, 'the daemon loaded the stale taint');
+  const healed = await client.heal();
+  assert.deepEqual(healed.prunedOrphans, [gone]);
+  assert.equal((await client.status()).taintedTabs, 0, 'the stale taint no longer blocks');
+  assert.equal(fs.existsSync(marker), false, 'the pruned marker is removed from disk');
+});
+
 test('without lsof, Linux finds a lock holder through /proc', { skip: process.platform !== 'linux' }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lock-holders-'));
   const file = path.join(dir, 'held.lock');

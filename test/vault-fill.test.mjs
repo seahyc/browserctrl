@@ -176,6 +176,68 @@ test('closing a live tainted tab lifts the taint and wipes the values',async()=>
   assert.equal(fs.existsSync(runtimePath(`vault-taint-${p}.json`)),false);
 });
 
+test('prune drops the taint of a closed tab so it no longer blocks (active() goes false)',async()=>{
+  const p=++port, live='ABCDEF1234567890', gone='00FFEE1122334455';
+  const send=async(method)=>{
+    if(method==='Target.getTargets')return {targetInfos:[{targetId:live,type:'page'},{targetId:gone,type:'page'}]};
+    if(method==='Page.getNavigationHistory')return {entries:[{url:'x'}],currentIndex:0};
+    if(method==='Page.getFrameTree')return {frameTree:{frame:{id:'F',loaderId:'L1',url:'https://example.com/login'}}};
+    if(method==='Page.createIsolatedWorld')return {executionContextId:7};
+    if(method==='Runtime.evaluate')return {result:{subtype:'node',objectId:'O1'}};
+    if(method==='DOM.describeNode')return {node:{backendNodeId:5}};
+    if(method==='DOM.resolveNode')return {object:{objectId:'O2'}};
+    if(method==='Runtime.callFunctionOn')return {result:{value:{ok:true}}};
+    return {};
+  };
+  const g=createFillGate(p,{recording:()=>false,send,sessionFor:async()=>'S',withInput:async(_t,_s,fn)=>fn()});
+  await g.run(request(r=>r.destination.tab_id=live),'o');
+  await g.run(request(r=>r.destination.tab_id=gone),'o');
+  assert.equal(g.active(),true);assert.equal(g.taintedCount(),2);
+  // The live tab set no longer contains `gone`: its taint is pruned, the live one is kept.
+  const dropped=g.prune(new Set([live]));
+  assert.deepEqual(dropped.taints,[gone]);
+  assert.equal(g.tainted(gone),false);assert.equal(g.tainted(live),true);
+  assert.equal(g.taintedCount(),1);assert.equal(g.active(),true);
+  // The pruned value is no longer redacted; the surviving tab's value still is.
+  assert.equal(g.redact('private-password-123'),'[redacted]');
+  const marker=JSON.parse(fs.readFileSync(runtimePath(`vault-taint-${p}.json`),'utf8'));
+  assert.ok(marker.tabs[live]&&!marker.tabs[gone]);
+});
+
+test('prune clears an orphan taint for a tab that is no longer live, unblocking the gate',async()=>{
+  const p=++port, gone='6C4D0950ACC1C5772E4CAF0C41A30314';
+  // Seed the on-disk marker exactly as the reported deadlock had it: a taint for a closed tab.
+  fs.writeFileSync(runtimePath(`vault-taint-${p}.json`),JSON.stringify({version:2,tabs:{[gone]:{browser:'dia',owner:'agent-vault-fill',origins:['https://dash.cloudflare.com']}}}));
+  const g=createFillGate(p,{recording:()=>false,send:async()=>({}),sessionFor:async()=>'S',withInput:async(_t,_s,fn)=>fn()});
+  assert.equal(g.tainted(gone),true);assert.equal(g.taintedCount(),1);
+  const dropped=g.prune(new Set(['SOMEOTHERLIVETAB0000']));
+  assert.deepEqual(dropped.orphans,[gone]);
+  assert.equal(g.tainted(gone),false);assert.equal(g.taintedCount(),0);
+  assert.equal(fs.existsSync(runtimePath(`vault-taint-${p}.json`)),false);
+});
+
+test('prune enforces a TTL so a taint cannot linger across sessions',async()=>{
+  const p=++port, t='DEADBEEF00112233';
+  const send=async(method)=>{
+    if(method==='Target.getTargets')return {targetInfos:[{targetId:t,type:'page'}]};
+    if(method==='Page.getNavigationHistory')return {entries:[{url:'x'}],currentIndex:0};
+    if(method==='Page.getFrameTree')return {frameTree:{frame:{id:'F',loaderId:'L1',url:'https://example.com/login'}}};
+    if(method==='Page.createIsolatedWorld')return {executionContextId:7};
+    if(method==='Runtime.evaluate')return {result:{subtype:'node',objectId:'O1'}};
+    if(method==='DOM.describeNode')return {node:{backendNodeId:5}};
+    if(method==='DOM.resolveNode')return {object:{objectId:'O2'}};
+    if(method==='Runtime.callFunctionOn')return {result:{value:{ok:true}}};
+    return {};
+  };
+  const g=createFillGate(p,{recording:()=>false,send,sessionFor:async()=>'S',withInput:async(_t,_s,fn)=>fn()});
+  await g.run(request(r=>r.destination.tab_id=t),'o');
+  assert.equal(g.tainted(t),true);
+  // Still live, but a day old: the TTL prunes it even though it is in the live set.
+  const dropped=g.prune(new Set([t]),{now:Date.now()+13*60*60*1000});
+  assert.deepEqual(dropped.taints,[t]);
+  assert.equal(g.tainted(t),false);
+});
+
 test('daemon trust check: the OS-reported listener must run this install root',async()=>{
   const root=path.resolve(new URL('..',import.meta.url).pathname);
   const script=fs.realpathSync(path.join(root,'lib','daemon-run.mjs'));
@@ -260,4 +322,25 @@ test('the test port override needs an isolated BROWSERCTRL_HOME',()=>{
   assert.equal(testPort({BROWSERCTRL_VAULT_TEST_PORT:'9471'}),undefined);
   assert.equal(testPort({BROWSERCTRL_VAULT_TEST_PORT:'9471',BROWSERCTRL_HOME:'/tmp/x'}),9471);
   for(const v of ['80','abc','9471.5','70000','']) assert.equal(testPort({BROWSERCTRL_VAULT_TEST_PORT:v,BROWSERCTRL_HOME:'/tmp/x'}),undefined);
+});
+
+test('v3 capture validation is exact and bounded; shape rules fail closed',async()=>{
+  const {validateVaultCapture,captureShapeOk}=await import('../lib/vault-fill.mjs');
+  const capture=(change=()=>{})=>{const r={version:3,request_id:crypto.randomUUID(),deadline:Date.now()/1000+60,destination:{browser:'dia',origin:'https://dash.example.com',tab_owner:'agent-vault-capture',element:{selector:'input[readonly]',name:'API token'}},shape:{min_length:20,max_length:64,charset:'base64url',prefix:''}};change(r);return r;};
+  assert.equal(validateVaultCapture(capture()).version,3);
+  assert.equal(validateVaultCapture(capture(r=>delete r.destination.element.name)).version,3);
+  assert.equal(validateVaultCapture(capture(r=>delete r.destination.element.selector)).version,3);
+  const bad=[
+    r=>r.version=2, r=>r.extra=1, r=>r.value='x', r=>delete r.shape, r=>r.deadline=Date.now()/1000+121,
+    r=>r.destination.tab_id='ABCDEF1234567890', r=>r.destination.browser='safari', r=>r.destination.origin='http://dash.example.com',
+    r=>r.destination.origin='https://dash.example.com/', r=>r.destination.origin='https://u:p@dash.example.com', r=>r.destination.origins=['https://dash.example.com'],
+    r=>r.destination.tab_owner='has space', r=>r.destination.tab_owner='', r=>r.destination.element={}, r=>r.destination.element={xpath:'//x'},
+    r=>r.destination.element={selector:'  '}, r=>r.destination.element={selector:'a\nb'}, r=>r.destination.element={name:'x'.repeat(257)},
+    r=>r.shape.min_length=0, r=>r.shape.max_length=8193, r=>r.shape.min_length=65, r=>r.shape.charset='regex', r=>r.shape.prefix='!!', r=>r.shape.pattern='.*',
+  ];
+  for(const change of bad)assert.throws(()=>validateVaultCapture(capture(change)),undefined,String(change));
+  const shape={min_length:10,max_length:12,charset:'hex',prefix:'ab'};
+  assert.equal(captureShapeOk('ab01234567',shape),true);
+  for(const v of ['ab0123456','ab01234567890','cd01234567','ab0123456z','ab 1234567','',null])assert.equal(captureShapeOk(v,shape),false,String(v));
+  assert.equal(captureShapeOk('Copy this token',{min_length:1,max_length:100,charset:'printable',prefix:''}),false);
 });

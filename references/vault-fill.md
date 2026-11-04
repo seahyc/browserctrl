@@ -161,6 +161,49 @@ with the same `BROWSERCTRL_AGENT_ID`, any one of the approved origins, and the
 full target ID. The daemon checks that the tab is gone before it clears the mark.
 A daemon holding taints refuses a cooperative upgrade or stop.
 
+## Protected capture (v3)
+
+The mirror of a fill: one value a page displays, such as a newly created API token, goes
+from one element to agent-vault's create-only writer, which saves it as a new login. Agents
+get only the new item reference. See agent-vault's `task write-plan capture`.
+
+The owner's plan fixes the browser, one exact HTTPS origin, a **tab owner** (a
+browserctrl agent id), the element and the value's shape. The request names no tab:
+
+```json
+{
+  "version": 3,
+  "request_id": "stable-unique-id",
+  "deadline": 1761200000,
+  "destination": {"browser": "dia", "origin": "https://dash.cloudflare.com",
+                  "tab_owner": "agent-vault-capture",
+                  "element": {"selector": "input[readonly]", "name": "API token"}},
+  "shape": {"min_length": 40, "max_length": 40, "charset": "base64url", "prefix": ""}
+}
+```
+
+`element` has a CSS `selector`, an accessible `name` (aria-labelledby, aria-label, label,
+title, then placeholder, whitespace-normalised, exact), or both. A name alone searches inputs
+and textareas. Charsets are `printable` (ASCII without spaces), `base64url`, `base64`,
+`alphanumeric` and `hex`.
+
+The daemon checks, in order: no recording or capture running; exactly one page target claimed
+by `tab_owner` whose URL is at `origin` (`tab_not_found`, `tab_ambiguous`), not already
+tainted (`tab_tainted`); a browserctrl-opened or one-entry tab (`tab_not_dedicated`); the
+request ID unused; the top frame at `origin`; exactly one matching element
+(`element_not_found`, `element_ambiguous`). It then reads the value of an input or textarea
+(or another element's text) in the isolated vault world, in the same page turn that
+re-checks the origin and visibility (`origin_mismatch`, `element_not_visible`), and checks
+the shape (`value_empty`, `value_shape_mismatch`). Nothing is read on a refusal and the tab
+stays untainted.
+
+On success the tab is tainted exactly as after a fill (the value counts as a password, so the
+taint lifts only on a page that doesn't show it) before the daemon answers, and every other
+reply redacts it. Only the capture's own reply carries the value, to the driver, which writes
+`{"status":"completed","verification":"captured","value":"..."}` to its stdout, the trusted
+writer's private pipe. A refusal is `{"status":"failed","verification":"not_verified","code":"..."}`.
+Capture protects the value from the moment it is read; before that it is an ordinary page.
+
 ## Limits
 
 Safari is not supported. Cross-process frames are not reachable. Protection

@@ -2,6 +2,7 @@
 // Intentionally no normal CLI argument parser or diagnostic output.
 import { submitVaultEntry } from '../lib/vault-entry.mjs';
 import { submitVaultFill } from '../lib/vault-fill.mjs';
+import { submitVaultCapture } from '../lib/vault-capture.mjs';
 const failed={status:'failed',verification:'not_verified',input_attempted:false,action_may_have_run:false,code:'invalid_request'};
 let size=0, chunks=[];
 try {
@@ -12,7 +13,10 @@ try {
   const continuation=process.argv.length===3 && process.argv[2]==='--continue';
   if(process.argv.length!==2 && !recover && !continuation)throw Error();
   const request=JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  // Version 2 fills one field; version 1, recovery and workflow continuation keep the original contract.
-  const result=!recover && !continuation && request?.version===2 ? await submitVaultFill(request) : await submitVaultEntry(request,{recover,continuation});
+  // Version 2 fills one field; version 3 captures one displayed value for the trusted caller
+  // (its stdout is that caller's private pipe); version 1, recovery and workflow continuation
+  // keep the original contract.
+  const plain=!recover && !continuation;
+  const result=plain && request?.version===2 ? await submitVaultFill(request) : plain && request?.version===3 ? await submitVaultCapture(request) : await submitVaultEntry(request,{recover,continuation});
   process.stdout.write(JSON.stringify(result)+'\n');
 }catch{process.stdout.write(JSON.stringify(failed)+'\n');}

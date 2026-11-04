@@ -152,6 +152,10 @@ reads still work, with values redacted. For Safari, read the Safari section of
 [vault entry](references/vault-entry.md#safari-27). A tab claim is not vault permission, and
 lease expiry does not log out the website.
 
+When a site shows a new secret once (an API token), don't read or copy it: agent-vault's
+protected capture saves it from the tab into a new vault item and taints the tab
+([protected capture](references/vault-fill.md#protected-capture-v3)).
+
 ## Safety
 
 - Never complete a purchase, booking, payment, sign-up, message or deletion unless the user asked

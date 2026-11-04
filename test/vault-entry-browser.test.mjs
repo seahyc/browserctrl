@@ -51,7 +51,7 @@ test('isolated HTTPS Chromium: POST navigation, TOTP gate, reflection refusal an
   const targetId=await tab();
   const active=client.send(targetId,'Runtime.evaluate',{expression:'new Promise(r=>setTimeout(()=>r(true),250))',awaitPromise:true,returnByValue:true});
   await new Promise(r=>setTimeout(r,40));
-  assert.ok((await client.status()).requestsInFlight>=1);assert.equal((await raw(port,undefined,'upgrade')).error,'daemon_busy_or_recording');await active;
+  assert.ok((await client.status()).requestsInFlight>=1);const deferred=(await raw(port,undefined,'upgrade')).result;assert.equal(deferred?.deferred,true,JSON.stringify(deferred));assert.match(deferred.blocker,/in flight|command is running/);await active;
   const normal=request(targetId), pending=raw(port,normal);await new Promise(r=>setTimeout(r,60));
   await assert.rejects(client.send(targetId,'Runtime.evaluate',{expression:'document.body.innerText',returnByValue:true}),/sensitive_phase_blocked/);
   const result=await pending;assert.equal(result.result?.status,'completed',JSON.stringify(result));assert.ok(!JSON.stringify(result).includes('654321'));

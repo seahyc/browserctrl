@@ -134,7 +134,7 @@ const MUTATING = new Set([
 
 // Flags that never take a value, so `--json <tab>` or `-q <tab>` keeps the word that follows.
 // --count takes one only when it is a number (click --count 2; find … --count).
-const SWITCHES = new Set(['quiet', 'json', 'jsonl', 'enabled', 'no-dedupe', 'id', 'csv', 'commit', 'headless', 'no-sandbox', 'foreground', 'stop', 'vnc', 'require-mask']);
+const SWITCHES = new Set(['quiet', 'json', 'jsonl', 'enabled', 'no-dedupe', 'id', 'csv', 'commit', 'headless', 'no-sandbox', 'foreground', 'stop', 'vnc', 'require-mask', 'fix']);
 // Flags written as --name=value (the rest take their value as the next word).
 const EQUALS = new Set(['headless']);
 
@@ -225,6 +225,8 @@ function usage() {
     browserctrl native-group --ids UUIDs --group-id N --browser dia [--dry-run] [--allow-focus]
     browserctrl doctor --browser dia                     read-only connection diagnosis (JSON)
     browserctrl doctor --browser dia --watch-seconds 20   passive OS connection capture
+    browserctrl doctor --fix --browser dia               self-heal: prune stale vault taints on closed tabs, release a stuck gate
+    browserctrl restart --browser dia                    stop the daemon (bypassing any deferred upgrade) and start a fresh one
 
   Captchas: browserctrl captcha <tab> --browser dia [--timeout ms] [--no-attempt] [--no-focus]
     tries a drag-to-end slider once (or an installed solver plugin), otherwise brings the tab to the front,
@@ -861,7 +863,38 @@ const main = async () => {
     const report = await diagnose(flags);
     if (seconds !== null && report.port) report.capture = await captureConnections(report.port, { seconds, daemonPid: report.daemonPid });
     report.cooldowns = cooldown.list().map(e => ({ site: e.site, kind: e.kind, until: new Date(e.until).toISOString(), strikes: e.strikes, summary: cooldown.describe(e) }));
+    // --fix: the sanctioned self-heal. Reach the daemon on a lifecycle connection (never
+    // deferred by a stuck gate) and prune taints/orphan marks for tabs that have since closed,
+    // releasing a sensitive-entry deadlock without a manual kill.
+    if (flags.fix) {
+      if (!report.port) report.fix = { healed: false, reason: 'no endpoint selected' };
+      else if (!report.daemonPid) report.fix = { healed: false, reason: 'no running daemon to heal' };
+      else {
+        try {
+          const conn = await connect(report.port, { mediated: true, lifecycle: true });
+          try { report.fix = { healed: true, ...(await conn.heal()) }; } finally { conn.close(); }
+        } catch (e) { report.fix = { healed: false, reason: e.message }; }
+      }
+    }
     return out(report);
+  }
+
+  // Lifecycle commands reach a running daemon regardless of its code version: a stuck
+  // cooperative-upgrade gate must never force a manual kill to stop or inspect the daemon.
+  if (cmd === 'stop' || cmd === 'restart') {
+    const port = await requireBrowser(flags);
+    const conn = await connect(port, { mediated: true, lifecycle: true });
+    try { await conn.stop().catch(() => {}); } finally { conn.close(); }
+    if (cmd === 'stop') return out(`Daemon stopped for port ${port}`);
+    await new Promise(r => setTimeout(r, 300));
+    const fresh = await connect(port, { mediated: true });
+    try { const s = await fresh.status(); return out({ restarted: true, port, pid: s.pid, code: s.code }); }
+    finally { fresh.close(); }
+  }
+  if (cmd === 'status') {
+    const port = await requireBrowser(flags);
+    const conn = await connect(port, { mediated: true, lifecycle: true });
+    try { return out(await conn.status()); } finally { conn.close(); }
   }
 
   if (cmd === 'migrate') {
