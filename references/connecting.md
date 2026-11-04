@@ -201,9 +201,14 @@ every command documented here exists in the CLI.
 - The overlay and the recorder refuse to install twice, so after changing
   either, use `browserctrl overlay <tab> --force` or start a fresh recording rather
   than expecting a silent upgrade.
-- A daemon started before a code change keeps running the old logic. Clients
-  compare a code version on connect and restart a stale daemon, which is why
-  you may see "restarting the daemon" after editing `lib/`.
+- A daemon never keeps running old code. It checks the code on disk every few
+  seconds and, once it changed, retires as soon as that is safe: no command,
+  CDP call, protected entry, vault taint, read session or recording in flight,
+  and no connected client active in the last 10 s. The next command starts a
+  daemon on the new code (`(requesting an idle daemon upgrade)`). A command that
+  arrives while the old daemon is still busy runs on it, with a note on stderr
+  naming what the upgrade waits for, instead of failing. `BROWSERCTRL_UPGRADE_CHECK_MS`
+  and `BROWSERCTRL_IDLE_FOR_UPGRADE_MS` tune the two intervals.
 - Screen recording needs the macOS permission once, granted to whatever runs
   ffmpeg.
 
