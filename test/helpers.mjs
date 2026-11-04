@@ -19,9 +19,17 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Every test process gets its own throwaway home for notes, recordings, state, sockets and
 // claims, so tests never touch (or migrate) the real one. It is under /tmp, not os.tmpdir(),
 // because a unix socket path may hold only about 100 bytes. Import this file before any lib/ file.
+// Test files run side by side (npm test runs several at once): a file's process, started by the
+// node --test runner (NODE_TEST_CONTEXT), gets its own home and debugging port instead of
+// sharing the runner's, so files never meet on a daemon, socket, claim or browser.
+const IN_RUNNER = Boolean(process.env.NODE_TEST_CONTEXT);
+if (IN_RUNNER && process.env.BROWSERCTRL_HOME && process.env.BROWSERCTRL_HOME === process.env.BROWSERCTRL_TEST_RUNNER_HOME) {
+  delete process.env.BROWSERCTRL_HOME;
+}
 let ownHome = null;
 if (!process.env.BROWSERCTRL_HOME) {
   ownHome = process.env.BROWSERCTRL_HOME = fs.mkdtempSync(path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', 'bc-test-'));
+  if (!IN_RUNNER) process.env.BROWSERCTRL_TEST_RUNNER_HOME = ownHome;
 }
 // Every daemon this process (or a child it runs) starts is logged here by lib/daemon.mjs, and
 // stopped when this process exits: by exact PID, after checking the PID still runs
@@ -91,7 +99,37 @@ process.env.BROWSERCTRL_RECIPES ||= path.join(process.env.BROWSERCTRL_HOME, 'rec
 // Capture and traces are off by default; the suite turns them on, since tests exercise both.
 process.env.BROWSERCTRL_CAPTURE ??= '1';
 process.env.BROWSERCTRL_TRACE ??= '1';
-export const TEST_PORT = Number(process.env.BROWSERCTRL_TEST_PORT || 9333); // override to run suites side by side
+// The debugging port this process's tests use. Run alone, BROWSERCTRL_TEST_PORT or 9333. Under the
+// test runner, each file locks its own from a range starting there (19300 by default), so files
+// running at once never share a browser; the lock goes when the process exits.
+export const TEST_PORT = testPort();
+function testPort() {
+  const fixed = Number(process.env.BROWSERCTRL_TEST_PORT) || null;
+  if (!IN_RUNNER || process.env.BROWSERCTRL_TEST_PORT_LOCKED) return fixed || 9333;
+  const base = fixed || 19300;
+  const dir = path.join(os.tmpdir(), 'bc-test-ports');
+  fs.mkdirSync(dir, { recursive: true });
+  for (let port = base; port < base + 400; port++) {
+    const lock = path.join(dir, `${port}.lock`);
+    try {
+      fs.writeFileSync(lock, String(process.pid), { flag: 'wx' });
+    } catch {
+      // Held by a process that is gone: take it.
+      let holder = 0;
+      try { holder = Number(fs.readFileSync(lock, 'utf8')); } catch {}
+      let alive = false;
+      try { process.kill(holder, 0); alive = holder > 0; } catch {}
+      if (alive) continue;
+      try { fs.unlinkSync(lock); fs.writeFileSync(lock, String(process.pid), { flag: 'wx' }); } catch { continue; }
+    }
+    process.on('exit', () => { try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {} });
+    // Processes this one starts (a nested runner, a CLI) keep this port.
+    process.env.BROWSERCTRL_TEST_PORT = String(port);
+    process.env.BROWSERCTRL_TEST_PORT_LOCKED = '1';
+    return port;
+  }
+  throw new Error(`no free test port in ${base}-${base + 399}`);
+}
 
 // Machine load: loadFactor(), scaled(ms) for duration bounds, and browserctrl's own waits
 // stretched to match, here and in every node process a test starts (see test/load.mjs).

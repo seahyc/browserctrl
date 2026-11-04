@@ -80,7 +80,20 @@ test('a hung tab preserves the browser connection and never replays the command'
   assert.equal(result.result.value, 1);
 });
 
+// A browser or daemon that stops answering is given up on after 3 s here, not the 30 s a
+// real one gets (lib/daemon.mjs reads these when it uses them).
+function shortTimeouts(t) {
+  const saved = { h: process.env.BROWSERCTRL_HEALTH_TIMEOUT_MS, i: process.env.BROWSERCTRL_IPC_LIVENESS_MS };
+  process.env.BROWSERCTRL_HEALTH_TIMEOUT_MS = '3000';
+  process.env.BROWSERCTRL_IPC_LIVENESS_MS = '3000';
+  t.after(() => {
+    if (saved.h === undefined) delete process.env.BROWSERCTRL_HEALTH_TIMEOUT_MS; else process.env.BROWSERCTRL_HEALTH_TIMEOUT_MS = saved.h;
+    if (saved.i === undefined) delete process.env.BROWSERCTRL_IPC_LIVENESS_MS; else process.env.BROWSERCTRL_IPC_LIVENESS_MS = saved.i;
+  });
+}
+
 test('a hung browser retires its daemon and permits a fresh observation after recovery', posixOptions, async t => {
+  shortTimeouts(t);
   const { port, browser } = await fixture(t);
   const client = await connect(port);
   t.after(() => client.close());
@@ -117,6 +130,7 @@ test('concurrent clients share one tab attachment and domain initialization', op
 });
 
 test('a frozen daemon is replaced on demand using verified process ownership', posixOptions, async t => {
+  shortTimeouts(t);
   const { port } = await fixture(t);
   const client = await connect(port);
   t.after(() => client.close());
