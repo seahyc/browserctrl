@@ -37,6 +37,9 @@ Use the `browserctrl` CLI on PATH. `browserctrl help` lists every command and fl
   it to `/dev/null`: that hides the stop reason and the exit code. Use `-q` for quiet output
   and test the exit code: `browserctrl find "$t" "Next" --enabled -q && …`.
 - `--json` on read commands gives one object, `--jsonl` one record per line.
+- Shell habits work without a pipe: `grep "$t" 'Total|Due' -i`, `head "$t" -n 40`, `tail "$t" -n 40`,
+  `cat "$t"`, `ls`, `pwd "$t"`, `back "$t"`, `--agent-id NAME`, `--name=value`. A flag a command
+  doesn't take exits 2 and says what it takes; `wait` takes a condition, never `--ms`.
   Details: [scripting](references/scripting.md).
 
 ## Fastest way through a task

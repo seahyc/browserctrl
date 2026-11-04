@@ -10,6 +10,7 @@ One JSON line per call, with short keys. Absent or empty fields are left out.
 |---|---|
 | `t`, `d` | start time (epoch seconds), duration (ms) |
 | `c`, `x` | command name, exit code |
+| `a` | the word typed when it was an alias (`grep`, `head`, `ls`, `screenshot`…); `c` is the command it ran |
 | `f` | flag NAMES only (sorted, at most 16), for example `["then","tab"]` |
 | `k` | target kind: `name`, `ref`, `sel`, `xy`, `item`, `none` |
 | `tab` | first 8 characters of the tab id |

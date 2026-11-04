@@ -52,10 +52,11 @@ import { page } from '../lib/page/index.mjs';
 import { EXIT, exitCodeFor, exitError, safariResultCode } from '../lib/exit-codes.mjs';
 import { MAX_REPEATS } from '../lib/steps.mjs';
 import { PAGE_CAP } from '../lib/collect.mjs';
+import { resolve as resolveArgs, checkFlags, THEN_FLAGS, ACTION_FLAGS } from '../lib/cli-flags.mjs';
 
 // Commands that act on a page take a still when their tab is being recorded; reads
 // only when the page moved on since the last one.
-const STILL_ACT = new Set(['nav', 'reload', 'refresh', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'act', 'captcha']);
+const STILL_ACT = new Set(['nav', 'back', 'forward', 'reload', 'refresh', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'act', 'captcha']);
 const STILL_READ = new Set(['read', 'items', 'text', 'check']);
 
 // Commands that take a target as a ref, a stable id or a CSS selector.
@@ -130,36 +131,8 @@ function actionLabel(cmd, positional, flags) {
 }
 
 const MUTATING = new Set([
-  'nav', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha', 'do',
+  'nav', 'back', 'forward', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha', 'do',
 ]);
-
-// Flags that never take a value, so `--json <tab>` or `-q <tab>` keeps the word that follows.
-// --count takes one only when it is a number (click --count 2; find … --count).
-const SWITCHES = new Set(['quiet', 'json', 'jsonl', 'enabled', 'no-dedupe', 'id', 'csv', 'commit', 'headless', 'no-sandbox', 'foreground', 'stop', 'vnc', 'require-mask', 'fix']);
-// Flags written as --name=value (the rest take their value as the next word).
-const EQUALS = new Set(['headless']);
-
-function parseArgs(argv) {
-  const flags = {};
-  const positional = [];
-  for (let i = 0; i < argv.length; i += 1) {
-    const a = argv[i];
-    if (a === '-q') flags.quiet = true;
-    else if (a.startsWith('--') && EQUALS.has(a.slice(2).split('=')[0]) && a.includes('=')) {
-      const [name, ...value] = a.slice(2).split('=');
-      flags[name] = value.join('=');
-    } else if (a.startsWith('--')) {
-      const name = a.slice(2);
-      const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--') || SWITCHES.has(name) || (name === 'count' && !/^\d+$/.test(next))) flags[name] = true;
-      else {
-        flags[name] = next;
-        i += 1;
-      }
-    } else positional.push(a);
-  }
-  return { flags, positional };
-}
 
 const out = v => console.log(typeof v === 'string' ? v : JSON.stringify(v, null, 2));
 // One JSON object per line (--jsonl); nothing at all for an empty list.
@@ -274,7 +247,7 @@ function usage() {
     browserctrl read <tab> --browser dia [--json] [--all] snapshot with ref_1..N + page text (--all: whole page, not just near the viewport)
     browserctrl text <tab> [--max-text 8000] [--match re] [--count]  visible text, bounded by default; with --match, exit 1 when no line matches
     browserctrl text <tab> --selector "<css>"                        the text of the elements a CSS selector matches
-                       [--region "main|dialog|<landmark label>|<heading>"] [--from "<line text>" [--to "<line text>"]] [--tail N]
+                       [--region "main|dialog|<landmark label>|<heading>"] [--from "<line text>" [--to "<line text>"]] [--head N] [--tail N]
     browserctrl table <tab> [--json|--jsonl|--csv] [--selector css] [--max N]  the main table or grid (ARIA and div rows too) as
                                                           header-keyed rows; TSV by default; exit 1 when there is none
     browserctrl find <tab> "<text or regex>" [--json|--jsonl] [--count] [--enabled]  controls whose name matches, hidden ones too: what
@@ -348,13 +321,14 @@ function usage() {
     browserctrl reload <tab> [--until load|domcontentloaded|networkidle|none] [--timeout 30000] [--hard]  (refresh is an alias;
                        --hard restarts the tab's renderer when the page is stuck and a plain reload times out)
     browserctrl nav <tab> <url> [--until load|domcontentloaded|networkidle|none]
+    browserctrl back <tab>     browserctrl forward <tab>     the tab's history, as the browser's buttons; exit 1 at either end
     browserctrl wait <tab> --selector ".done" | --text "Saved" | --url /success | --gone ".spinner" | --network-idle
-                   [--timeout 15000]   exit 1 when it never happened
+                   [--timeout 15000]   exit 1 when it never happened (it waits for a condition, never a time: no --ms)
     browserctrl wait --download [DIR] [--timeout 60000] [--since 30]   prints the downloaded file's path (~/Downloads by default)
                        nav, click and do steps already wait for the page to settle and fill in: no sleep after them
 
   See what happened:
-    browserctrl shot <tab> [file] [--full] [--emulate-focus] [--ref ref_3] [--selector css]
+    browserctrl shot <tab> [file | -o file] [--full] [--emulate-focus] [--ref ref_3] [--selector css]
                        [--viewport 1440x900] [--scale 2]   capture at that CSS size and device pixel ratio, then restore
                        [--mask "css;css"] [--mask-blur 12] [--require-mask]   blur matches during the capture only;
                        --require-mask refuses to capture when a mask matches nothing   [--pad 16] margin around --ref/--selector
@@ -382,6 +356,15 @@ function usage() {
                                              A word is the tab only if it is ".", a tab id, active, marked or an alias, or the
                                              command has more words than it takes (nav <tab> <url>); never a URL, name or step
     browserctrl status --browser dia         browserctrl stop --browser dia
+
+  Unix spellings (references/scripting.md):
+    browserctrl cat <tab>                      = text          browserctrl ls          = tabs
+    browserctrl head|tail <tab> [-n N]         first/last N lines of the text (10 by default; also -N)
+    browserctrl grep <tab> PATTERN [-i] [-v] [-n] [-c] [-F] [-q]   matching lines, as grep (case-sensitive unless -i);
+                                               exit 1 when none match
+    browserctrl pwd <tab> | url <tab>          the tab's address       browserctrl cd <tab>    = use <tab>
+    browserctrl whoami                         the agent identity claims belong to (--agent-id NAME sets it for one call)
+    --name=value works for every flag, -- ends the options, and a flag a command does not take is a usage error (exit 2).
 
   Scripting (references/scripting.md): data goes to stdout; hints, warnings and progress to stderr.
     -q/--quiet drops those; find, text --match, wait, ready and check --expect then print nothing (as grep -q).
@@ -510,15 +493,17 @@ async function launch(name) {
   };
 }
 
-const { flags, positional } = parseArgs(process.argv.slice(2));
-// Names agents reach for that mean an existing command.
-const ALIASES = { screenshot: 'shot', navigate: 'nav', list: 'tabs' };
-if (ALIASES[positional[0]]) positional[0] = ALIASES[positional[0]];
-const cmd = positional[0];
+// Unix spellings become the command and flags they mean (grep, head, tail, cat, ls, cd, pwd;
+// --agent-id, --head, shot -o), and --name=value works for every flag (lib/cli-flags.mjs).
+let resolved;
+try { resolved = resolveArgs(process.argv.slice(2)); }
+catch (e) { console.error(`Error: ${e.message}`); process.exit(e.exitCode || 2); }
+const { flags, positional, alias: typedAlias } = resolved;
+const cmd = resolved.cmd;
 // One compact line per call in the local usage log (lib/usage-log.mjs; BROWSERCTRL_USAGE_LOG=0
 // turns it off): the command, flag names, timings and outcome, never values or page text.
 usageLog.startUsage({ argv: process.argv.slice(2) });
-usageLog.noteUsage({ c: cmd, br: typeof flags.browser === 'string' ? flags.browser : process.env.BROWSERCTRL_BROWSER });
+usageLog.noteUsage({ c: cmd, ...(typedAlias ? { a: typedAlias } : {}), br: typeof flags.browser === 'string' ? flags.browser : process.env.BROWSERCTRL_BROWSER });
 process.on('exit', code => usageLog.finishUsage(code));
 // -q/--quiet: no hints, warnings or progress on stderr (errors still print). Commands that
 // test a condition (find, text --match, wait, ready, check --expect) print nothing at all, as
@@ -727,51 +712,6 @@ async function uploadByName(conn, port, targetId, name, files, flags) {
   return await thenAfter(conn, port, targetId);
 }
 
-// --then <kind>: after an action that worked, the page as that command shows it, in the
-// same call, taking that command's own flags (click … --then text --tail 40).
-const THEN_FLAGS = {
-  text: ['tail', 'max-text', 'region', 'from', 'to', 'match'], // not --selector: that is the action's target
-  read: ['all', 'max', 'max-text', 'include-hidden', 'text'],
-  items: ['all', 'max', 'groups', 'group', 'grep', 'no-prefetch'],
-  table: ['max', 'csv', 'jsonl'],
-  fields: ['all', 'jsonl'],
-};
-// The flags each action reads, so one it would ignore (click --tail, click --wait) is an
-// error instead of a silent no-op. A target is a name, ref, CSS selector or point; a by-name
-// action runs as a one-step do plan, which reads the BY_NAME flags. Every command reads
-// ACTION_COMMON.
-const ACTION_COMMON = ['browser', 'port', 'json', 'quiet', 'help', 'show', 'steal', 'then', 'no-diff', 'timeout'];
-const BY_NAME = ['dismiss', 'min-p', 'no-handoff', 'handoff-timeout', 'no-notes'];
-const TARGET_FLAGS = ['ref', 'selector', 'x', 'y', 'token', 'intent', 'expect', 'no-check'];
-const ACTION_FLAGS = {
-  click: [...TARGET_FLAGS, ...BY_NAME, 'commit', 'button', 'count', 'mod'],
-  hover: [...TARGET_FLAGS, ...BY_NAME],
-  fill: [...TARGET_FLAGS, ...BY_NAME, 'value', 'commit'],
-  select: [...TARGET_FLAGS, ...BY_NAME, 'value', 'label'],
-  check: [...BY_NAME, 'expect', 'commit'],
-  upload: [...TARGET_FLAGS, ...BY_NAME, 'files', 'commit'],
-  key: [], type: [],
-  nav: ['until', 'force'],
-  open: ['id', 'profile', 'anonymous', 'until', 'force'],
-};
-
-function checkActionFlags(cmd, flags) {
-  const own = ACTION_FLAGS[cmd];
-  if (!own) return;
-  const usage = message => Object.assign(new Error(message), { exitCode: EXIT.USAGE });
-  if (flags.then !== undefined && !Object.hasOwn(THEN_FLAGS, flags.then)) {
-    throw usage(`--then takes ${Object.keys(THEN_FLAGS).join(', ')}: browserctrl ${cmd} <tab> … --then text`);
-  }
-  const allowed = new Set([...ACTION_COMMON, ...own, ...(flags.then ? THEN_FLAGS[flags.then] : [])]);
-  const bad = Object.keys(flags).filter(k => !allowed.has(k));
-  if (!bad.length) return;
-  const list = bad.map(k => `--${k}`).join(', ');
-  // A flag that shapes what a look at the page shows: say which --then takes it.
-  const kind = Object.keys(THEN_FLAGS).find(t => bad.every(k => THEN_FLAGS[t].includes(k)));
-  if (kind && !flags.then) throw usage(`${cmd} does not take ${list}; ${kind} does. To ${cmd} and then show the page in one call: browserctrl ${cmd} <tab> … --then ${kind} ${bad.map(k => `--${k}${flags[k] === true ? '' : ` ${shellWord(String(flags[k]))}`}`).join(' ')}`);
-  throw usage(`${cmd} does not take ${list}. It takes ${[...own, ...ACTION_COMMON.filter(f => !['help', 'quiet'].includes(f))].map(f => `--${f}`).join(', ')}, and -q${flags.then ? `; with --then ${flags.then} also ${THEN_FLAGS[flags.then].map(f => `--${f}`).join(', ')}` : ''}.`);
-}
-
 // A plan's outcome for the usage log: counts and a stop's kind, never names or page text.
 function noteRun(r) {
   if (!r) return;
@@ -887,20 +827,32 @@ async function observeCommand(kind, conn, port, targetId, flags, tabArg) {
         selected = lines.slice(start, rel < 0 ? lines.length : start + 2 + rel).join('\n');
       }
       // --match is grep-like: exit 1 when no line matches; -q prints nothing; --count the lines.
-      if (flags.match) {
+      // Case-insensitive unless --case-sensitive (browserctrl grep is, unless -i); --invert-match,
+      // --line-number and --fixed-strings as grep's -v, -n and -F.
+      if (flags.match !== undefined) {
+        if (flags.match === true || flags.match === '') throw Object.assign(new Error('--match needs a pattern'), { exitCode: EXIT.USAGE });
+        const pattern = flags['fixed-strings'] ? String(flags.match).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : String(flags.match);
+        const caseFlag = flags['case-sensitive'] ? '' : 'i';
         let re;
-        try { re = new RegExp(String(flags.match), 'i'); }
-        catch (e) { throw new Error(`Invalid --match regex: ${e.message}`); }
-        selected = selected.split(/\r?\n/).filter(line => re.test(line)).join('\n');
-        const n = selected ? selected.split('\n').length : 0;
-        if (!n) no(flags.json || flags.count ? '' : `No line of the page matches /${flags.match}/i.`);
+        try { re = new RegExp(pattern, caseFlag); }
+        catch (e) { throw Object.assign(new Error(`Invalid --match regex: ${e.message}`), { exitCode: EXIT.USAGE }); }
+        const invert = Boolean(flags['invert-match']);
+        const kept = selected.split(/\r?\n/).map((line, i) => [i + 1, line]).filter(([, line]) => re.test(line) !== invert);
+        selected = kept.map(([i, line]) => (flags['line-number'] ? `${i}:${line}` : line)).join('\n');
+        const n = kept.length;
+        if (!n) no(flags.json || flags.count ? '' : `No line of the page ${invert ? 'fails to match' : 'matches'} /${flags.match}/${caseFlag}.`);
         if (quiet) return;
         if (flags.count) return out(String(n));
         if (!n && !flags.json) return;
+      } else if (flags['line-number']) {
+        selected = selected.split(/\r?\n/).map((line, i) => `${i + 1}:${line}`).join('\n');
       }
-      if (flags.tail !== undefined) {
-        if (!(Number(flags.tail) > 0)) throw new Error('--tail must be a positive number of lines');
-        selected = selected.split(/\r?\n/).slice(-Number(flags.tail)).join('\n');
+      // --head N / --tail N: the first or last N lines (both: the last N of the first M, as head | tail).
+      for (const end of ['head', 'tail']) {
+        if (flags[end] === undefined) continue;
+        if (!(Number(flags[end]) > 0)) throw Object.assign(new Error(`--${end} must be a positive number of lines`), { exitCode: EXIT.USAGE });
+        const lines = selected.split(/\r?\n/);
+        selected = (end === 'head' ? lines.slice(0, Number(flags[end])) : lines.slice(-Number(flags[end]))).join('\n');
       }
       const limit = flags['max-text'] === undefined ? 20000 : Number(flags['max-text']);
       const clipped = limit > 0 && selected.length > limit;
@@ -1029,8 +981,8 @@ const main = async () => {
     const report = usageReport(usageLog.readUsage({ days: Number(flags.days || 7) }));
     return out(flags.json ? report : formatUsageReport(report));
   }
-  // Before any browser is reached: a flag the action would ignore is a usage error (exit 2).
-  checkActionFlags(cmd, flags);
+  // Before any browser is reached: a flag the command would ignore is a usage error (exit 2).
+  checkFlags(cmd, flags, positional);
   if (flags.then && ACTION_FLAGS[cmd] && (flags.browser === 'safari' || /^(firefox|camoufox)/i.test(String(flags.browser || process.env.BROWSERCTRL_BROWSER || '')))) {
     throw Object.assign(new Error(`--then needs a Chromium-family browser; run ${flags.then} as its own command.`), { exitCode: EXIT.USAGE });
   }
@@ -1139,6 +1091,11 @@ const main = async () => {
     }
     const lines = moves.map(m => `${m.skipped ? 'kept ' : apply ? 'moved' : 'would move'} ${m.from} -> ${m.to}${m.skipped ? `  (${m.skipped})` : ''}`);
     return out(lines.length ? `${lines.join('\n')}${apply ? '' : '\n\nStop any older browserctrl first (its agents and daemons), then: browserctrl migrate --apply'}` : 'Nothing to move: no folders from an earlier version.');
+  }
+  if (cmd === 'whoami') {
+    // The identity tab claims and the current tab belong to (--agent-id or BROWSERCTRL_AGENT_ID).
+    const id = agentId();
+    return out(flags.json ? { agent: id, from: /^pid:/.test(id) ? 'parent process (set BROWSERCTRL_AGENT_ID or --agent-id to keep it across shell calls)' : flags['agent-id'] ? '--agent-id' : 'BROWSERCTRL_AGENT_ID' } : id);
   }
   if (cmd === 'where') {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -1837,6 +1794,16 @@ const main = async () => {
         }
         return quiet ? undefined : out(r);
       }
+      case 'back': case 'forward': {
+        const res = await ops.history(conn, targetId, cmd === 'back' ? -1 : 1, { waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000 });
+        if (!res.moved) { no(res.reason); return quiet ? undefined : out(res); }
+        hint(res.url, flags);
+        usageLog.noteUsage({ host: res.url });
+        out(await observe(conn, targetId, res));
+        return await thenAfter(conn, port, targetId);
+      }
+      case 'url':
+        return out(flags.json ? { tab: tab.id, url: tab.url, title: tab.title } : tab.url);
       case 'click':
         out(await withChanges(conn, targetId, () => ops.click(conn, targetId, {
           ...target,

@@ -151,8 +151,8 @@ test('toggle mode on another port than the usual one is found through DevToolsAc
 test('an unknown command names the nearest one instead of printing all of help', async () => {
   const { execFile } = await import('node:child_process');
   const run = (c) => new Promise(res => execFile(process.execPath, [fileURLToPath(new URL('../bin/browserctrl.mjs', import.meta.url)), c], (e, so, se) => res(se)));
-  // screenshot, navigate and list are aliases now; other near words still get a pointer.
-  assert.match(await run('snapshot'), /Unknown command "snapshot"\. Did you mean "read"\?/);
+  // screenshot, snapshot, goto, ls, cat… are aliases now (lib/cli-flags.mjs); other near words still get a pointer.
+  assert.match(await run('type_text'), /Unknown command "type_text"\. Did you mean "type"\?/);
   assert.match(await run('shto'), /Did you mean "shot"\?/);
   assert.match(await run('zzqqxx'), /Unknown command "zzqqxx"\. Run browserctrl help/);
 });

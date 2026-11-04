@@ -70,6 +70,37 @@ browserctrl text <tab> --match 'SELECT' --count         # matching lines
 browserctrl wait <tab> --text "Saved" --timeout 5000 -q || echo "not saved"
 ```
 
+## Unix spellings
+
+The commands and options agents already know work as they do in a shell, and read the page's
+text without a pipe (a pipe through `head` or `grep` would also hide the exit code and the stop
+reason):
+
+| Typed | Means |
+| --- | --- |
+| `grep <tab> PATTERN [-i] [-v] [-n] [-c] [-F] [-q]` | `text --match`, case-sensitive unless `-i` (`text --match` alone ignores case); `-v` inverts, `-n` numbers lines, `-c` counts, `-F` is a fixed string; exit 1 when no line matches |
+| `head <tab> [-n N \| -N]`, `tail <tab> [-n N \| -N]` | `text --head N`, `text --tail N` (10 lines by default) |
+| `cat <tab>` | `text` |
+| `ls` | `tabs` |
+| `cd <tab>` | `use <tab>` |
+| `pwd [<tab>]`, `url [<tab>]` | the tab's address (`--json`: tab, url and title) |
+| `back <tab>`, `forward <tab>` | the tab's history, as the browser's buttons; exit 1 at either end; `--then` as after `nav` |
+| `whoami` | the identity tab claims belong to |
+| `screenshot`, `goto`, `navigate`, `press`, `snapshot` | `shot`, `nav`, `nav`, `key`, `read` |
+
+Options follow getopt's habits:
+
+- `--name=value` works for every flag, and `--` ends the options (`grep <tab> -- -v` searches for "-v").
+- `--agent-id NAME` (or `--agent NAME`) on any command sets `BROWSERCTRL_AGENT_ID` for that call.
+- `--tab <tab>` names the tab on any command that takes one first.
+- A flag a command would ignore is a usage error (exit 2) that names what it takes, with a
+  "did you mean" when one is close: `text --max-chars` points to `--max-text`, `read --grep`
+  to `text`, and `click … --tail 40` to `--then text --tail 40`. Synonyms that are unambiguous
+  are accepted: `--grep`/`--match` on `text`, `items`, `visit` and `do`; `fill --text` for
+  `--value`; `shot --out FILE` or `-o FILE`; `click --at x,y`; `release --all` for `--mine`.
+- `wait` waits for a condition, never a time: `wait --ms 2000` is a usage error. nav, click and
+  do steps already wait for the page to settle; for a fixed pause, `sleep` in the shell.
+
 ## Reading parts of a page
 
 ```bash
@@ -77,12 +108,13 @@ browserctrl text <tab> --region main                 # a landmark: main, nav, he
 browserctrl text <tab> --region "Policy Document"    # a heading and what follows it, up to the next heading of its level
 browserctrl text <tab> --from "Policy Document" --to "Grants"   # line range, case-insensitive substrings
 browserctrl text <tab> --tail 30                     # the last lines, instead of eval 'document.body.innerText.slice(-N)'
+browserctrl text <tab> --head 30                     # the first lines (head <tab> -n 30 is the same)
 browserctrl table <tab>                              # TSV with a header line
 browserctrl table <tab> --csv > users.csv
 browserctrl table <tab> --jsonl | jq -r 'select(.Role == "Admin") | .User'
 ```
 
-The ranges apply in the order `--region`, `--from/--to`, `--match`, `--tail`; one that finds
+The ranges apply in the order `--region`, `--from/--to`, `--match`, `--head`, `--tail`; one that finds
 nothing exits 1 and lists the landmarks and headings there are. `table` finds the largest
 shown table or ARIA grid (a header row kept in its own table is matched by column count), else
 rows drawn with divs (three or more siblings of one class with the same number of cells);
