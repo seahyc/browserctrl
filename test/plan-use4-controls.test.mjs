@@ -60,7 +60,10 @@ t('a clipped scroll-panel link is scrolled and retried once', async () => {
 });
 t('a native slider reports a delayed committed value instead of its input value', async () => {
  const id=await open('plan-use2-perform.html');
- await js(id, `document.querySelector('main').innerHTML='<label>Shortest duration<input type="range" min="0" max="30" value="1"></label><output>1 days</output>';document.querySelector('input').onchange=e=>setTimeout(()=>{e.target.value=Number(e.target.value)+1;document.querySelector('output').textContent=e.target.value+' days';history.replaceState({},'', '?duration='+e.target.value+'-')},30)`);
+ await js(id, `document.querySelector('main').innerHTML='<label>Shortest duration<input type="range" min="0" max="30" value="1"></label><output>1 days</output>';document.querySelector('input').onchange=e=>setTimeout(()=>{e.target.value=Math.ceil(Number(e.target.value)/2)*2;document.querySelector('output').textContent=e.target.value+' days';history.replaceState({},'', '?duration='+e.target.value+'-')},30)`);
+ // The page snaps what it commits up to an even number, as real pages snap to allowed values:
+ // 11 is applied as 12. Snapping twice changes nothing, so a snap that lands late on a loaded
+ // machine cannot push the slider on (a +1 on every change did, to the maximum).
  const r=await run(id,['set "Shortest duration" = 11']);
  assert.equal(r.done,true,JSON.stringify(r.stopped));
  assert.equal(r.steps[0].unsure,true);
@@ -107,7 +110,10 @@ t('ambiguous header controls keep the hidden search field stopped', async () => 
 });
 t('a slider removed after commit keeps the observed value and requests a check', async () => {
  const id=await open('plan-use2-perform.html');
- await js(id, `document.querySelector('main').innerHTML='<label>Shortest duration<input type="range" min="0" max="30" value="1"></label>';document.querySelector('input').onchange=e=>setTimeout(()=>e.target.remove(),30)`);
+ await js(id, `document.querySelector('main').innerHTML='<label>Shortest duration<input type="range" min="0" max="30" value="1"></label>';document.querySelector('input').onchange=e=>setTimeout(()=>e.target.remove(),150)`);
+ // Removed 150 ms after the commit: after the step reads the committed value (30 ms was within
+ // one CDP round trip on a loaded machine), and inside the 300 ms quiet window that comes before
+ // the applied-value check, which therefore finds the slider gone.
  const r=await run(id,['set "Shortest duration" = 11']);
  assert.equal(r.steps[0].slider,'11');
  assert.equal(r.steps[0].unsure,true);

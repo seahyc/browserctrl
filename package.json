@@ -19,9 +19,11 @@
   },
   "scripts": {
     "pretest": "node test/sweep-orphans.mjs",
-    "test": "node --import ./test/helpers.mjs --test --test-concurrency=4 --test-timeout=300000 test/*.test.mjs",
+    "test": "node test/run.mjs core",
+    "test:full": "node test/run.mjs full",
     "test:serial": "node --import ./test/helpers.mjs --test --test-concurrency=1 --test-timeout=300000 test/*.test.mjs",
-    "test:quick": "node test/quick.mjs",
+    "test:quick": "node test/run.mjs quick",
+    "test:select": "node test/select.mjs",
     "sync-extension": "node scripts/sync-extension.mjs",
     "prepack": "node scripts/sync-extension.mjs",
     "check-extension": "node scripts/sync-extension.mjs --check",

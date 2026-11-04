@@ -186,7 +186,8 @@ npm test
 
 The suite drives a throwaway headless browser with its own user-data-dir, so it never
 touches a real profile, and every test file gets its own `BROWSERCTRL_HOME` and debugging
-port, so four run at once. `npm run test:quick` runs the files that need no browser. It also checks that
+ports, so eight run at once. `npm test` is the one-minute core tier, `npm run test:full` every
+file, `npm run test:quick` the files that need no browser (see CONTRIBUTING.md). It also checks that
 every command documented here exists in the CLI.
 
 ## Gotchas
