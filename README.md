@@ -376,6 +376,16 @@ Before typing anything, browserctrl checks that the page and the frame holding t
 
 This guards against the agent and its logs seeing a credential. It doesn't protect against other programs on your computer, or the website itself. Details are in [protected field fill](references/vault-fill.md).
 
+Agent-vault can also approve a displayed payment card and a merchant's exact number,
+expiry and CVC inputs with `browser.card.fill`. Its private v4/v5 driver captures and
+fills without the clipboard, including payment fields in cross-origin iframes. The
+source account labels, last four digits, expiry, merchant origin and every frame
+origin are fixed by policy. Both tabs must share a browser and owner. Every field
+is checked before insertion and read back privately; the agent receives only a
+receipt. It never clicks Save or makes a payment. Source and destination frames are
+protected from screenshots, recordings and raw reads while they contain card data.
+See agent-vault's payment-card transfer workflow for policy registration and limits.
+
 Protected username/password/TOTP entry is supported in a fresh owned Safari automation tab. It closes that tab after submission and keeps console/network inspection private for the native session. See [Safari credential entry](references/vault-entry.md#safari-27) for setup, session continuity and recovery limits.
 
 
