@@ -52,7 +52,7 @@ import { page } from '../lib/page/index.mjs';
 import { EXIT, exitCodeFor, exitError, safariResultCode } from '../lib/exit-codes.mjs';
 import { MAX_REPEATS } from '../lib/steps.mjs';
 import { PAGE_CAP } from '../lib/collect.mjs';
-import { resolve as resolveArgs, checkFlags, THEN_FLAGS, ACTION_FLAGS } from '../lib/cli-flags.mjs';
+import { resolve as resolveArgs, checkFlags, THEN_FLAGS, ACTION_FLAGS, MAX_PAUSE_MS } from '../lib/cli-flags.mjs';
 
 // Commands that act on a page take a still when their tab is being recorded; reads
 // only when the page moved on since the last one.
@@ -134,7 +134,28 @@ const MUTATING = new Set([
   'nav', 'back', 'forward', 'reload', 'refresh', 'focus', 'wake', 'click', 'hover', 'drag', 'type', 'key', 'fill', 'select', 'upload', 'scroll', 'scroll-to', 'close', 'act', 'captcha', 'do',
 ]);
 
-const out = v => console.log(typeof v === 'string' ? v : JSON.stringify(v, null, 2));
+// --grep/--head/--tail given to a look that has none of its own (read, tabs, find, console…):
+// applied to the lines it prints, as a pipe would, with grep's exit 1 when no line matches.
+// lib/cli-flags.mjs inferIntent sets them; JSON output is left whole.
+function shapeLines(text) {
+  const want = flags['output-lines'];
+  if (!want || typeof want !== 'object') return text;
+  let lines = String(text).split('\n');
+  if (want.grep !== undefined) {
+    let re;
+    try { re = new RegExp(String(want.grep), 'i'); } catch (e) { throw Object.assign(new Error(`Invalid --grep regex: ${e.message}`), { exitCode: EXIT.USAGE }); }
+    lines = lines.filter(l => re.test(l));
+    if (!lines.length && (!process.exitCode || process.exitCode === EXIT.OK)) process.exitCode = EXIT.NO;
+  }
+  if (want.head !== undefined) lines = lines.slice(0, Number(want.head));
+  if (want.tail !== undefined) lines = lines.slice(-Number(want.tail));
+  return lines.join('\n');
+}
+const out = v => {
+  if (typeof v !== 'string' && flags['output-lines']) console.error('(--grep/--head/--tail shape text output; the JSON is printed whole)');
+  const s = typeof v === 'string' ? shapeLines(v) : JSON.stringify(v, null, 2);
+  if (s !== '' || typeof v !== 'string' || !flags['output-lines']) console.log(s);
+};
 // One JSON object per line (--jsonl); nothing at all for an empty list.
 const outLines = rows => { if (rows.length) process.stdout.write(rows.map(r => JSON.stringify(r)).join('\n') + '\n'); };
 // A negative answer (exit 1): the message goes to stderr, so stdout holds only data.
@@ -323,7 +344,7 @@ function usage() {
     browserctrl nav <tab> <url> [--until load|domcontentloaded|networkidle|none]
     browserctrl back <tab>     browserctrl forward <tab>     the tab's history, as the browser's buttons; exit 1 at either end
     browserctrl wait <tab> --selector ".done" | --text "Saved" | --url /success | --gone ".spinner" | --network-idle
-                   [--timeout 15000]   exit 1 when it never happened (it waits for a condition, never a time: no --ms)
+                   [--timeout 15000]   exit 1 when it never happened; --ms N alone pauses (prefer a condition)
     browserctrl wait --download [DIR] [--timeout 60000] [--since 30]   prints the downloaded file's path (~/Downloads by default)
                        nav, click and do steps already wait for the page to settle and fill in: no sleep after them
 
@@ -367,6 +388,7 @@ function usage() {
     --name=value works for every flag, -- ends the options, and a flag a command does not take is a usage error (exit 2).
     Synonyms (--max-chars, --limit, --first, --last) are taken with a note on stderr, and so are typos in a command that
     only looks (txet, --tali); a typo in an action stays exit 2, so nothing acts on a guess. Line output pipes cleanly.
+    --grep/--head/--tail on a look without them cut its lines (read --grep "Sign in" keeps the ref lines).
 
   Scripting (references/scripting.md): data goes to stdout; hints, warnings and progress to stderr.
     -q/--quiet drops those; find, text --match, wait, ready and check --expect then print nothing (as grep -q).
@@ -1346,6 +1368,13 @@ const main = async () => {
   }
 
   // A download is a file, not a page: no browser needed.
+  // wait --ms N (or --sleep/--seconds) with nothing to wait for: a pause (lib/cli-flags.mjs).
+  if (cmd === 'wait' && flags.pause !== undefined) {
+    const ms = Math.min(Number(flags.pause), MAX_PAUSE_MS);
+    if (!(ms >= 0)) throw Object.assign(new Error('--pause takes milliseconds'), { exitCode: EXIT.USAGE });
+    await new Promise(r => setTimeout(r, ms));
+    return quiet ? undefined : out({ paused_ms: ms });
+  }
   if (cmd === 'wait' && flags.download) {
     const r = await waitDownload(flags);
     if (!r.path) { no(r.reason); return quiet ? undefined : out({ downloaded: false, reason: r.reason }); }

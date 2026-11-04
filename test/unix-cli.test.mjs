@@ -122,10 +122,9 @@ test('--tab names the tab, --at a point, and spellings agents use map to the fla
 });
 
 test('a flag any command would ignore is a usage error that says what it takes', () => {
-  usageError(() => check(['wait', 'ABCDEF12', '--ms', '2000']), /not for a time.*sleep in the shell/);
+  usageError(() => check(['wait', 'ABCDEF12', '--ms', 'soon']), /takes a length of time/);
   usageError(() => check(['text', 'ABCDEF12', '--bogus-thing', '1000']), /text does not take --bogus-thing\. It takes --tail/);
-  usageError(() => check(['read', 'ABCDEF12', '--grep', 'Sign in']), /read does not take --grep; text does: browserctrl text <tab> --grep 'Sign in'|read does not take --grep; items does/);
-  usageError(() => check(['read', 'ABCDEF12', '--tail', '25']), /read does not take --tail; text does: browserctrl text <tab> --tail 25/);
+  usageError(() => check(['fields', 'ABCDEF12', '--region', 'main']), /fields does not take --region; text does/);
   usageError(() => check(['find', 'ABCDEF12', 'video', '--role', 'video']), /find does not take --role\. It takes --max/);
   usageError(() => check(['tabs', '--bogus']), /tabs does not take --bogus/);
   usageError(() => check(['text', 'ABCDEF12', '-n', '40']), /text has no option -n.*--head N or --tail N/);
@@ -155,7 +154,7 @@ test('synonyms are taken on any command; typos only on commands that just look',
   usageError(() => r(['click', 'ABCDEF12', 'Save', '--comit']), /click does not take --comit\. Did you mean --commit\?/);
   usageError(() => r(['do', 'ABCDEF12', 'click "A"', '--repaet', 'click "Next"']), /Did you mean --repeat\?/);
   // A real flag of another command is not "corrected": the error says which command takes it.
-  usageError(() => r(['read', 'ABCDEF12', '--grep', 'x']), /read does not take --grep; text does/);
+  usageError(() => r(['fields', 'ABCDEF12', '--from', 'x']), /fields does not take --from; text does/);
   // Two equally close flags: no guess.
   assert.deepEqual(autocorrect('table', { maxx: '3', mxa: '1' }, []).length <= 1, true);
 });
@@ -167,6 +166,38 @@ test('a misspelt command that only looks runs as the one meant; an action does n
   assert.equal(resolve(['whoamii'], {}).cmd, 'whoami');
   assert.equal(resolve(['clik', 'ABCDEF12', 'Save'], {}).cmd, 'clik', 'click changes the page: still an unknown command');
   assert.equal(resolve(['fil', 'ABCDEF12', 'a', 'b'], {}).cmd, 'fil');
+});
+
+test('wait --ms is a pause, or the timeout of a condition; units are inferred', () => {
+  const r = argv => { const x = resolve(argv, {}); checkFlags(x.cmd, x.flags, x.positional); return x; };
+  let x = r(['wait', 'ABCDEF12', '--ms', '3000']);
+  assert.equal(x.flags.pause, '3000');
+  assert.match(x.notes[0], /pausing 3000 ms/);
+  assert.equal(r(['wait', 'ABCDEF12', '--sleep', '2']).flags.pause, '2000', 'a small bare number is seconds, as sleep 2');
+  assert.equal(r(['wait', 'ABCDEF12', '--seconds', '1.5']).flags.pause, '1500');
+  assert.equal(r(['wait', 'ABCDEF12', '--delay', '500ms']).flags.pause, '500');
+  assert.equal(r(['wait', 'ABCDEF12', '--for', '2s']).flags.pause, '2000');
+  assert.equal(r(['wait', 'ABCDEF12', '--seconds', '900']).flags.pause, '120000', 'capped at two minutes');
+  x = r(['wait', 'ABCDEF12', '--text', 'Saved', '--ms', '5000']);
+  assert.deepEqual([x.flags.timeout, x.flags.pause], ['5000', undefined], 'with a condition: its timeout');
+  x = r(['wait', 'ABCDEF12', '--text', 'Saved', '--timeout', '100', '--ms', '5000']);
+  assert.equal(x.flags.timeout, '100', 'an explicit --timeout wins');
+});
+
+test('--grep/--head/--tail on a look without them shape its lines; read --region runs text', () => {
+  const r = argv => { const x = resolve(argv, {}); checkFlags(x.cmd, x.flags, x.positional); return x; };
+  let x = r(['read', 'ABCDEF12', '--grep', 'Sign in', '--tail', '5']);
+  assert.deepEqual([x.cmd, x.flags['output-lines']], ['read', { grep: 'Sign in', tail: '5' }]);
+  assert.match(x.notes[0], /applied --grep --tail to the lines read prints/);
+  assert.deepEqual(r(['tabs', '--match', 'court']).flags['output-lines'], { grep: 'court' });
+  x = r(['items', 'ABCDEF12', '--grep', 'a', '--head', '2']);
+  assert.deepEqual([x.flags.grep, x.flags['output-lines']], ['a', { head: '2' }], 'items keeps its own --grep');
+  x = r(['read', 'ABCDEF12', '--region', 'Payment Methods', '--grep', 'Visa']);
+  assert.deepEqual([x.cmd, x.positional, x.flags.region, x.flags.match], ['text', ['text', 'ABCDEF12'], 'Payment Methods', 'Visa']);
+  assert.match(x.notes[0], /ran text: read has no --region/);
+  usageError(() => r(['read', 'ABCDEF12', '--head', '0']), /positive number/);
+  // Actions are not looks: their flags stay strict.
+  usageError(() => r(['click', 'ABCDEF12', 'Save', '--grep', 'x']), /click does not take --grep/);
 });
 
 // Every flag the CLI reads is in some command's list, so a new flag cannot be rejected by mistake.
@@ -192,7 +223,7 @@ test('every documented command has a flag list', () => {
 });
 
 test('usage errors exit 2 before a browser is needed; whoami needs none', async () => {
-  const r = await run(['wait', 'ABCDEF12', '--ms', '500'], { port: null });
+  const r = await run(['wait', 'ABCDEF12', '--ms', 'soon'], { port: null });
   assert.equal(r.code, EXIT.USAGE, r.stderr);
   const t = await run(['tabs', '--bogus'], { port: null });
   assert.equal(t.code, EXIT.USAGE, t.stderr);
@@ -368,6 +399,30 @@ t('screenshot -o, goto, press, snapshot, fill --text and click --at do what they
   r = await run(['goto', tab, `${fixture.url}fixtures/unix-cli.html`]);
   assert.equal(r.code, 0, r.stderr);
   assert.match(JSON.parse(r.stdout).url, /unix-cli\.html$/);
+});
+
+t('read --grep keeps the matching ref lines; tabs --grep filters; no match exits 1; wait pauses', async () => {
+  const tab = await open();
+  let r = await run(['read', tab, '--grep', 'next page']);
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /ref_\d+.*Next page/i);
+  assert.ok(r.stdout.trim().split('\n').every(l => /next page/i.test(l)), r.stdout);
+  assert.match(r.stderr, /applied --grep to the lines read prints/);
+  r = await run(['read', tab, '--grep', 'zzzqq']);
+  assert.equal(r.code, EXIT.NO);
+  assert.equal(r.stdout, '');
+  r = await run(['tabs', '--grep', 'unix fixture']);
+  assert.ok(r.stdout.trim().split('\n').length >= 1 && r.stdout.split('\n').filter(Boolean).every(l => /unix fixture/i.test(l)), r.stdout);
+  r = await run(['read', tab, '--from', 'gamma', '--to', 'delta']);
+  assert.deepEqual(r.stdout.trim().split('\n'), ['gamma three', 'beta four', 'delta five']);
+  const started = Date.now();
+  r = await run(['wait', tab, '--ms', '600']);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(Date.now() - started >= 600);
+  assert.deepEqual(JSON.parse(r.stdout), { paused_ms: 600 });
+  r = await run(['wait', tab, '--text', 'never on this page', '--ms', '400']);
+  assert.equal(r.code, EXIT.NO, 'with a condition, --ms is its timeout');
+  assert.match(r.stderr, /took --ms as --timeout 400/);
 });
 
 // Last: a challenge starts a cool-down for the fixture's site, cleared at the end.

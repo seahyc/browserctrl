@@ -94,8 +94,8 @@ Options follow getopt's habits:
 - `--agent-id NAME` (or `--agent NAME`) on any command sets `BROWSERCTRL_AGENT_ID` for that call.
 - `--tab <tab>` names the tab on any command that takes one first.
 - A flag a command would ignore is a usage error (exit 2) that names what it takes, with a
-  "did you mean" when one is close: `read --grep` points to `text`, and `click … --tail 40` to
-  `--then text --tail 40`. Synonyms that are unambiguous
+  "did you mean" when one is close: `fields --region` points to `text`, and `click … --tail 40`
+  to `--then text --tail 40`. Synonyms that are unambiguous
   are accepted: `--grep`/`--match` on `text`, `items`, `visit` and `do`; `fill --text` for
   `--value`; `shot --out FILE` or `-o FILE`; `click --at x,y`; `release --all` for `--mine`.
 - Corrections that save a turn: a known synonym is taken on any command, with a note on stderr
@@ -108,8 +108,18 @@ Options follow getopt's habits:
 - Pipes: the line commands (`grep`, `head`, `tail`, `text --match/--head/--tail`) print only
   page lines on stdout; a challenge notice goes to stderr then (plain `text`/`cat` still lead
   with it). A reader that stops early (`| head -1`) is not an error.
-- `wait` waits for a condition, never a time: `wait --ms 2000` is a usage error. nav, click and
-  do steps already wait for the page to settle; for a fixed pause, `sleep` in the shell.
+- Intentions inferred from a flag the command lacks, each with a note on stderr:
+  - `wait <tab> --ms 2000` (also `--sleep 2`, `--seconds 1.5`, `--delay 500ms`, `--for 2s`)
+    pauses, at most 2 minutes, and prints `{"paused_ms":2000}`. A bare number is milliseconds
+    for `--ms`, seconds for `--seconds`, and for the other names seconds when under 100. With a
+    condition (`--text`, `--selector`, `--url`, `--gone`, `--fn`, `--network-idle`) it is the
+    timeout instead. nav, click and do steps already wait for the page to settle, and a
+    condition waits only as long as needed, so a pause is rarely the fastest way.
+  - `--grep RE`, `--head N` and `--tail N` on a look that has no such flag of its own (`read`,
+    `tabs`, `find`, `fields`, `console`, `network`, `table`…) cut the lines it prints, as a pipe
+    would, keeping the exit code: no matching line exits 1. `read <tab> --grep "Sign in"` keeps
+    the matching ref lines, ready to click. JSON output is printed whole.
+  - `read <tab> --region/--from/--to/--selector` runs `text`, which gives that part of the page.
 
 ## Reading parts of a page
 
