@@ -76,7 +76,9 @@ test('idle finalization allows protected fill without recording later canary or 
   const before = files(out);
   const rr = zlib.brotliDecompressSync(before['rrweb.ndjson.br']).toString();
   assert.match(rr,new RegExp(SAFE));
-  assert.ok(Object.keys(before).some(k=>k.startsWith('trajectory/') && k.endsWith('.jpg')), 'real screenshot positive control is required');
+  const images = Object.entries(before).filter(([name]) => name.startsWith('trajectory/') && name.endsWith('.jpg'));
+  assert.ok(images.length > 0, 'real screenshot positive control is required');
+  for (const [name, image] of images) assert.deepEqual([...image.subarray(0, 3)], [0xff, 0xd8, 0xff], `${name} must be a JPEG`);
   const filled = await fill();
   assert.deepEqual(filled,{status:'completed',verification:'filled',input_attempted:true,action_may_have_run:false});
   assert.equal(await ops.evaluate(conn,target,"document.querySelector('#echo').textContent.length"),CANARY.length);
