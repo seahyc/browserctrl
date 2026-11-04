@@ -263,7 +263,7 @@ test('a live legacy daemon is left running until an owner coordinates safe upgra
 // A stand-in daemon that is healthy but running a different code version, so a normal
 // connect would ask it to cooperatively upgrade. It defers that upgrade (as a stuck vault
 // taint would) and logs every op it receives, so a test can prove which ops reached it.
-function startFakeUpgradeableDaemon(port, { blocker }) {
+function startFakeUpgradeableDaemon(port, { blocker, retiresWhenFree = false }) {
   const socketPath = SOCK(port);
   const child = spawn(process.execPath, ['--input-type=module', '-e', `
     import net from 'node:net'; import fs from 'node:fs'; import {execFileSync} from 'node:child_process';
@@ -273,7 +273,7 @@ function startFakeUpgradeableDaemon(port, { blocker }) {
       for(const line of data.toString().trim().split('\\n')){
         if(!line)continue; const req=JSON.parse(line); console.log('OP '+req.op);
         if(req.op==='status'||req.op==='health') sock.write(JSON.stringify({reqId:req.reqId,result:status})+'\\n');
-        else if(req.op==='upgrade') sock.write(JSON.stringify({reqId:req.reqId,result:{deferred:true,blocker:${JSON.stringify(blocker)}}})+'\\n');
+        else if(req.op==='upgrade') sock.write(JSON.stringify({reqId:req.reqId,result:{deferred:true,blocker:${JSON.stringify(blocker)},retiresWhenFree:${retiresWhenFree}}})+'\\n');
         else if(req.op==='heal') sock.write(JSON.stringify({reqId:req.reqId,result:{prunedOrphans:['GONE'],prunedTaints:[],taintedTabs:0,blockedBy:null}})+'\\n');
         else if(req.op==='stop'){console.log('STOPPED');sock.write(JSON.stringify({reqId:req.reqId,result:'stopping'})+'\\n');try{fs.unlinkSync(socketPath);fs.unlinkSync(socketPath+'.owner.json');}catch{}process.exit(0);}
         else sock.write(JSON.stringify({reqId:req.reqId,error:'unexpected'})+'\\n');
@@ -312,6 +312,72 @@ test('a deferred upgrade names the blocker and points at the no-kill recovery', 
   // specific blocker and the recovery path, rather than the old generic sentence.
   await assert.rejects(connect(port), e =>
     /vault taint is held on tab 6C4D0950/.test(e.message) && /doctor --fix|browserctrl stop/.test(e.message));
+});
+
+test('a deferred upgrade from a daemon that retires when free serves the command instead of failing', posixOptions, async t => {
+  const { port } = await fixture(t);
+  const fake = startFakeUpgradeableDaemon(port, { blocker: 'a command is running', retiresWhenFree: true });
+  t.after(() => fake.kill('SIGKILL'));
+  let out = ''; fake.stdout.on('data', d => out += d);
+  await new Promise(resolve => fake.stdout.once('data', resolve));
+  const client = await connect(port);
+  t.after(() => client.close());
+  assert.equal((await client.status()).pid, fake.pid, 'the running daemon serves this command');
+  assert.ok(out.split('\n').includes('OP upgrade'), 'the upgrade was still asked for');
+});
+
+// A real daemon on code that then changes: it retires by itself once idle, and not while a
+// client is mid-command.
+async function withCodeStamp(t, value) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-stamp-'));
+  const file = path.join(dir, 'stamp');
+  fs.writeFileSync(file, value);
+  const saved = { stamp: process.env.BROWSERCTRL_TEST_CODE_STAMP, check: process.env.BROWSERCTRL_UPGRADE_CHECK_MS, idle: process.env.BROWSERCTRL_IDLE_FOR_UPGRADE_MS };
+  Object.assign(process.env, { BROWSERCTRL_TEST_CODE_STAMP: file, BROWSERCTRL_UPGRADE_CHECK_MS: '100', BROWSERCTRL_IDLE_FOR_UPGRADE_MS: '700' });
+  t.after(() => {
+    for (const [k, v] of [['BROWSERCTRL_TEST_CODE_STAMP', saved.stamp], ['BROWSERCTRL_UPGRADE_CHECK_MS', saved.check], ['BROWSERCTRL_IDLE_FOR_UPGRADE_MS', saved.idle]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  return file;
+}
+const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+async function until(cond, ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { if (await cond()) return true; await new Promise(r => setTimeout(r, 50)); }
+  return false;
+}
+
+test('a daemon retires by itself once the code changes and it is idle; the next command gets new code', posixOptions, async t => {
+  const { port } = await fixture(t);
+  const stamp = await withCodeStamp(t, 'one');
+  const first = await connect(port);
+  const old = await first.status();
+  assert.match(old.code, /\+one$/);
+  first.close();
+  fs.writeFileSync(stamp, 'two');
+  assert.ok(await until(() => !alive(old.pid), 15000), 'the old daemon must not keep running');
+  const next = await connect(port);
+  t.after(() => next.close());
+  const now = await next.status();
+  assert.notEqual(now.pid, old.pid);
+  assert.match(now.code, /\+two$/);
+});
+
+test('a daemon on old code does not retire while a connected client is mid-command', posixOptions, async t => {
+  const { port } = await fixture(t);
+  const stamp = await withCodeStamp(t, 'one');
+  const client = await connect(port);
+  t.after(() => client.close());
+  const { pid } = await client.status();
+  fs.writeFileSync(stamp, 'two');
+  // Requests in a row, with gaps shorter than the idle window: the daemon stays.
+  const end = Date.now() + 2500;
+  while (Date.now() < end) { await client.tabs?.().catch(() => {}); await client.status(); await new Promise(r => setTimeout(r, 150)); }
+  assert.ok(alive(pid), 'retired between two requests of a running command');
+  // Quiet past the idle window: it goes.
+  assert.ok(await until(() => !alive(pid), 15000), 'an idle old daemon must retire even with a client connected');
 });
 
 test('heal prunes a taint left for a tab that is no longer live', options, async t => {

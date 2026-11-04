@@ -159,7 +159,9 @@ a marked tab refuses every operation except closing it. Ask the owner to close
 the tab, then run the [v1 recovery command](vault-entry.md#owner-recovery-after-uncertain-cleanup)
 with the same `BROWSERCTRL_AGENT_ID`, any one of the approved origins, and the
 full target ID. The daemon checks that the tab is gone before it clears the mark.
-A daemon holding taints refuses a cooperative upgrade or stop.
+A daemon holding taints refuses a stop, and waits with an upgrade: it keeps serving
+commands and restarts on the new code by itself once the taints are lifted (a taint
+on a tab that has since closed is dropped first).
 
 ## Protected capture (v3)
 
