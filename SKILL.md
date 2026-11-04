@@ -55,8 +55,11 @@ Use the `browserctrl` CLI on PATH. `browserctrl help` lists every command and fl
 - A flag a command doesn't take exits 2 and says what it takes. Known synonyms are taken with a
   note on stderr (`--max-chars` as `--max-text`, `--limit` as `--max`, `--first`/`--last` as
   `--head`/`--tail`), and so are typos in a command that only looks (`txet`, `--tali`); a typo in
-  an action is still an error, so nothing is clicked on a guess. `wait` takes a condition,
-  never `--ms`. Details: [scripting](references/scripting.md).
+  an action is still an error, so nothing is clicked on a guess. A look given `--grep`/`--head`/
+  `--tail` it lacks shapes its own lines (`read "$t" --grep "Sign in"` keeps the ref lines,
+  `tabs --grep shop`); `read --region/--from/--selector` runs `text`. `wait --ms N` pauses (with
+  `--text` or `--selector`, it is the timeout), but nav, click and do already wait for the page:
+  prefer `wait --text "…"`. Details: [scripting](references/scripting.md).
 
 ## Fastest way through a task
 
