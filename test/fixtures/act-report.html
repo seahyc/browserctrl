@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Billing</title></head>
+<body>
+<main>
+  <h1>Billing</h1>
+  <p id="count" role="status">3 cards</p>
+  <button id="add" onclick="document.getElementById('dlg').hidden = false">Add card</button>
+  <button id="noop">Nothing happens</button>
+  <a href="page.html">Next page</a>
+  <form onsubmit="event.preventDefault(); document.getElementById('count').textContent = '4 cards'">
+    <label for="q">Card name</label> <input id="q">
+  </form>
+  <p>Footer line one</p>
+  <p>Footer line two</p>
+</main>
+<div id="dlg" role="dialog" aria-label="Add card" hidden>
+  <label for="num">Card number</label> <input id="num">
+  <button>Save card</button>
+</div>
+</body></html>

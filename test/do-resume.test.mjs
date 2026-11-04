@@ -19,7 +19,7 @@ const noCandidates = { stopped: { step: 2, reason: 'Target absent' } };
 test('stopped plans resume from the failed step with the closest control swapped in', () => {
   const text = formatSteps(report());
   assert.match(text, /70%  ref_8 button "Closest"/);
-  assert.match(text, /✗ stopped at step 2\/3: Target absent\nresume: browserctrl do 'tab-1' 'click "Closest"' 'fill Search = later' {3}# closest control, p=0\.70\n {4}or as planned: browserctrl do 'tab-1' 'click Missing' 'fill Search = later'$/);
+  assert.match(text, /✗ stopped at step 2\/3: Target absent(  · [^\n]+)?\nresume: browserctrl do 'tab-1' 'click "Closest"' 'fill Search = later' {3}# closest control, p=0\.70\n {4}or as planned: browserctrl do 'tab-1' 'click Missing' 'fill Search = later'$/);
   assert.doesNotMatch(resumeLine(text), /First|ref_8/);
 });
 

@@ -46,6 +46,7 @@ import * as site from '../lib/site.mjs';
 import * as rec from '../lib/rec.mjs';
 import * as readtokens from '../lib/readtokens.mjs';
 import * as finder from '../lib/find.mjs';
+import * as usageLog from '../lib/usage-log.mjs';
 import * as recording from '../lib/recording.mjs';
 import { page } from '../lib/page/index.mjs';
 import { EXIT, exitCodeFor, exitError, safariResultCode } from '../lib/exit-codes.mjs';
@@ -224,6 +225,7 @@ function usage() {
     browserctrl native-focus <native UUID> --browser dia  select and wake a native Dia tab
     browserctrl native-group --ids UUIDs --group-id N --browser dia [--dry-run] [--allow-focus]
     browserctrl doctor --browser dia                     read-only connection diagnosis (JSON)
+    browserctrl usage [--days 7] [--json]                summary of the local usage log: calls, chains, stops, latency (references/usage-log.md)
     browserctrl doctor --browser dia --watch-seconds 20   passive OS connection capture
     browserctrl doctor --fix --browser dia               self-heal: prune stale vault taints on closed tabs, release a stuck gate
     browserctrl restart --browser dia                    stop the daemon (bypassing any deferred upgrade) and start a fresh one
@@ -271,6 +273,7 @@ function usage() {
   Read before you act:
     browserctrl read <tab> --browser dia [--json] [--all] snapshot with ref_1..N + page text (--all: whole page, not just near the viewport)
     browserctrl text <tab> [--max-text 8000] [--match re] [--count]  visible text, bounded by default; with --match, exit 1 when no line matches
+    browserctrl text <tab> --selector "<css>"                        the text of the elements a CSS selector matches
                        [--region "main|dialog|<landmark label>|<heading>"] [--from "<line text>" [--to "<line text>"]] [--tail N]
     browserctrl table <tab> [--json|--jsonl|--csv] [--selector css] [--max N]  the main table or grid (ARIA and div rows too) as
                                                           header-keyed rows; TSV by default; exit 1 when there is none
@@ -286,7 +289,10 @@ function usage() {
 
   Act by the name you see (exact name, else Jev, as in do; exit 3 when unsure, 5 for a committing click without --commit):
     browserctrl click <tab> "Save"        browserctrl fill <tab> "Search" "aeron"      browserctrl select <tab> "Country" "Singapore"
-    browserctrl hover <tab> "Account"     browserctrl check <tab> "Remember me"        (prints one JSON object: what it acted on)
+    browserctrl hover <tab> "Account"     browserctrl check <tab> "Remember me"        (prints one JSON object: what it acted on
+                                          and "changed": the dialog it opened, counts and controls that changed; --no-diff skips it)
+    Then look in the same call: --then text|read|items|table|fields, with that command's flags (any action, nav, open):
+    browserctrl click <tab> "Billing" --then text --tail 40      browserctrl nav <tab> <url> --then items      browserctrl open <url> --then read
 
   Act (all accept --ref ref_3, --selector <css>, or --x/--y):
     browserctrl click <tab> --intent "the Grey option" [--expect "…"]   Jev picks the element (also fill/select/hover); never clicks Buy/Send/Pay/Delete
@@ -509,6 +515,11 @@ const { flags, positional } = parseArgs(process.argv.slice(2));
 const ALIASES = { screenshot: 'shot', navigate: 'nav', list: 'tabs' };
 if (ALIASES[positional[0]]) positional[0] = ALIASES[positional[0]];
 const cmd = positional[0];
+// One compact line per call in the local usage log (lib/usage-log.mjs; BROWSERCTRL_USAGE_LOG=0
+// turns it off): the command, flag names, timings and outcome, never values or page text.
+usageLog.startUsage({ argv: process.argv.slice(2) });
+usageLog.noteUsage({ c: cmd, br: typeof flags.browser === 'string' ? flags.browser : process.env.BROWSERCTRL_BROWSER });
+process.on('exit', code => usageLog.finishUsage(code));
 // -q/--quiet: no hints, warnings or progress on stderr (errors still print). Commands that
 // test a condition (find, text --match, wait, ready, check --expect) print nothing at all, as
 // grep -q: the exit code is the answer. A do plan prints no report, only why it stopped.
@@ -681,7 +692,7 @@ function uploadPaths(list) {
 // name a person sees: the exact name first, else Jev picks among the page's upload controls.
 // Unsure, or no upload control: exit 3 with the controls there are. A button that opens a
 // picker of the page's making and whose name commits (Upload and submit) needs --commit (else 5).
-async function uploadByName(conn, targetId, name, files, flags) {
+async function uploadByName(conn, port, targetId, name, files, flags) {
   const found = await ops.evaluate(conn, targetId, page('upload-targets', {}));
   const controls = found.controls || [];
   const stop = (reason, extra = {}) => {
@@ -712,21 +723,232 @@ async function uploadByName(conn, targetId, name, files, flags) {
   const marked = await ops.evaluate(conn, targetId, page('upload-targets', { mark: pick.i }));
   if (!marked.selector) return stop('the page changed while choosing the control; run upload again');
   const r = await ops.upload(conn, targetId, { selector: marked.selector, files });
-  if (quiet) return;
-  return out({ ...r, target: { kind: pick.kind, name: pick.name, ...(pick.within ? { within: pick.within } : {}), opens: pick.opens }, how });
+  if (!quiet) out({ ...r, target: { kind: pick.kind, name: pick.name, ...(pick.within ? { within: pick.within } : {}), opens: pick.opens }, how });
+  return await thenAfter(conn, port, targetId);
+}
+
+// --then <kind>: after an action that worked, the page as that command shows it, in the
+// same call, taking that command's own flags (click … --then text --tail 40).
+const THEN_FLAGS = {
+  text: ['tail', 'max-text', 'region', 'from', 'to', 'match'], // not --selector: that is the action's target
+  read: ['all', 'max', 'max-text', 'include-hidden', 'text'],
+  items: ['all', 'max', 'groups', 'group', 'grep', 'no-prefetch'],
+  table: ['max', 'csv', 'jsonl'],
+  fields: ['all', 'jsonl'],
+};
+// The flags each action reads, so one it would ignore (click --tail, click --wait) is an
+// error instead of a silent no-op. A target is a name, ref, CSS selector or point; a by-name
+// action runs as a one-step do plan, which reads the BY_NAME flags. Every command reads
+// ACTION_COMMON.
+const ACTION_COMMON = ['browser', 'port', 'json', 'quiet', 'help', 'show', 'steal', 'then', 'no-diff', 'timeout'];
+const BY_NAME = ['dismiss', 'min-p', 'no-handoff', 'handoff-timeout', 'no-notes'];
+const TARGET_FLAGS = ['ref', 'selector', 'x', 'y', 'token', 'intent', 'expect', 'no-check'];
+const ACTION_FLAGS = {
+  click: [...TARGET_FLAGS, ...BY_NAME, 'commit', 'button', 'count', 'mod'],
+  hover: [...TARGET_FLAGS, ...BY_NAME],
+  fill: [...TARGET_FLAGS, ...BY_NAME, 'value', 'commit'],
+  select: [...TARGET_FLAGS, ...BY_NAME, 'value', 'label'],
+  check: [...BY_NAME, 'expect', 'commit'],
+  upload: [...TARGET_FLAGS, ...BY_NAME, 'files', 'commit'],
+  key: [], type: [],
+  nav: ['until', 'force'],
+  open: ['id', 'profile', 'anonymous', 'until', 'force'],
+};
+
+function checkActionFlags(cmd, flags) {
+  const own = ACTION_FLAGS[cmd];
+  if (!own) return;
+  const usage = message => Object.assign(new Error(message), { exitCode: EXIT.USAGE });
+  if (flags.then !== undefined && !Object.hasOwn(THEN_FLAGS, flags.then)) {
+    throw usage(`--then takes ${Object.keys(THEN_FLAGS).join(', ')}: browserctrl ${cmd} <tab> … --then text`);
+  }
+  const allowed = new Set([...ACTION_COMMON, ...own, ...(flags.then ? THEN_FLAGS[flags.then] : [])]);
+  const bad = Object.keys(flags).filter(k => !allowed.has(k));
+  if (!bad.length) return;
+  const list = bad.map(k => `--${k}`).join(', ');
+  // A flag that shapes what a look at the page shows: say which --then takes it.
+  const kind = Object.keys(THEN_FLAGS).find(t => bad.every(k => THEN_FLAGS[t].includes(k)));
+  if (kind && !flags.then) throw usage(`${cmd} does not take ${list}; ${kind} does. To ${cmd} and then show the page in one call: browserctrl ${cmd} <tab> … --then ${kind} ${bad.map(k => `--${k}${flags[k] === true ? '' : ` ${shellWord(String(flags[k]))}`}`).join(' ')}`);
+  throw usage(`${cmd} does not take ${list}. It takes ${[...own, ...ACTION_COMMON.filter(f => !['help', 'quiet'].includes(f))].map(f => `--${f}`).join(', ')}, and -q${flags.then ? `; with --then ${flags.then} also ${THEN_FLAGS[flags.then].map(f => `--${f}`).join(', ')}` : ''}.`);
+}
+
+// A plan's outcome for the usage log: counts and a stop's kind, never names or page text.
+function noteRun(r) {
+  if (!r) return;
+  usageLog.noteUsage({ n: r.planned_leaves ?? r.steps?.length, nd: r.executed_leaves ?? r.steps?.filter(s => !s.stopped).length,
+    j: r.jev_calls, ms_settle: r.settle_ms, un: Boolean(r.unsure), host: r.page?.url,
+    ...(r.stopped ? { stop: String(r.stopped.reason || ''), sp: String(r.stopped.step ?? '') } : {}) });
+}
+
+// After an action that worked: --then's look at the page, as that command prints it.
+async function thenAfter(conn, port, targetId) {
+  if (!flags.then || !targetId || (process.exitCode && process.exitCode !== EXIT.OK)) return;
+  const own = new Set(['browser', 'port', 'json', ...THEN_FLAGS[flags.then]]);
+  const shaped = Object.fromEntries(Object.entries(flags).filter(([k]) => own.has(k)));
+  if (!flags.json) console.log(`\n--- ${flags.then} ---`);
+  usageLog.noteUsage({ then: flags.then });
+  await observeCommand(flags.then, conn, port, targetId, shaped, targetId);
+}
+
+// What an action changed, as a do plan reports it: the page state before, the action, a wait
+// for the page to go quiet, the state after. --no-diff skips the before and after looks.
+async function withChanges(conn, targetId, act) {
+  if (flags['no-diff']) return act();
+  const before = await ops.evaluate(conn, targetId, finder.PAGE_STATE_FOR_DIFF).catch(() => null);
+  const res = await act();
+  if (!before || !res || typeof res !== 'object') return res;
+  const settled = await ops.settle(conn, targetId, 'step').catch(() => null);
+  const after = await ops.evaluate(conn, targetId, finder.PAGE_STATE_FOR_DIFF).catch(() => null);
+  if (!after) return res;
+  return { ...res, ...changeReport(finder.diffPage(before, after)), ...(settled?.waitedMs >= 500 ? { settled_ms: settled.waitedMs } : {}) };
+}
+
+// A diff as the lines a person would read ("+ dialog "Add card" opened"), for JSON output.
+function changeReport(d) {
+  if (!d) return { changed: 'no control, heading, count or notice changed' };
+  const lines = finder.formatDiff(d).split('\n').map(l => l.trim()).filter(l => l && l !== 'changed on the page:');
+  usageLog.noteUsage({ ch: lines.length });
+  return { changed: lines };
+}
+
+// eval doing what a command does (agent transcripts, 2026-11: a third of evals read text with
+// querySelector, clicked or set values by hand): name that command once, on stderr.
+export function evalHint(expr, tab) {
+  const e = String(expr);
+  const sel = /querySelector\(\s*(['"`])((?:(?!\1).){1,120})\1\s*\)\s*\??\.\s*(?:innerText|textContent)/.exec(e);
+  if (sel && !/querySelectorAll/.test(e)) return `text ${tab} --selector ${shellWord(sel[2])} reads that element's text (with --tail, --match, --max-text)`;
+  if (/querySelectorAll\(\s*['"`][^'"`]*\b(tr|td|th|table|\[role=["']?row)/i.test(e)) return `table ${tab} reads a table or grid as rows (--csv, --jsonl, --selector "<css of the table>")`;
+  if (/\.click\(\s*\)/.test(e)) return `click ${tab} "<name or css>" clicks with real input and says what changed; a JS .click() skips both`;
+  if (/\.value\s*=[^=]/.test(e)) return `fill ${tab} "<name or css>" "<value>" types as a person would, so the page's own handlers run`;
+  if (/(innerText|textContent)/.test(e) && /document\.body/.test(e)) return `text ${tab} (with --region "<heading>", --from/--to, --tail, --match) reads the page text`;
+  return null;
+}
+
+// The commands that look at a page (text, read, items, table, fields), callable on their own
+// and after an action's --then, with the flags that shape them (--tail, --region, --max …).
+async function observeCommand(kind, conn, port, targetId, flags, tabArg) {
+  switch (kind) {
+    case 'items': {
+      await waitToRead(conn, targetId, flags);
+      const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }), { retry: true }));
+      if (flags.group) r.groups = r.groups.filter(g => g.id === flags.group);
+      if (!flags['no-prefetch']) await prefetch.start(conn, mainLinks(r, 3, r.url)).catch(() => {});
+      if (flags.jsonl) return outLines(r.groups.flatMap(g => g.items.map(it => ({ group: g.id, ...it }))));
+      return out(flags.json ? r : formatItems(r, { full: Boolean(flags.group), grep: flags.grep }));
+    }
+    case 'read': {
+      const settled = await waitToRead(conn, targetId, flags, { quiet: true });
+      const snap = await recovering(conn, targetId, flags, (id) => ops.readPage(conn, id, {
+        maxText: flags.text === 'none' ? 0 : Number(flags['max-text'] || 20000),
+        max: Number(flags.max || 400),
+        includeHidden: Boolean(flags['include-hidden']),
+        all: Boolean(flags.all),
+      }));
+      const readId = snap.recoveredTab ? (await ops.resolveTab(conn, snap.recoveredTab)).targetId : targetId;
+      readtokens.remember(port, readId, snap.token);
+      if (settled) { snap.settled = settled; snap.waitNote = ops.describeSettle(settled); }
+      if (snap.recovered) snap.waitNote = [snap.waitNote, snap.recovered].filter(Boolean).join('; ');
+      hint(snap.url, flags);
+      snap.params = await ops.evaluate(conn, readId, PAGE_PARAMS).catch(() => []);
+      const blocked = await captcha.notice(conn, readId, tabArg);
+      if (flags.json) return out(blocked ? { ...snap, challenge: blocked } : snap);
+      return out((blocked ? `${blocked}\n\n` : '') + formatRead(snap) + (snap.params?.length ? `\nurl params (set them with a nav step): ${formatParams(snap.params)}` : ''));
+    }
+    case 'text': {
+      await waitToRead(conn, targetId, flags);
+      // Shadow-root text too (a quiz or popup drawn by a web component).
+      const raw = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, deepTextExpression(), { retry: true }));
+      const source = String(raw || '');
+      let selected = source;
+      // Ranges, in this order: --region, --from/--to, --match, --tail. A range that finds
+      // nothing is a negative answer (exit 1).
+      const nothing = (message, extra = {}) => { no(message); if (flags.json && !quiet) out({ text: '', textLength: 0, truncated: false, ...extra }); };
+      // --selector "<css>": the text of the elements it matches, as the page shows them.
+      if (typeof flags.selector === 'string') {
+        const r = await ops.evaluate(conn, targetId, `(() => { try { const els = [...document.querySelectorAll(${JSON.stringify(flags.selector)})];
+          return { n: els.length, text: els.map(el => el.innerText ?? el.textContent ?? '').join('\\n\\n') }; } catch (e) { return { error: String(e.message || e) }; } })()`);
+        if (r?.error) throw Object.assign(new Error(`--selector is not valid CSS: ${r.error}`), { exitCode: EXIT.USAGE });
+        if (!r?.n) return nothing(`No element matches the CSS selector ${flags.selector}.`);
+        if (r.n > 1) console.error(`(${r.n} elements match ${flags.selector}; their texts are joined by a blank line)`);
+        selected = String(r.text || '');
+      }
+      if (typeof flags.region === 'string') {
+        const r = await ops.evaluate(conn, targetId, page('region-text', { region: flags.region }));
+        if (!r.found) return nothing(`No landmark or heading on the page matches "${flags.region}". Landmarks: ${r.landmarks.join(', ') || 'none'}. Headings: ${r.headings.map(h => JSON.stringify(h)).join(', ') || 'none'}.`, { landmarks: r.landmarks, headings: r.headings });
+        selected = String(r.text || '');
+        console.error(`(${r.found})`);
+      }
+      if (typeof flags.from === 'string' || typeof flags.to === 'string') {
+        const lines = selected.split(/\r?\n/);
+        const has = (l, w) => l.toLowerCase().includes(String(w).toLowerCase());
+        const start = typeof flags.from === 'string' ? lines.findIndex(l => has(l, flags.from)) : 0;
+        if (start < 0) return nothing(`No line contains "${flags.from}".`);
+        const rel = typeof flags.to === 'string' ? lines.slice(start + 1).findIndex(l => has(l, flags.to)) : -1;
+        selected = lines.slice(start, rel < 0 ? lines.length : start + 2 + rel).join('\n');
+      }
+      // --match is grep-like: exit 1 when no line matches; -q prints nothing; --count the lines.
+      if (flags.match) {
+        let re;
+        try { re = new RegExp(String(flags.match), 'i'); }
+        catch (e) { throw new Error(`Invalid --match regex: ${e.message}`); }
+        selected = selected.split(/\r?\n/).filter(line => re.test(line)).join('\n');
+        const n = selected ? selected.split('\n').length : 0;
+        if (!n) no(flags.json || flags.count ? '' : `No line of the page matches /${flags.match}/i.`);
+        if (quiet) return;
+        if (flags.count) return out(String(n));
+        if (!n && !flags.json) return;
+      }
+      if (flags.tail !== undefined) {
+        if (!(Number(flags.tail) > 0)) throw new Error('--tail must be a positive number of lines');
+        selected = selected.split(/\r?\n/).slice(-Number(flags.tail)).join('\n');
+      }
+      const limit = flags['max-text'] === undefined ? 20000 : Number(flags['max-text']);
+      const clipped = limit > 0 && selected.length > limit;
+      const text = clipped ? `${selected.slice(0, limit)}\n\n[truncated ${selected.length - limit} characters]` : selected;
+      const blocked = source.length < 3000 ? await captcha.notice(conn, targetId, tabArg) : null;
+      return out(flags.json ? { text, textLength: selected.length, truncated: clipped, ...(blocked ? { challenge: blocked } : {}) } : (blocked ? `${blocked}\n\n${text}` : text));
+    }
+    case 'table': {
+      // The page's main table or grid as header-keyed rows (the code do --collect rows uses).
+      await waitToRead(conn, targetId, flags);
+      const t = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, page('table-rows', { max: Number(flags.max) || PAGE_CAP.rows, selector: typeof flags.selector === 'string' ? flags.selector : null }), { retry: true }));
+      if (!t.rows.length) {
+        no(t.error ? `No table: ${t.error}` : 'No table, grid or repeated rows on the page. Try items, or table --selector "<css of the table>".');
+        if (flags.json && !quiet) out(t);
+        return;
+      }
+      if (quiet) return;
+      if (t.truncated) console.error(`(first ${t.rows.length} of ${t.total} rows; --max N for more)`);
+      if (flags.json) return out(t);
+      if (flags.jsonl) return outLines(t.rows);
+      const cell = flags.csv ? v => (/[",\n\r]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : String(v)) : v => String(v).replace(/[\t\n\r]+/g, ' ');
+      const sep = flags.csv ? ',' : '\t';
+      return out([t.columns, ...t.rows.map(r => t.columns.map(c => r[c] ?? ''))].map(row => row.map(cell).join(sep)).join('\n'));
+    }
+    case 'fields': {
+      await waitToRead(conn, targetId, flags);
+      const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, finder.FIELDS({ all: !!flags.all }), { retry: true }));
+      if (flags.jsonl) return outLines(r.rows || []);
+      return out(flags.json ? r : finder.formatFields(r));
+    }
+  }
 }
 
 // click/fill/select/hover/check by name: a one-step do plan, reported in one JSON object.
 // It stops as a do step does (exit 3), and refuses a control that commits (exit 5) unless
 // --commit says the user wants it clicked.
-async function actByName(conn, targetId, step, flags) {
+async function actByName(conn, port, targetId, step, flags) {
   const r = await runSteps(conn, targetId, [step], { onWarning: w => console.error(`⚠ ${w}`), noNotes: Boolean(flags['no-notes']), show: show.showing(flags),
-    minP: flags['min-p'] ? Number(flags['min-p']) : undefined, dismiss: flags.dismiss, diff: false, prefetch: false, handoff: !flags['no-handoff'] });
+    minP: flags['min-p'] ? Number(flags['min-p']) : undefined, dismiss: flags.dismiss, diff: !flags['no-diff'], prefetch: false, handoff: !flags['no-handoff'] });
+  noteRun(r);
   const row = r.steps.find(s => s.step === 1 || s.step === '1') || r.steps[0] || {};
   if (r.done) {
-    if (quiet) return;
-    return out({ acted: true, step, target: row.target, ...(row.how ? { how: row.how } : {}), ...(row.checked !== undefined ? { checked: row.checked } : {}),
-      ...(row.url_change ? { url_change: row.url_change } : {}), page: r.page });
+    // What the action changed, so the caller needn't read the page to find out.
+    // (no changes key: the plan moved to another tab, or the page could not be read twice)
+    const changes = flags['no-diff'] || !Object.hasOwn(r, 'changes') ? {} : changeReport(r.changes);
+    if (!quiet) out({ acted: true, step, target: row.target, ...(row.how ? { how: row.how } : {}), ...(row.checked !== undefined ? { checked: row.checked } : {}),
+      ...(row.url_change ? { url_change: row.url_change } : {}), page: r.page, ...(r.dialog ? { dialog: r.dialog } : {}), ...changes });
+    return await thenAfter(conn, port, r.current_tab || targetId);
   }
   const committing = /commit/i.test(r.stopped?.reason || '');
   process.exitCode = committing ? EXIT.REFUSED : EXIT.STOPPED;
@@ -802,6 +1024,16 @@ async function resolveTabArg(conn, port, arg) {
 const main = async () => {
   requireNode();
   if (!cmd || cmd === 'help' || flags.help) return out(usage());
+  if (cmd === 'usage') {
+    const { usageReport, formatUsageReport } = await import('../lib/usage-report.mjs');
+    const report = usageReport(usageLog.readUsage({ days: Number(flags.days || 7) }));
+    return out(flags.json ? report : formatUsageReport(report));
+  }
+  // Before any browser is reached: a flag the action would ignore is a usage error (exit 2).
+  checkActionFlags(cmd, flags);
+  if (flags.then && ACTION_FLAGS[cmd] && (flags.browser === 'safari' || /^(firefox|camoufox)/i.test(String(flags.browser || process.env.BROWSERCTRL_BROWSER || '')))) {
+    throw Object.assign(new Error(`--then needs a Chromium-family browser; run ${flags.then} as its own command.`), { exitCode: EXIT.USAGE });
+  }
   if (/^[a-z][a-z_-]*$/.test(cmd)) {
     const near = suggestCommand(cmd);
     if (near !== null) throw new Error(`Unknown command "${cmd}".${near ? ` Did you mean "${near}"?` : ''} Run browserctrl help for the list.`);
@@ -1376,8 +1608,9 @@ const main = async () => {
       // The new tab becomes this agent's current tab: later commands may leave the tab out.
       currentTab.set(port, res.targetId);
       // --id: only the new tab's id, for t=$(browserctrl open URL --id)
-      if (flags.id) return out(res.id);
-      return out(res);
+      usageLog.noteUsage({ host: positional[1], tab: res.targetId });
+      out(flags.id ? res.id : res);
+      return await thenAfter(conn, port, res.targetId);
     }
 
     const tab = await resolveTabArg(conn, port, positional[1]);
@@ -1413,6 +1646,7 @@ const main = async () => {
       if (target.ref || target.selector) valueArg = positional[3];
       if (target.x !== undefined) valueArg = positional[4];
     }
+    usageLog.noteUsage({ tab: targetId, ...(ACTION_FLAGS[cmd] && cmd !== 'nav' ? { k: named !== null ? 'name' : target.ref ? 'ref' : target.selector ? 'sel' : target.x !== undefined ? 'xy' : flags.intent ? 'intent' : 'none' } : {}) });
     // A ref means what the agent's last `read` of this tab printed, not whatever snapshot
     // ran last (do and --intent read the page again).
     if (target.ref && !target.token) target.token = readtokens.recall(port, targetId);
@@ -1433,14 +1667,14 @@ const main = async () => {
     // upload's files: the words after its target, and --files a,b.
     const filesGiven = () => [...(typeof flags.files === 'string' ? flags.files.split(',').filter(Boolean) : []),
       ...positional.slice(named !== null || (positional[2] !== undefined && (target.ref || target.selector) && !flags.ref && !flags.selector) ? 3 : 2)];
-    if (named !== null && cmd === 'upload') return await uploadByName(conn, targetId, named, uploadPaths(filesGiven()), flags);
+    if (named !== null && cmd === 'upload') return await uploadByName(conn, port, targetId, named, uploadPaths(filesGiven()), flags);
     if (named !== null) {
       const value = cmd === 'fill' ? (flags.value ?? positional[3]) : cmd === 'select' ? (flags.label ?? flags.value ?? positional[3]) : undefined;
       if (cmd === 'select' && (value === undefined || value === true)) throw new Error(`Usage: browserctrl select ${tab.id} "<list name>" "<option>"`);
       if (cmd === 'click' && (flags.button || flags.count || flags.mod)) throw new Error('--button, --count and --mod need a ref or a CSS selector: browserctrl click <tab> ref_9 --button right');
       const q = v => `"${String(v)}"`;
       const step = `${cmd}${cmd === 'click' && flags.commit ? '!' : ''} ${q(named)}${value !== undefined ? ` = ${q(value)}` : ''}`;
-      return await actByName(conn, targetId, step, flags);
+      return await actByName(conn, port, targetId, step, flags);
     }
 
     // Refs that --intent prints come from its own snapshot, the page's latest. A do plan reads
@@ -1474,7 +1708,8 @@ const main = async () => {
         report.page = { url: page.url, title: page.title };
         report.after = await jev.checkPage(cfg, page, { expect: flags.expect });
       }
-      return out(report);
+      out(report);
+      return await thenAfter(conn, port, targetId);
     }
 
     switch (cmd) {
@@ -1494,6 +1729,8 @@ const main = async () => {
           });
         } finally { await sink?.close(); }
         if (r.refsToken) readtokens.remember(port, targetId, r.refsToken);
+        noteRun(r);
+        if (flags.then) usageLog.noteUsage({ then: String(flags.then) });
         if (!r.done) process.exitCode = EXIT.STOPPED;
         const retry = r.stopped ? dismissRetry(r) : null;
         // The report is stdout's data, unless --out sends the collected pages there or to a file.
@@ -1503,14 +1740,8 @@ const main = async () => {
         } else print(flags.json ? JSON.stringify(retry ? { ...r, retry } : r, null, 2) : formatSteps({ ...r, warnings: [] }) + (retry ? `\n${retry}` : ''));
         return;
       }
-      case 'items': {
-        await waitToRead(conn, targetId, flags);
-        const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, itemsExpression({ all: Boolean(flags.all), maxGroups: Number(flags.groups || 8), maxItems: Number(flags.max || 30) }), { retry: true }));
-        if (flags.group) r.groups = r.groups.filter(g => g.id === flags.group);
-        if (!flags['no-prefetch']) await prefetch.start(conn, mainLinks(r, 3, r.url)).catch(() => {});
-        if (flags.jsonl) return outLines(r.groups.flatMap(g => g.items.map(it => ({ group: g.id, ...it }))));
-        return out(flags.json ? r : formatItems(r, { full: Boolean(flags.group), grep: flags.grep }));
-      }
+      case 'items': case 'read': case 'text': case 'table': case 'fields':
+        return await observeCommand(cmd, conn, port, targetId, flags, positional[1]);
       case 'check': {
         const page = await ops.evaluate(conn, targetId, jev.VIEW_TEXT);
         const c = await jev.checkPage(jev.jevKey(), page, { expect: flags.expect });
@@ -1518,69 +1749,6 @@ const main = async () => {
         if (flags.expect && !c.expected) no(`The page does not show: ${flags.expect} (p=${c.checks.expect})`);
         if (quiet) return;
         return out({ page: { url: page.url, title: page.title }, ...c, ...(cool ? { cooldown: cooldown.describe(cool) } : {}) });
-      }
-      case 'read': {
-        const settled = await waitToRead(conn, targetId, flags, { quiet: true });
-        const snap = await recovering(conn, targetId, flags, (id) => ops.readPage(conn, id, {
-          maxText: flags.text === 'none' ? 0 : Number(flags['max-text'] || 20000),
-          max: Number(flags.max || 400),
-          includeHidden: Boolean(flags['include-hidden']),
-          all: Boolean(flags.all),
-        }));
-        const readId = snap.recoveredTab ? (await ops.resolveTab(conn, snap.recoveredTab)).targetId : targetId;
-        readtokens.remember(port, readId, snap.token);
-        if (settled) { snap.settled = settled; snap.waitNote = ops.describeSettle(settled); }
-        if (snap.recovered) snap.waitNote = [snap.waitNote, snap.recovered].filter(Boolean).join('; ');
-        hint(snap.url, flags);
-        snap.params = await ops.evaluate(conn, readId, PAGE_PARAMS).catch(() => []);
-        const blocked = await captcha.notice(conn, readId, positional[1]);
-        if (flags.json) return out(blocked ? { ...snap, challenge: blocked } : snap);
-        return out((blocked ? `${blocked}\n\n` : '') + formatRead(snap) + (snap.params?.length ? `\nurl params (set them with a nav step): ${formatParams(snap.params)}` : ''));
-      }
-      case 'text': {
-        await waitToRead(conn, targetId, flags);
-        // Shadow-root text too (a quiz or popup drawn by a web component).
-        const raw = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, deepTextExpression(), { retry: true }));
-        const source = String(raw || '');
-        let selected = source;
-        // Ranges, in this order: --region, --from/--to, --match, --tail. A range that finds
-        // nothing is a negative answer (exit 1).
-        const nothing = (message, extra = {}) => { no(message); if (flags.json && !quiet) out({ text: '', textLength: 0, truncated: false, ...extra }); };
-        if (typeof flags.region === 'string') {
-          const r = await ops.evaluate(conn, targetId, page('region-text', { region: flags.region }));
-          if (!r.found) return nothing(`No landmark or heading on the page matches "${flags.region}". Landmarks: ${r.landmarks.join(', ') || 'none'}. Headings: ${r.headings.map(h => JSON.stringify(h)).join(', ') || 'none'}.`, { landmarks: r.landmarks, headings: r.headings });
-          selected = String(r.text || '');
-          console.error(`(${r.found})`);
-        }
-        if (typeof flags.from === 'string' || typeof flags.to === 'string') {
-          const lines = selected.split(/\r?\n/);
-          const has = (l, w) => l.toLowerCase().includes(String(w).toLowerCase());
-          const start = typeof flags.from === 'string' ? lines.findIndex(l => has(l, flags.from)) : 0;
-          if (start < 0) return nothing(`No line contains "${flags.from}".`);
-          const rel = typeof flags.to === 'string' ? lines.slice(start + 1).findIndex(l => has(l, flags.to)) : -1;
-          selected = lines.slice(start, rel < 0 ? lines.length : start + 2 + rel).join('\n');
-        }
-        // --match is grep-like: exit 1 when no line matches; -q prints nothing; --count the lines.
-        if (flags.match) {
-          let re;
-          try { re = new RegExp(String(flags.match), 'i'); }
-          catch (e) { throw new Error(`Invalid --match regex: ${e.message}`); }
-          selected = selected.split(/\r?\n/).filter(line => re.test(line)).join('\n');
-          const n = selected ? selected.split('\n').length : 0;
-          if (!n) no(flags.json || flags.count ? '' : `No line of the page matches /${flags.match}/i.`);
-          if (quiet) return;
-          if (flags.count) return out(String(n));
-          if (!n && !flags.json) return;
-        }
-        if (flags.tail !== undefined) {
-          if (!(Number(flags.tail) > 0)) throw new Error('--tail must be a positive number of lines');
-          selected = selected.split(/\r?\n/).slice(-Number(flags.tail)).join('\n');
-        }
-        const limit = flags['max-text'] === undefined ? 20000 : Number(flags['max-text']);
-        const clipped = limit > 0 && selected.length > limit;
-        const text = clipped ? `${selected.slice(0, limit)}\n\n[truncated ${selected.length - limit} characters]` : selected;
-        const blocked = source.length < 3000 ? await captcha.notice(conn, targetId, positional[1]) : null;
-        return out(flags.json ? { text, textLength: selected.length, truncated: clipped, ...(blocked ? { challenge: blocked } : {}) } : (blocked ? `${blocked}\n\n${text}` : text));
       }
       case 'find': {
         const pattern = positional.slice(2).join(' ');
@@ -1600,35 +1768,17 @@ const main = async () => {
         if (count) return out(finder.formatFind(r, pattern));
         return;
       }
-      case 'table': {
-        // The page's main table or grid as header-keyed rows (the code do --collect rows uses).
-        await waitToRead(conn, targetId, flags);
-        const t = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, page('table-rows', { max: Number(flags.max) || PAGE_CAP.rows, selector: typeof flags.selector === 'string' ? flags.selector : null }), { retry: true }));
-        if (!t.rows.length) {
-          no(t.error ? `No table: ${t.error}` : 'No table, grid or repeated rows on the page. Try items, or table --selector "<css of the table>".');
-          if (flags.json && !quiet) out(t);
-          return;
-        }
-        if (quiet) return;
-        if (t.truncated) console.error(`(first ${t.rows.length} of ${t.total} rows; --max N for more)`);
-        if (flags.json) return out(t);
-        if (flags.jsonl) return outLines(t.rows);
-        const cell = flags.csv ? v => (/[",\n\r]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : String(v)) : v => String(v).replace(/[\t\n\r]+/g, ' ');
-        const sep = flags.csv ? ',' : '\t';
-        return out([t.columns, ...t.rows.map(r => t.columns.map(c => r[c] ?? ''))].map(row => row.map(cell).join(sep)).join('\n'));
-      }
-      case 'fields': {
-        await waitToRead(conn, targetId, flags);
-        const r = await recovering(conn, targetId, flags, (id) => ops.evaluate(conn, id, finder.FIELDS({ all: !!flags.all }), { retry: true }));
-        if (flags.jsonl) return outLines(r.rows || []);
-        return out(flags.json ? r : finder.formatFields(r));
-      }
       case 'html': {
         const html = await ops.html(conn, targetId, positional[2]);
         return out(flags.json ? { html } : html);
       }
-      case 'eval':
-        return out(await ops.evaluate(conn, targetId, positional.slice(2).join(' '), { timeoutMs, caller: true }));
+      case 'eval': {
+        const expr = positional.slice(2).join(' ');
+        const res = await ops.evaluate(conn, targetId, expr, { timeoutMs, caller: true });
+        const tip = evalHint(expr, tab.id);
+        if (tip && !quiet) console.error(`hint: ${tip}`);
+        return out(res);
+      }
       case 'act': {
         let raw = flags.steps ?? positional.slice(2).join(' ');
         if (!raw) throw new Error('Usage: browserctrl act <tab> --steps \'[{"action":"scroll","dy":800}]\'');
@@ -1668,7 +1818,9 @@ const main = async () => {
         let res = await ops.navigate(conn, targetId, positional[2], { waitUntil: flags.until || 'load', timeoutMs: timeoutMs || 30000 });
         if ((flags.until || 'load') !== 'none') res = await observe(conn, targetId, res);
         hint(res.url, flags);
-        return out(res);
+        usageLog.noteUsage({ host: res.url });
+        out(res);
+        return await thenAfter(conn, port, targetId);
       }
       case 'wait': {
         // A condition that never came true is a negative answer (exit 1), not a failure.
@@ -1686,33 +1838,38 @@ const main = async () => {
         return quiet ? undefined : out(r);
       }
       case 'click':
-        return out(
-          await ops.click(conn, targetId, {
-            ...target,
-            button: flags.button || 'left',
-            clickCount: Number(flags.count || 1),
-            modifiers: flags.mod ? String(flags.mod).split(',') : [],
-          }),
-        );
+        out(await withChanges(conn, targetId, () => ops.click(conn, targetId, {
+          ...target,
+          button: flags.button || 'left',
+          clickCount: Number(flags.count || 1),
+          modifiers: flags.mod ? String(flags.mod).split(',') : [],
+        })));
+        return await thenAfter(conn, port, targetId);
       case 'hover':
-        return out(await ops.hover(conn, targetId, target));
+        out(await withChanges(conn, targetId, () => ops.hover(conn, targetId, target)));
+        return await thenAfter(conn, port, targetId);
       case 'drag':
         return out(await ops.drag(conn, targetId, { from: { ref: flags.from }, to: { ref: flags.to } }));
       case 'type':
-        return out(await ops.type(conn, targetId, positional.slice(2).join(' ')));
+        out(await withChanges(conn, targetId, () => ops.type(conn, targetId, positional.slice(2).join(' '))));
+        return await thenAfter(conn, port, targetId);
       case 'key':
-        return out(await ops.key(conn, targetId, positional[2]));
+        out(await withChanges(conn, targetId, () => ops.key(conn, targetId, positional[2])));
+        return await thenAfter(conn, port, targetId);
       case 'fill': {
         const value = flags.value ?? valueArg;
         if (value === undefined || value === true) throw new Error(`Usage: browserctrl fill ${tab.id} ref_5 "text"   (or --ref ref_5 --value "text")`);
-        return out(await ops.fill(conn, targetId, { ...target, value }));
+        out(await withChanges(conn, targetId, () => ops.fill(conn, targetId, { ...target, value })));
+        return await thenAfter(conn, port, targetId);
       }
       case 'select':
-        return out(await ops.selectOption(conn, targetId, { ...target, value: flags.value, label: flags.label }));
+        out(await withChanges(conn, targetId, () => ops.selectOption(conn, targetId, { ...target, value: flags.value, label: flags.label })));
+        return await thenAfter(conn, port, targetId);
       case 'upload': {
         const files = uploadPaths(filesGiven());
         if (!target.ref && !target.selector) throw new Error(`Usage: browserctrl upload ${tab.id} "<file input, label or button name>" <file>...   (or --ref ref_2, or a CSS selector)`);
-        return out(await ops.upload(conn, targetId, { ...target, files }));
+        out(await ops.upload(conn, targetId, { ...target, files }));
+        return await thenAfter(conn, port, targetId);
       }
       case 'scroll': {
         if (typeof flags.in !== 'string') return out(await ops.scroll(conn, targetId, { deltaY: Number(flags.dy || 400), deltaX: Number(flags.dx || 0) }));

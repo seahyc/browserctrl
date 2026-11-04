@@ -47,10 +47,11 @@ First `browserctrl site <site or URL>`: its recipes (the site's own API) and flo
 | --- | --- |
 | Data a recipe covers | the `recipe run` that `site` prints |
 | A page whose address you can build (search, sort, filter) | `nav`, then `items` or `text` |
-| One action | by the name you see: `click "$t" "Save"`, `fill "$t" "Search" "aeron"`, `select "$t" "Country" "Singapore"`, `check "$t" "Remember me"` |
+| One action | by the name you see: `click "$t" "Save"`, `fill "$t" "Search" "aeron"`, `select "$t" "Country" "Singapore"`, `check "$t" "Remember me"`. Its `changed` lists what it did to the page (a dialog that opened, counts and controls that changed): don't `read` to find out |
+| One action, then the page | `click "$t" "Billing" --then text --tail 40` (also `--then read\|items\|table\|fields`, on any action, `nav` and `open`) |
 | Two or more actions you can foresee | one `do` plan with `--then items` |
 | A table or grid | `table "$t"` (`--csv`, `--jsonl`) |
-| Part of a long page | `text "$t" --region "<heading>"`, `--from "<line>" --to "<line>"`, `--tail 40` |
+| Part of a long page | `text "$t" --region "<heading>"`, `--from "<line>" --to "<line>"`, `--tail 40`, `--selector "<css>"` |
 | Every page of a paged list or log | one `do` with `--repeat 'click "Next"' --collect rows --out /tmp/rows.jsonl` |
 | The same steps on several tabs | `do --each-tab <id,id\|all-mine> '<step>' …` |
 | A file upload | `upload "$t" "Resume" ~/cv.pdf` |
@@ -60,8 +61,9 @@ First `browserctrl site <site or URL>`: its recipes (the site's own API) and flo
 
 | Instead of | Use |
 | --- | --- |
+| `click … && text`, `nav … && text`, `open … && read` | the same action with `--then text` (or `read`, `items`), and text's flags |
 | `read \| grep` to find a ref | the visible name: `click "$t" "Trust Policy"` |
-| `eval` with `querySelectorAll` or `innerText.slice` | `table`, `items`, `text --region/--from/--tail` |
+| `eval` with `querySelectorAll` or `innerText.slice` | `table`, `items`, `text --selector/--region/--from/--tail` |
 | a shell loop over pages | `do --repeat … --collect … --out` |
 | `sleep` | nothing: `nav`, `click` and `do` wait for content; `wait` for a condition; `wait --download` for a file |
 | `key Escape; sleep 1` before a click | `do … --dismiss "<that dialog>"` (a notice that only closes is closed for you) |
@@ -176,5 +178,6 @@ protected capture saves it from the tab into a new vault item and taints the tab
 | [tabs-and-browser.md](references/tabs-and-browser.md) | tabs, claims, profiles, handing over to the user, the extension |
 | [connecting.md](references/connecting.md) | browsers, launching, Safari, Firefox/Camoufox (BiDi), diagnostics |
 | [activity.md](references/activity.md), [dia-native.md](references/dia-native.md) | agent activity, Dia dormant tabs |
+| [usage-log.md](references/usage-log.md) | the local usage log and `browserctrl usage` |
 | [vault-fill.md](references/vault-fill.md), [vault-entry.md](references/vault-entry.md) | protected credential fill, taint and recovery |
 | [settings.md](references/settings.md), [architecture.md](references/architecture.md) | every `BROWSERCTRL_*` setting, the Jev key, the CLI and daemon |

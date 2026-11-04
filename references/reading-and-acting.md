@@ -546,9 +546,29 @@ browserctrl check  <tab> "Remember me"          # ticks it; check <tab> --expect
 browserctrl click  <tab> "Delete user" --commit # a control that commits needs --commit (else exit 5)
 ```
 
-Each prints one JSON object (`acted`, `target`, `page`). When it cannot pick with
+Each prints one JSON object (`acted`, `target`, `page`, `changed`). When it cannot pick with
 confidence it acts on nothing, exits 3 and lists the candidates and the controls on screen,
 as a `do` step does. An empty name (an unset shell variable) is a usage error (exit 2).
+
+`changed` is what the action did to the page, the same diff a `do` report prints: a dialog
+that opened, a count or notice that appeared, controls that changed state, appeared or went,
+or `page now: a different page, "<title>"`. It is a string when nothing it watches changed
+(`"no control, heading, count or notice changed"`): the click may have missed, so look
+before you click again. Every action reports it, by name, ref, selector or point, and so do
+`key` and `type`, after waiting for the page to go quiet. `--no-diff` skips it.
+
+`--then text|read|items|table|fields` shows the page in the same call once the action
+worked, as that command prints it and with its own flags, after a `--- text ---` line (with
+`--json`, a second JSON document). It works on every action, `nav` and `open`:
+
+```bash
+browserctrl click <tab> "Billing" --then text --tail 40
+browserctrl nav   <tab> "https://example.com/search?q=aeron" --then items --max 10
+browserctrl open  "https://example.com" --then read
+```
+
+A stopped or refused action skips it. A flag an action doesn't read is a usage error that
+names the command that takes it (`click … --tail 40` says to add `--then text`).
 
 Every action also takes a ref or selector, positionally (`click <tab> ref_3`, `click <tab>
 "#id"`, `fill <tab> ref_5 "text"`) or as `--ref ref_3` / `--selector <css>`, or `--x/--y`.

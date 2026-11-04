@@ -32,12 +32,23 @@ test('check parses as an idempotent toggle click', () => {
 test('the outcome is the last line, after optional returned text and the page footer', () => {
   const base = { steps: [], page: { title: 'Fixture', url: 'https://fixture.test/' }, ms: 10, jev_calls: 0, planned_leaves: 3, executed_leaves: 3, text: 'returned text' };
   const done = formatSteps({ ...base, done: true });
-  assert.match(done, /returned text[\s\S]*https:\/\/fixture.test\/[^\n]*\n✓ done: 3\/3 steps$/);
+  assert.match(done, /returned text[\s\S]*https:\/\/fixture.test\/[^\n]*\n✓ done: 3\/3 steps  · on "Fixture"$/);
   const stopped = formatSteps({ ...base, stopped: { step: 2, reason: 'missing\n' + 'x'.repeat(300) } });
   assert.match(stopped, /Stopped at step 2:/);
-  assert.match(stopped.split('\n').at(-1), /^✗ stopped at step 2\/3: missing x{192}$/);
+  assert.match(stopped.split('\n').at(-1), /^✗ stopped at step 2\/3: missing x{192}  · on "Fixture"$/);
   console.log(done);
   console.log(stopped);
+});
+
+test('the verdict line says where the page is now: a new page, a dialog, or how much changed', () => {
+  const base = { steps: [{ step: 1, do: 'click "Add"', acted: true }], page: { title: 'Billing', url: 'https://fixture.test/' }, ms: 10, jev_calls: 0, done: true };
+  const last = r => formatSteps(r).split('\n').at(-1);
+  assert.equal(last({ ...base, changes: { newPage: { title: 'Cards', headings: [] } } }), '✓ done: 1/1 steps  · now on "Cards"');
+  assert.equal(last({ ...base, dialog: { role: 'dialog', name: 'Add card' }, changes: { added: [{}, {}], changed: [{}], counts: [], gone: [], notices: ['Saved'] } }),
+    '✓ done: 1/1 steps  · on "Billing" · dialog "Add card" open · 2 new, 1 changed, 1 notices');
+  assert.equal(last({ ...base, changes: null }), '✓ done: 1/1 steps  · on "Billing" · no control, heading, count or notice changed');
+  // Unmeasured (the plan moved to another tab): no claim about changes.
+  assert.equal(last(base), '✓ done: 1/1 steps  · on "Billing"');
 });
 
 t('no key: action expectations continue, including the final expectation', async () => {
@@ -59,7 +70,7 @@ t('no key: action expectations continue, including the final expectation', async
     assert.equal(row.stopped, undefined);
   }
   assert.match(await ops.evaluate(conn, id, 'document.body.innerText'), /First done.*Second done/s);
-  assert.match(formatSteps(r), /✓ done: 2\/2 steps \(unsure\)$/);
+  assert.match(formatSteps(r), /✓ done: 2\/2 steps \(unsure\)(  · [^\n]+)?$/);
   console.log(formatSteps(r));
 });
 
