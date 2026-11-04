@@ -154,7 +154,8 @@ test('a block for unusual traffic tells the person (once), leaves the agent flow
   assert.equal(await observe(conn, tab, hooks), null, 'not a captcha: the agent flow is unchanged');
   assert.equal(posts.length, 1);
   assert.ok(posts[0].includes('--if-new'), 'agent-notify alerts once while the block stays');
-  assert.match(posts[0][posts[0].indexOf('--message') + 1], /blocked the browser as unusual traffic/);
+  assert.match(posts[0][posts[0].indexOf('--title') + 1], /blocked the browser$/);
+  assert.match(posts[0][posts[0].indexOf('--message') + 1], /unusual traffic/);
   assert.equal(cooldown.active(fixture.url), null, 'a block does not start a captcha cool-down');
   await ops.evaluate(conn, tab, "document.getElementById('msg').textContent = 'Results'; document.title = 'Search'; document.querySelector('h1').textContent = 'Results'");
   assert.equal(await observe(conn, tab, hooks), null);
@@ -174,8 +175,10 @@ test('the flag notice names the site, opens the tab and shares the handoff key',
   const posted = [];
   flagNotice(9223, 'ABCDEF0123456789', 'https://www.google.com/sorry/index', 'blocked', { post: args => (posted.push(args), true), mark: () => {} });
   const args = posted[0];
-  assert.equal(args[args.indexOf('--title') + 1], 'google.com needs you');
-  assert.match(args[args.indexOf('--message') + 1], /blocked the browser as unusual traffic/);
+  assert.equal(args[args.indexOf('--title') + 1], '🚧 google.com blocked the browser');
+  assert.match(args[args.indexOf('--message') + 1], /unusual traffic/);
+  assert.equal(args[args.indexOf('--kind') + 1], 'browser-handoff');
+  assert.deepEqual(args.slice(-4), ['--button', 'go=🧭 Open the tab', '--button', 'snooze'], 'open the tab first, remind later second');
   assert.equal(args[args.indexOf('--key') + 1], flagKey('https://www.google.com/sorry/index'));
   assert.deepEqual(args.slice(args.indexOf('--activate'), args.indexOf('--activate') + 3), ['--activate', 'company.thebrowser.dia', '--run']);
   assert.ok(args.includes('focus') && args.includes('ABCDEF0123456789'));

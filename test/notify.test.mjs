@@ -35,8 +35,9 @@ test('the debugging-prompt notice names the browser and brings it forward', () =
   assert.equal(notice.post(), true);
   const [program, args] = runs[0];
   assert.equal(program, '/bin/agent-notify');
-  assert.deepEqual(args.slice(0, 5), ['post', '--source', 'browserctrl', '--title', 'Allow debugging in Dia']);
-  assert.deepEqual(args.slice(args.indexOf('--urgency')), ['--urgency', 'urgent', '--key', 'allow-debugging-9223', '--activate', 'company.thebrowser.dia']);
+  assert.deepEqual(args.slice(0, 5), ['post', '--source', 'browserctrl', '--title', '🔌 Dia wants you to allow debugging']);
+  assert.deepEqual(args.slice(args.indexOf('--urgency')), ['--urgency', 'urgent', '--key', 'allow-debugging-9223', '--kind', 'browser-debug',
+    '--activate', 'company.thebrowser.dia', '--button', 'go=🔌 Switch to Dia', '--button', 'snooze']);
   notice.clear();
   assert.deepEqual(runs[1][1], ['clear', '--source', 'browserctrl', '--key', 'allow-debugging-9223']);
 });
