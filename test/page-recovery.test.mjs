@@ -16,6 +16,8 @@ import { startFixtureServer, startHeadlessBrowser, chromeBinary, TEST_PORT, scal
 const TRACES = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-test-traces-'));
 const MEMO = fs.mkdtempSync(path.join(os.tmpdir(), 'browserctrl-test-memo-'));
 process.env.CDP_AGENT_ID = 'test-page-recovery';
+// These pages hang on purpose: decide "stuck" in 40% of the production budgets (test/load.mjs).
+process.env.BROWSERCTRL_TEST_STUCK_SCALE ??= '0.4';
 process.env.BROWSERCTRL_NOTIFY = '0';
 process.env.BROWSERCTRL_TRACES = TRACES;
 process.env.BROWSERCTRL_NOTES = 'off';
@@ -97,7 +99,11 @@ t('a stuck main thread is diagnosed with the command to run', async () => {
   await ops.closeTab(conn, id).catch(() => {});
 });
 
-t('a read that times out while the page is briefly busy runs again once it answers', async () => {
+t('a read that times out while the page is briefly busy runs again once it answers', async t => {
+  // Busy, not stuck: this page must be judged with the real budgets.
+  const scale = process.env.BROWSERCTRL_TEST_STUCK_SCALE;
+  process.env.BROWSERCTRL_TEST_STUCK_SCALE = '1';
+  t.after(() => { process.env.BROWSERCTRL_TEST_STUCK_SCALE = scale; });
   const id = await open('slice-controls.html');
   await ops.evaluate(conn, id, 'window.__busyFrom = 0; setTimeout(function () { window.__busyFrom = Date.now(); var t = Date.now(); while (Date.now() - t < 4000) {} }, 0); 1');
   const t0 = Date.now();

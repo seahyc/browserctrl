@@ -48,6 +48,10 @@ if (!Object.getOwnPropertyDescriptor(T.VISION, 'CAPTURE_MS').get) {
       Object.defineProperty(obj, k, { get: () => Math.round(Math.min(Math.max(base, MOST), base * factor())), enumerable: true, configurable: true });
     }
   };
+  // BROWSERCTRL_TEST_STUCK_SCALE (read on each use): a file whose pages hang on purpose shortens
+  // the waits that decide a tab is stuck, so it need not sit through the production budgets.
+  const stuckScale = () => Number(process.env.BROWSERCTRL_TEST_STUCK_SCALE) || 1;
+  const stuck = (obj, keys) => stretch(() => loadFactor() * stuckScale(), obj, keys);
   const cap = (obj, keys) => stretch(loadFactor, obj, keys);
   const pause = (obj, keys) => stretch(() => Math.sqrt(loadFactor()), obj, keys);
   for (const preset of Object.values(T.SETTLE)) {
@@ -61,9 +65,10 @@ if (!Object.getOwnPropertyDescriptor(T.VISION, 'CAPTURE_MS').get) {
   cap(T.CONTENT, ['WAIT', 'PLAN_WAIT']);
   cap(T.INPUT, ['ACK', 'SLOW_ACK', 'LATE_WAIT', 'CHOOSER_WAIT']);
   pause(T.INPUT, ['COVER_RECHECK', 'AFTER_SCROLL']);
-  cap(T.NAV, ['TIMEOUT', 'ANSWER', 'ANSWER_PROBE', 'RECOVER']);
+  cap(T.NAV, ['TIMEOUT']);
+  stuck(T.NAV, ['ANSWER', 'ANSWER_PROBE', 'RECOVER']);
   pause(T.NAV, ['IDLE']);
-  cap(T.RECOVERY, ['TIMEOUT', 'CALL', 'DIAGNOSE_PROBE', 'TARGET_CALL', 'NAVIGATE_MAX']);
+  stuck(T.RECOVERY, ['TIMEOUT', 'CALL', 'DIAGNOSE_PROBE', 'TARGET_CALL', 'NAVIGATE_MAX']);
   pause(T.RECOVERY, ['CRASH_SETTLE', 'STILL_ANSWERS']);
   cap(T.WAIT_FOR, ['TIMEOUT']);
   cap(T.STEP, ['PROBE']);

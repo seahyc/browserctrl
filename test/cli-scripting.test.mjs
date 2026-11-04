@@ -161,38 +161,40 @@ t('do - reads the plan from stdin, one step per line, skipping blanks and # comm
   assert.equal(bad.code, 2, bad.stderr);
 });
 
-t('--collect rows --out FILE streams all 40 pages of a log table, every row once, and ends at the last page', async () => {
-  const tab = await open('log-table.html');
+t('--collect rows --out FILE streams every page of a log table, every row once, and ends at the last page', async () => {
+  // 10 pages show the same paging as 40 (the fixture's default) in a quarter of the time.
+  const tab = await open('log-table.html?pages=10');
   const file = path.join(TMP, 'rows.jsonl');
   const r = await run(['do', tab, '--repeat', 'click "Go to next page"', '--collect', 'rows', '--out', file]);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, '', 'the report goes to stderr when --out is used');
-  assert.match(r.stderr, /collected 1000 rows over 40 pages into /);
-  assert.match(r.stderr, /repeated over 40 pages, ended by "Go to next page" is disabled \(the last page\)/);
+  assert.match(r.stderr, /collected 250 rows over 10 pages into /);
+  assert.match(r.stderr, /repeated over 10 pages, ended by "Go to next page" is disabled \(the last page\)/);
   const pages = fs.readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l));
-  assert.deepEqual(pages.map(p => p.page), Array.from({ length: 40 }, (_, i) => i + 1));
+  assert.deepEqual(pages.map(p => p.page), Array.from({ length: 10 }, (_, i) => i + 1));
   assert.deepEqual(pages[0].columns, ['Time', 'Duration (ms)', 'Query', 'Rows']);
   assert.ok(pages.every(p => p.url.includes('log-table.html')));
   const rows = pages.flatMap(p => p.rows);
-  assert.equal(rows.length, 1000);
+  assert.equal(rows.length, 250);
   const ids = rows.map(row => Number(/id = (\d+)$/.exec(row.Query)?.[1]));
-  assert.deepEqual(ids, Array.from({ length: 1000 }, (_, i) => i + 1), 'every row once, in order, no loading rows');
-  assert.equal(new Set(rows.map(row => row.Time)).size, 1000);
+  assert.deepEqual(ids, Array.from({ length: 250 }, (_, i) => i + 1), 'every row once, in order, no loading rows');
+  assert.equal(new Set(rows.map(row => row.Time)).size, 250);
 });
 
 t('--collect text --out - streams JSON lines on stdout with no total cap; a Next that stays enabled ends at the unchanged page', async () => {
-  const tab = await open('log-table.html?per=40');
+  // Ten long pages: the same 1600 rows and the same past-the-old-cap total as 40 short ones.
+  const tab = await open('log-table.html?pages=10&per=160');
   const r = await run(['do', tab, '--repeat', 'click "Go to next page"', '--collect', 'text', '--out', '-', '--json']);
   assert.equal(r.code, 0, r.stderr);
   const pages = r.stdout.trim().split('\n').map(l => JSON.parse(l));
-  assert.equal(pages.length, 40);
+  assert.equal(pages.length, 10);
   const all = pages.map(p => p.text).join('\n');
   assert.ok(all.length > 20000, `more than the old 20000-character cap: ${all.length}`);
   const seen = new Set([...all.matchAll(/WHERE id = (\d+)/g)].map(m => Number(m[1])));
   for (let i = 1; i <= 1600; i++) assert.ok(seen.has(i), `row ${i} in the text`);
   const report = JSON.parse(r.stderr.slice(r.stderr.indexOf('{')));
   assert.equal(report.done, true);
-  assert.equal(report.collected.pages, 40);
+  assert.equal(report.collected.pages, 10);
 
   const keep = await open('log-table.html?pages=4&keepnext=1');
   const k = await run(['do', keep, '--repeat', 'click "Go to next page"', '--collect', 'rows', '--out', path.join(TMP, 'keep.jsonl'), '-q']);

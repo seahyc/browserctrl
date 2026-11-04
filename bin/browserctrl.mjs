@@ -553,6 +553,7 @@ function knownCommands() {
   const src = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const words = new Set([...usage().matchAll(/browserctrl ([a-z][a-z-]+)/g)].map(m => m[1]));
   for (const m of src.matchAll(/case '([a-z][a-z-]+)':/g)) words.add(m[1]);
+  for (const m of src.matchAll(/cmd === '([a-z][a-z-]+)'/g)) words.add(m[1]);
   return words;
 }
 function editDistance(a, b) {

@@ -26,10 +26,16 @@ python -m pip install ./python
 python -m unittest discover -s test -p 'test_*.py' -v
 ```
 
-`npm test` preloads `test/helpers.mjs` and runs the test files one at a time, each in its own
-temporary `BROWSERCTRL_HOME`, so tests never touch your real notes, recipes or claims. Run one file with
+`npm test` preloads `test/helpers.mjs` and runs four test files at a time (about 8 minutes),
+each in its own temporary `BROWSERCTRL_HOME` and on its own debugging port (locked from 19300 up,
+or from `BROWSERCTRL_TEST_PORT`), so tests never touch your real notes, recipes or claims, nor
+each other. `npm run test:quick` runs only the files that need no browser, in seconds, for the
+edit-test loop; `npm run test:serial` runs one file at a time, as before. Run one file with
 `node --import ./test/helpers.mjs --test test/<name>.test.mjs`. Browser tests start a disposable headless
-Chrome; set `CHROME_BIN` to point at one if it is not found.
+Chrome; set `CHROME_BIN` to point at one if it is not found. Tests whose pages hang on purpose
+shorten the waits that decide a tab is stuck (`BROWSERCTRL_TEST_STUCK_SCALE`, see `test/load.mjs`),
+and daemon tests shorten its 30 s health and IPC timeouts (`BROWSERCTRL_HEALTH_TIMEOUT_MS`,
+`BROWSERCTRL_IPC_LIVENESS_MS`).
 
 `extension/annotate.js` is a copy of `lib/overlay/annotate.js`. After changing the overlay run
 `npm run sync-extension`. `npm run check-extension` (also run by CI and before packing) fails when the two differ.
