@@ -125,6 +125,18 @@ test('protected field fill v2 in isolated HTTPS Chromium', {skip: !chromeBinary(
   });
 
   // A tab the user opened, here through the browser's own endpoint rather than the daemon.
+  await t.test('protected fill replaces an existing password, including focus-time autofill', async t => {
+    const id = await tab('/password');
+    t.after(() => raw.browser('Target.closeTarget', {targetId: id}).catch(() => {}));
+    await ops.evaluate(conn, id, `(()=>{const e=document.querySelector('#pw');e.value='old-autofill';e.addEventListener('focus',()=>{e.value='focus-autofill';},{once:true});})()`);
+    const result = await fill(id, '#pw', 'password', PASSWORD);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.verification, 'filled');
+    await ops.click(conn, id, {selector: '#submit'});
+    await until(id, "location.pathname==='/done' && document.readyState==='complete'", true);
+    assert.equal(posted.at(-1), PASSWORD);
+  });
+
   async function userTab(url) {
     const r = await fetch(`http://127.0.0.1:${port}/json/new?${origin}${url}`, {method: 'PUT'});
     const {id} = await r.json();
