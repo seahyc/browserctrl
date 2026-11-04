@@ -125,6 +125,21 @@ test('protected field fill v2 in isolated HTTPS Chromium', {skip: !chromeBinary(
   });
 
   // A tab the user opened, here through the browser's own endpoint rather than the daemon.
+  for (const [name, script, code] of [
+    ['emptied', "e.value=''", 'fill_value_empty'],
+    ['shortened', 'e.value=e.value.slice(0,-1)', 'fill_value_shortened'],
+    ['expanded', "e.value+='x'", 'fill_value_expanded'],
+    ['blurred', 'e.blur()', 'fill_focus_lost'],
+  ]) await t.test(`transformed input is reported only as a fixed ${name} code`, async t => {
+    const id = await tab('/password');
+    t.after(() => raw.browser('Target.closeTarget', {targetId: id}).catch(() => {}));
+    await ops.evaluate(conn, id, `(()=>{const e=document.querySelector('#pw');e.addEventListener('input',()=>{${script}});})()`);
+    const result = await fill(id, '#pw', 'password', PASSWORD);
+    assert.equal(result.status, 'indeterminate');
+    assert.equal(result.code, code);
+    assert.ok(!JSON.stringify(result).includes(PASSWORD));
+  });
+
   await t.test('protected fill replaces an existing password, including focus-time autofill', async t => {
     const id = await tab('/password');
     t.after(() => raw.browser('Target.closeTarget', {targetId: id}).catch(() => {}));
