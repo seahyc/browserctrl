@@ -1,8 +1,9 @@
 name: Test
 
 # A push or PR finishes in about 5 minutes: the full suite split across four Ubuntu machines,
-# and the one-minute core tier (test/tiers.json) on macOS and Windows. The full suite runs on
-# macOS and Windows nightly, or on demand from the Actions tab.
+# and on macOS and Windows the tests that need no browser (paths, pipes, locks, shell quoting:
+# what differs by OS), in seconds. Their browser tests take minutes each on those runners, so
+# the full suite runs there nightly, or on demand from the Actions tab (Run workflow).
 on:
   push:
     # dev is only ever fast-forwarded to main: the same commit, tested already.
@@ -36,8 +37,8 @@ jobs:
           - { os: ubuntu-latest, part: full 4/4, run: full --shard=4/4 }
           # The macOS runner has 3 slow cores: three files at once, each with its own Chrome,
           # drove the load to 83 and crashed renderers, so it runs two.
-          - { os: macos-latest, part: core, run: core --test-concurrency=2, deep: full --test-concurrency=2 }
-          - { os: windows-latest, part: core, run: core, deep: full }
+          - { os: macos-latest, part: quick, run: quick, deep: full --test-concurrency=2 }
+          - { os: windows-latest, part: quick, run: quick, deep: full }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

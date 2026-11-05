@@ -52,8 +52,8 @@ and daemon tests shorten its 30 s health and IPC timeouts (`BROWSERCTRL_HEALTH_T
 
 CI runs on Node 24 ([workflow](.github/workflows/test.yml)) and finishes in about 5 minutes: the
 full suite split across four Linux machines (`node test/run.mjs full --shard=i/4`, balanced by the
-timings in `test/tiers.json`), and the core on Windows and macOS, plus the Python tests on all
-three. The full suite runs on Windows and macOS nightly, or from the Actions tab (Run workflow).
+timings in `test/tiers.json`), and the tests that need no browser (`npm run test:quick`) on Windows
+and macOS, plus the Python tests on all three. The full suite runs on Windows and macOS nightly, or from the Actions tab (Run workflow).
 
 The hosted Linux CI runner sets `CHROME_TEST_NO_SANDBOX=1` for its disposable
 Chrome test profile. This flag belongs only to the test harness. Normal browserctrl
