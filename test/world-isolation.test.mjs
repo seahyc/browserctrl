@@ -29,9 +29,10 @@ before(async () => {
 
 after(async () => {
   try { conn?.close(); } catch {}
-  browser?.close();
+  await browser?.close();
   await fixture?.close();
-  fs.rmSync(process.env.BROWSERCTRL_HOME, { recursive: true, force: true });
+  // The daemon can still be writing its log as the folder goes (ENOTEMPTY on CI Ubuntu).
+  fs.rmSync(process.env.BROWSERCTRL_HOME, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 const t = (name, fn) => test(name, { skip: haveBrowser ? false : 'no Chromium-family browser installed' }, fn);

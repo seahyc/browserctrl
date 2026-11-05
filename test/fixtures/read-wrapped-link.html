@@ -1,0 +1,7 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Wrapped link</title>
+<style>body { font: 13px sans-serif; margin: 20px; } .row { width: 150px; } select { width: 80px; }</style></head>
+<body>
+<!-- The link breaks across two lines; the centre of the rect around both lands on the select. -->
+<div class="row"><select aria-label="Country"><option>Malaysia</option></select> <a href="#clicked" onclick="document.title = 'clicked'; return false">Download CSV</a></div>
+</body></html>
