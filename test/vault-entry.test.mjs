@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import {createVaultGate,validateVaultEntry,entryExpression} from '../lib/vault-entry.mjs';
 import {runtimePath} from '../lib/env.mjs';
+import {fileURLToPath} from 'node:url';
 
 const request=()=>({version:1,request_id:crypto.randomUUID(),deadline:Date.now()/1000+60,destination:{browser:'dia',tab_id:'ABCDEF1234567890',origin:'https://example.test',fields:{password:'#password',totp:'#code'},submit:'#submit'},fields:{password:'private-password-123',totp:'654321'}});
 let port=19800;
@@ -53,7 +54,7 @@ test('origin mismatch, frames, ambiguous fields and expired request cannot enter
 test('stdio adapter rejects malformed and oversized secret-bearing requests without echoes',async()=>{
   const {spawnSync}=await import('node:child_process');
   for(const input of ['{"secret":"private-password-123"}', 'private-password-123'.repeat(3000)]) {
-    const child=spawnSync(process.execPath,[new URL('../bin/browserctrl-vault.mjs',import.meta.url).pathname],{input,encoding:'utf8'});
+    const child=spawnSync(process.execPath,[fileURLToPath(new URL('../bin/browserctrl-vault.mjs',import.meta.url))],{input,encoding:'utf8'});
     assert.equal(child.status,0);assert.equal(child.stderr,'');assert.ok(!child.stdout.includes('private-password'));assert.equal(JSON.parse(child.stdout).code,'invalid_request');
   }
 });

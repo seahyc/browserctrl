@@ -225,7 +225,9 @@ test('launch planning: own profile, BiDi port, headless; binaries and ports from
 
 test('the daemon keeps one session across requests (Camoufox renumbers tabs per session) and stops on request', async () => {
   await withFake({}, async fake => {
-    const socketPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-bidi-d-')), 'd.sock');
+    // Windows listens on named pipes only (a file path is EACCES), as bidiSocket does.
+    const socketPath = process.platform === 'win32' ? `\\\\.\\pipe\\bc-bidi-test-${process.pid}-${Date.now()}`
+      : path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-bidi-d-')), 'd.sock');
     let exited = null;
     const d = await startDaemon({ port: fake.port, key: 'firefox', socketPath, idleMs: 60000, exit: code => { exited = code; } });
     const ask = payload => daemonRequest(fake.port, payload, { start: false, socketPath });

@@ -9,7 +9,7 @@ import zlib from 'node:zlib';
 
 const home = process.env.BROWSERCTRL_HOME || fs.mkdtempSync(path.join(os.tmpdir(), 'bc-recording-rpc-'));
 assert.match(path.basename(home), /^bc-(?:test|recording-rpc)-/, 'a disposable test home is required');
-assert.ok([os.tmpdir(), '/tmp'].map(dir => fs.realpathSync(dir)).includes(fs.realpathSync(path.dirname(home))), 'test home must be directly beneath a temporary directory');
+assert.ok([os.tmpdir(), ...(process.platform === 'win32' ? [] : ['/tmp'])].map(dir => fs.realpathSync(dir)).includes(fs.realpathSync(path.dirname(home))), 'test home must be directly beneath a temporary directory');
 process.env.BROWSERCTRL_HOME = home;
 process.env.BROWSERCTRL_REC_STILLS = 'off';
 process.env.BROWSERCTRL_CAPTURE = '0';
