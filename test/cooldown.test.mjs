@@ -120,7 +120,7 @@ t('during the cool-down, open, nav, do with nav and recipe run refuse the site; 
   const refused = /127\.0\.0\.1 is cooling down after a verification-page .*--force/s;
 
   const open = await cli('open', `${fixture.url}fixtures/page.html`);
-  assert.equal(open.code, 5); // refused (lib/exit-codes.mjs)
+  assert.equal(open.code, 5, open.stderr); // refused (lib/exit-codes.mjs)
   assert.match(open.stderr, refused);
 
   const other = await cli('open', `${local}fixtures/page.html`);
@@ -128,11 +128,11 @@ t('during the cool-down, open, nav, do with nav and recipe run refuse the site; 
   const tab = JSON.parse(other.stdout).id;
 
   const nav = await cli('nav', tab, `${fixture.url}`);
-  assert.equal(nav.code, 5);
+  assert.equal(nav.code, 5, nav.stderr);
   assert.match(nav.stderr, /refusing to navigate to it/);
 
   const plan = await cli('do', tab, 'wait 10', `nav ${fixture.url}`);
-  assert.equal(plan.code, 5);
+  assert.equal(plan.code, 5, plan.stderr);
   assert.match(plan.stderr, refused);
 
   // Reading the already-open tab is still allowed.

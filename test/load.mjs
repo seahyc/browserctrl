@@ -17,7 +17,10 @@ export function loadFactor() {
   const fixed = Number(process.env.BROWSERCTRL_TEST_LOAD_FACTOR);
   if (fixed > 0) return fixed;
   if (Date.now() - loadSample.at > 1000) {
-    const perCpu = os.loadavg()[0] / Math.max(1, os.cpus().length);
+    // BROWSERCTRL_TEST_OWN_LOAD: the load a parallel run's own files add (test/run.mjs sets it),
+    // left out so running more files at once does not stretch every wait in them.
+    const own = Number(process.env.BROWSERCTRL_TEST_OWN_LOAD) || 0;
+    const perCpu = Math.max(0, os.loadavg()[0] - own) / Math.max(1, os.cpus().length);
     loadSample = { at: Date.now(), factor: Math.round(Math.min(LOAD_FACTOR_MAX, Math.max(1, perCpu)) * 10) / 10 };
   }
   return loadSample.factor;

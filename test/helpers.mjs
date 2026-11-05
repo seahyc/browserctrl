@@ -100,8 +100,9 @@ process.env.BROWSERCTRL_RECIPES ||= path.join(process.env.BROWSERCTRL_HOME, 'rec
 process.env.BROWSERCTRL_CAPTURE ??= '1';
 process.env.BROWSERCTRL_TRACE ??= '1';
 // The debugging port this process's tests use. Run alone, BROWSERCTRL_TEST_PORT or 9333. Under the
-// test runner, each file locks its own from a range starting there (19300 by default), so files
-// running at once never share a browser; the lock goes when the process exits.
+// test runner, each file locks its own pair (TEST_PORT and TEST_PORT + 1) from a range starting
+// there (19300 by default), so files running at once never share a browser; the lock goes when the
+// process exits.
 export const TEST_PORT = testPort();
 function testPort() {
   const fixed = Number(process.env.BROWSERCTRL_TEST_PORT) || null;
@@ -109,7 +110,8 @@ function testPort() {
   const base = fixed || 19300;
   const dir = path.join(os.tmpdir(), 'bc-test-ports');
   fs.mkdirSync(dir, { recursive: true });
-  for (let port = base; port < base + 400; port++) {
+  // A block of two per file: some files also start a second browser on TEST_PORT + 1.
+  for (let port = base; port < base + 400; port += 2) {
     const lock = path.join(dir, `${port}.lock`);
     try {
       fs.writeFileSync(lock, String(process.pid), { flag: 'wx' });

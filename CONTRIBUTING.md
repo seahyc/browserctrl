@@ -21,16 +21,26 @@ The CLI, daemon, and Python client share the implementation in `lib/`. Keep user
 Run the relevant checks and include their real output in the pull request description:
 
 ```sh
-npm test
+npm run test:full
 python -m pip install ./python
 python -m unittest discover -s test -p 'test_*.py' -v
 ```
 
-`npm test` preloads `test/helpers.mjs` and runs four test files at a time (about 8 minutes),
-each in its own temporary `BROWSERCTRL_HOME` and on its own debugging port (locked from 19300 up,
-or from `BROWSERCTRL_TEST_PORT`), so tests never touch your real notes, recipes or claims, nor
-each other. `npm run test:quick` runs only the files that need no browser, in seconds, for the
-edit-test loop; `npm run test:serial` runs one file at a time, as before. Run one file with
+Three tiers (`test/run.mjs`), each running up to eight test files at once, longest first:
+
+| Command | What | Time |
+| --- | --- | --- |
+| `npm run test:quick` | the files that need no browser | seconds |
+| `npm test` | the core: the files that cover the most lines per second, 86% of everything the full suite covers | about a minute |
+| `npm run test:full` | every file; run it before a pull request, and CI runs it | about 4-5 minutes |
+
+`npm run test:select` re-chooses the core from a coverage run (V8 coverage of every process a file
+starts) and records each file's time in `test/tiers.json`; it lists the files left out, so a new
+test file is in the core until the next selection. Files that caught regressions coverage cannot
+see can be kept in the core by name (`pinned`). `npm run test:serial` runs every file one at a time.
+Each file runs in its own temporary `BROWSERCTRL_HOME` and on its own pair of debugging ports
+(locked from 19300 up, or from `BROWSERCTRL_TEST_PORT`), so tests never touch your real notes,
+recipes or claims, nor each other. Run one file with
 `node --import ./test/helpers.mjs --test test/<name>.test.mjs`. Browser tests start a disposable headless
 Chrome; set `CHROME_BIN` to point at one if it is not found. Tests whose pages hang on purpose
 shorten the waits that decide a tab is stuck (`BROWSERCTRL_TEST_STUCK_SCALE`, see `test/load.mjs`),
