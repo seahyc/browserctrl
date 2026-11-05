@@ -20,6 +20,7 @@ test('generic protected transfer uses exact fields, shared safety gate and real 
     r.setHeader('content-type','text/html');r.setHeader('cache-control','no-store');const u=new URL(q.url,'https://fixture.invalid'),mode=u.searchParams.get('mode')||'token';
     if(u.pathname==='/submit'){let body='';q.on('data',c=>body+=c);q.on('end',()=>{submitted=JSON.parse(body);r.end('received');});return;}
     if(u.pathname==='/source')return r.end(`<p id="account">Fixture account</p><input id="token" readonly value="${TOKEN}"><span id="username">${u.searchParams.has('short')?'e':LOGIN.username}</span><input id="password" readonly value="${LOGIN.password}">`);
+    if(u.pathname==='/padded')return r.end(`<p id="account">Fixture account</p><dl><dt>Client secret</dt><dd id="token">\n  ${TOKEN}  <button aria-label="Copy"></button>&nbsp; \n</dd></dl><input id="padded" readonly value=" ${TOKEN} ">`);
     if(u.pathname==='/outer')return r.end(`<iframe id="innerframe" src="${destOrigin}/field?mode=token"></iframe><script>addEventListener('message',e=>{if(e.data==='collect')document.querySelector('iframe').contentWindow.postMessage('collect','*');else if(e.data&&e.data.field)parent.postMessage(e.data,'*')})</script>`);
     if(u.pathname==='/field'&&mode==='card')return r.end(`<input id="number" type="tel"><input id="expiry" type="text"><input id="cvc" type="password"><script>document.querySelector('#number').oninput=e=>{const n=e.target.value.replace(/[^0-9]/g,'');e.target.value=(n.match(/.{1,4}/g)||[]).join(' ')};addEventListener('message',e=>{if(e.data==='collect')parent.postMessage({fields:{number:document.querySelector('#number').value.replace(/[^0-9]/g,''),expiry:document.querySelector('#expiry').value,cvc:document.querySelector('#cvc').value}},'*')})</script>`);
     if(u.pathname==='/field')return r.end(`<input id="${mode==='login'?'password':'token'}" type="${mode==='login'?'password':'text'}" value="old value"><script>addEventListener('message',e=>{if(e.data==='collect')parent.postMessage({field:'${mode==='login'?'password':'token'}',value:document.querySelector('input').value},'*')})</script>`);
@@ -51,6 +52,15 @@ test('generic protected transfer uses exact fields, shared safety gate and real 
       for(const id of [src,dst,frame.targetId]){await assert.rejects(conn.send(id,'Page.captureScreenshot',{}),/tab_tainted/);await assert.rejects(ops.evaluate(conn,id,'1',{caller:true}),/tab_tainted/);}
       assert.equal(await ops.evaluate(conn,frame.targetId,"document.querySelector('input').value"),'[redacted]');
       await submit(dst,{token:TOKEN});
+    }finally{await close(src);await close(dst);}
+  });
+  await t.test('element text is trimmed like protected capture while input values stay exact',async()=>{
+    submitted=null;const src=await tab('/padded'),dst=await tab('/destination',true),ref=reference('token'),dest=destination('token');
+    try{
+      const padded=structuredClone(ref);padded.source.fields.token.selector='#padded';assert.equal((await capture(padded)).code,'value_shape_mismatch');
+      assert.deepEqual(await capture(ref),{status:'completed',verification:'captured',fields:{token:TOKEN}});
+      assert.deepEqual(await fill(fillRequest(ref,dest,dst,{token:TOKEN})),{status:'completed',verification:'filled',input_attempted:true,action_may_have_run:false});
+      assert.equal(submitted,null);await submit(dst,{token:TOKEN});
     }finally{await close(src);await close(dst);}
   });
   await t.test('nested OOPIF targets keep their own approved origin and document metadata',async()=>{
