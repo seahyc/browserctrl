@@ -163,6 +163,16 @@ t('GitHub two-factor: a control that names no panel counts as opened when links 
   } finally { await ops.closeTab(conn, id); }
 });
 
+t('GitHub two-factor: a collapsed menu beside the control does not hide the panel one level further up', async () => {
+  const id = await open('twofa=menu');
+  try {
+    const r = await run(id, ['click "More options"', 'click "Passkey"']);
+    assert.equal(r.done, true, why(r));
+    assert.equal(r.steps[0].expanded, true);
+    assert.equal(await reaches(id, 'chose webauthn'), 'chose webauthn');
+  } finally { await ops.closeTab(conn, id); }
+});
+
 t('IMDb: a flyout that opens under the pointer and closes on click is left open, and says so', async () => {
   const id = await open('hoverflyout=1');
   try {

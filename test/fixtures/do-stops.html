@@ -55,7 +55,8 @@ if (q.has('twofa')) {
      (no aria-controls, no aria-haspopup), and its links sit beside the button's row,
      not right after the button. */
   root.innerHTML = `<h1>Two-factor authentication</h1><p>Enter the code from your app.</p>
-    <div class="more"><div class="more-row"><button type="button" id="more2" aria-expanded="false">More options</button></div>
+    <div class="more"><div class="more-row"><button type="button" id="more2" aria-expanded="false">More options</button>${q.get('twofa') === 'menu'
+      ? '<nav class="mobile-menu" hidden><a href="#help">Help</a> <button type="button">Sign out</button></nav>' : ''}</div>
     <div class="more-list" hidden><a href="#webauthn">Passkey</a> <a href="#sms">Text message</a></div></div>`;
   const b = document.getElementById('more2');
   b.addEventListener('click', () => {
