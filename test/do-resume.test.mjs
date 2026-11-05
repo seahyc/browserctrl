@@ -26,7 +26,7 @@ test('stopped plans resume from the failed step with the closest control swapped
 test('with a trace, the resume line is do --resume with the replacement', () => {
   const text = formatSteps(report({ trace: '/traces/tab-1.jsonl' }));
   assert.match(text, /resume: browserctrl do 'tab-1' --resume --replace 'click "Closest"' {3}# closest control, p=0\.70\n {4}or as planned: browserctrl do 'tab-1' --resume$/);
-  assert.match(formatSteps(report({ trace: '/traces/tab-1.jsonl', ...noCandidates })), /resume: browserctrl do 'tab-1' --resume {3}# add --replace '<step>' to fix step 2$/);
+  assert.match(formatSteps(report({ trace: '/traces/tab-1.jsonl', ...noCandidates })), /resume: browserctrl do 'tab-1' --resume {3}# add --replace '<step>' to fix step 2; stopped: Target absent$/);
   assert.match(formatSteps(report({ trace: '/traces/tab-1.jsonl', tab_switched: true })), /resume: browserctrl do 'tab-1' 'click "Closest"' 'fill Search = later'/);
 });
 
@@ -74,4 +74,11 @@ test('the printed replacement runs in a shell as one argument per step', () => {
   const command = resumeLine(formatSteps(report())).replace('resume: browserctrl do ', 'set -- ');
   const args = execFileSync('/bin/sh', ['-c', command + '\nprintf "%s\\n" "$@"'], { encoding: 'utf8' }).trimEnd().split('\n');
   assert.deepEqual(args, ['tab-1', 'click "Closest"', 'fill Search = later']);
+});
+
+test('the resume line says why the plan stopped, and offers a stale ref by the name it had', () => {
+  const plain = formatSteps(report(noCandidates));
+  assert.match(resumeLine(plain), /'fill Search = later' {3}# stopped: Target absent$/);
+  const stale = formatSteps(report({ plan: ['click First', 'click ref_25', 'fill Search = later'], stopped: { step: 2, reason: 'ref_25 is not on the page any more (detached: …)', staleRef: { ref: 'ref_25', code: 'detached', was: { role: 'button', name: 'Continue to summary' } } } }));
+  assert.match(resumeLine(stale), /resume: browserctrl do 'tab-1' 'click "Continue to summary"' 'fill Search = later' {3}# by the name ref_25 had when read$/);
 });

@@ -129,3 +129,28 @@ test('a headless capture that fails without stalling is not retried', async t =>
   await assert.rejects(screenshot(conn, 'T'.repeat(16), {path: path.join(dir, 'a.png')}), /Target closed/);
   assert.equal(calls.filter(c => c.method === 'Page.bringToFront').length, 0);
 });
+
+// A tab that never paints (Dia, a dormant or busy tab on dash.cloudflare.com) once held
+// `shot` past two minutes: every call waited its own 30 s. Now the shot has one deadline.
+test('a capture that never answers fails within the shot deadline, saying what to try', async () => {
+  const sent = [];
+  const conn = {
+    async send(target, method, params, timeoutMs) {
+      sent.push({ method, timeoutMs });
+      if (method === 'Page.captureScreenshot') {
+        await new Promise(r => setTimeout(r, timeoutMs));
+        throw new Error(`CDP Page.captureScreenshot timed out after ${timeoutMs}ms`);
+      }
+      if (method === 'Runtime.evaluate') return { result: { value: 1 } };
+      return {};
+    },
+  };
+  const t0 = Date.now();
+  await assert.rejects(screenshot(conn, 'ABCDEF0123456789', { timeoutMs: 1500 }), e => {
+    assert.equal(e.code, 'shot_timeout');
+    assert.match(e.message, /no picture within 2 s.*browserctrl wake ABCDEF01/);
+    return true;
+  });
+  assert.ok(Date.now() - t0 < 4000, `took ${Date.now() - t0} ms`);
+  assert.ok(sent.find(s => s.method === 'Page.captureScreenshot').timeoutMs <= 1500);
+});

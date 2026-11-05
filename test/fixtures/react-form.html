@@ -1,0 +1,92 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>React token form</title>
+<style>
+  body { font: 14px system-ui; margin: 20px; }
+  .rs { position: relative; width: 320px; }
+  .rs__control { display: flex; align-items: center; border: 1px solid #888; padding: 4px; min-height: 28px; cursor: default; }
+  .rs__value { position: absolute; left: 8px; pointer-events: none; color: #222; }
+  .rs__placeholder { position: absolute; left: 8px; pointer-events: none; color: #999; }
+  .rs__input { border: 0; outline: 0; width: 2px; min-width: 2px; background: transparent; font: inherit; }
+  .rs__input.typing { width: 200px; }
+  .rs__menu { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #888; z-index: 5; max-height: 160px; overflow: auto; }
+  .rs__option { padding: 4px 8px; }
+  .rs__option.focused { background: #def; }
+  .qs { position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 50; display: grid; place-items: start center; }
+  .qs > div { margin-top: 60px; background: #fff; padding: 12px; width: 420px; }
+  .err { color: #b00; }
+</style>
+<script src="react.production.min.js"></script>
+<script src="react-dom.production.min.js"></script>
+</head><body>
+<!-- A Cloudflare-style multi-step "Create Custom Token" form in real React 18: a controlled
+     text input, a react-select-style combobox (a tiny input inside a control that opens on
+     mousedown, options chosen on click, the menu closing on blur), Back and Continue between
+     steps, and an optional Cmd+K quick-search dialog over everything (?overlay=1). The app's
+     state is mirrored into #state so a test can see what React holds, not just the DOM. -->
+<div id="root"></div>
+<pre id="state"></pre>
+<script>
+const h = React.createElement, { useState, useRef, useEffect } = React;
+const PERMS = ['Workers Scripts', 'Workers R2 Storage', 'Workers KV Storage', 'DNS', 'Zone Settings', 'Account Settings'];
+const params = new URLSearchParams(location.search);
+
+function Select({ label, options, value, onChange }) {
+  const [open, setOpen] = useState(false), [q, setQ] = useState(''), [focus, setFocus] = useState(0);
+  const input = useRef(null);
+  const shown = options.filter(o => o.toLowerCase().includes(q.toLowerCase()));
+  const choose = (o) => { onChange(o); setOpen(false); setQ(''); };
+  return h('div', { className: 'rs' },
+    h('div', { className: 'rs__control', onMouseDown: (e) => { if (e.target !== input.current) e.preventDefault(); input.current.focus(); setOpen(o => !o); } },
+      !q && (value ? h('div', { className: 'rs__value' }, value) : h('div', { className: 'rs__placeholder' }, 'Select...')),
+      h('input', { ref: input, className: 'rs__input' + (q ? ' typing' : ''), role: 'combobox', 'aria-label': label, 'aria-expanded': String(open), 'aria-autocomplete': 'list',
+        value: q, onChange: (e) => { setQ(e.target.value); setOpen(true); setFocus(0); },
+        onBlur: () => { setOpen(false); setQ(''); },
+        onKeyDown: (e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setFocus(f => Math.min(f + 1, shown.length - 1)); }
+          if (e.key === 'Enter' && open && shown[focus]) { e.preventDefault(); choose(shown[focus]); }
+          if (e.key === 'Escape') setOpen(false);
+        } })),
+    open && h('div', { className: 'rs__menu', role: 'listbox', 'aria-label': label + ' options' },
+      shown.length ? shown.map((o, i) => h('div', { key: o, role: 'option', 'aria-selected': String(o === value), className: 'rs__option' + (i === focus ? ' focused' : ''),
+        onMouseDown: (e) => e.preventDefault(), onMouseMove: () => setFocus(i), onClick: () => choose(o) }, o)) : h('div', null, 'No options')));
+}
+
+function App() {
+  const [step, setStep] = useState('form'), [name, setName] = useState(''), [perm, setPerm] = useState(''), [level, setLevel] = useState('');
+  const [error, setError] = useState(''), [quick, setQuick] = useState(false), [continues, setContinues] = useState(0);
+  useEffect(() => { document.getElementById('state').textContent = JSON.stringify({ step, name, perm, level, error, continues }); });
+  useEffect(() => {
+    if (!params.has('overlay')) return;
+    const onKey = (e) => { if (e.metaKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setQuick(true); } if (e.key === 'Escape') setQuick(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+  const next = () => {
+    setContinues(c => c + 1);
+    if (!name.trim() || !perm || !level) { setError('Fill in the token name and every permission'); return; }
+    setError(''); setStep('summary');
+  };
+  const page = step === 'form'
+    ? h('form', { onSubmit: (e) => { e.preventDefault(); next(); } },
+        h('h1', null, 'Create Custom Token'),
+        h('label', null, 'Token name ', h('input', { name: 'api_token_name', 'data-testid': 'api_token_name', value: name, onChange: (e) => setName(e.target.value) })),
+        h('h2', null, 'Permissions'),
+        h(Select, { label: 'Permissions', options: PERMS, value: perm, onChange: setPerm }),
+        h(Select, { label: 'Permissions levels', options: ['Read', 'Edit'], value: level, onChange: setLevel }),
+        error && h('p', { className: 'err', role: 'alert' }, error),
+        h('button', { type: 'button', onClick: () => setStep('start') }, 'Back'),
+        h('button', { type: 'submit', 'data-testid': 'api_tokens_summary_button' }, 'Continue to summary'))
+    : step === 'summary'
+    ? h('div', null, h('h1', null, 'Token Summary'), h('p', null, 'NAME ' + name), h('p', null, perm + ': ' + level),
+        h('button', { type: 'button', onClick: () => setStep('form') }, 'Back'))
+    : h('div', null, h('h1', null, 'Create API Token'), h('button', { type: 'button', onClick: () => setStep('form') }, 'Get started'));
+  return h('div', null,
+    h('button', { type: 'button', onClick: () => setQuick(true) }, 'Quick search... ⌘K'),
+    page,
+    quick && h('div', { className: 'qs', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Quick search' },
+      h('div', null, h('input', { 'aria-label': 'Search accounts', autoFocus: true }), h('button', { type: 'button', onClick: () => setQuick(false) }, 'Esc'),
+        h('div', { role: 'listbox', 'aria-label': 'Accounts' }, h('div', { role: 'option' }, 'Example account')))));
+}
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body></html>

@@ -50,6 +50,20 @@ import * as usageLog from '../lib/usage-log.mjs';
 import * as recording from '../lib/recording.mjs';
 import { page } from '../lib/page/index.mjs';
 import { EXIT, exitCodeFor, exitError, safariResultCode } from '../lib/exit-codes.mjs';
+import { guardStream, redactionOn } from '../lib/credentials.mjs';
+
+// Credential-shaped strings never reach the caller's terminal (lib/credentials.mjs): a page
+// that shows a new API token once would otherwise put it into read, text, eval and do output.
+if (redactionOn()) {
+  let noted = false;
+  const onRedact = () => {
+    if (noted) return;
+    noted = true;
+    process.stderr.write('note: redacted credential-shaped text in this output. To keep a secret a page shows once, use agent-vault protected capture (references/vault-fill.md); BROWSERCTRL_REDACT=0 turns this off.\n');
+  };
+  guardStream(process.stdout, { onRedact });
+  guardStream(process.stderr, { onRedact });
+}
 import { MAX_REPEATS } from '../lib/steps.mjs';
 import { PAGE_CAP } from '../lib/collect.mjs';
 import { resolve as resolveArgs, checkFlags, THEN_FLAGS, ACTION_FLAGS, MAX_PAUSE_MS } from '../lib/cli-flags.mjs';
@@ -1627,6 +1641,8 @@ const main = async () => {
     const timeoutMs = flags.timeout ? Number(flags.timeout) : undefined;
     // The natural forms: `click <tab> ref_9`, `click <tab> "#id"`, `fill <tab> ref_61 "value"`,
     // and by the name a person sees: `click <tab> "Save"`, `fill <tab> "Search" "aeron"`.
+    // `fill <tab> ref_14 = "x"`, the do step's spelling: the = is not the value.
+    if (['fill', 'select'].includes(cmd) && positional[3] === '=' && positional.length > 4) positional.splice(3, 1);
     let valueArg = positional[2];
     let named = null;
     if (TARGET_CMDS.has(cmd) && !flags.intent && !target.ref && !target.selector && target.x === undefined && positional[2] !== undefined) {
@@ -1910,6 +1926,7 @@ const main = async () => {
           maskBlur: flags['mask-blur'],
           requireMask: Boolean(flags['require-mask']),
           pad: Number(flags.pad || 0),
+          ...(flags.timeout ? { timeoutMs: Number(flags.timeout) } : {}),
         });
         const zero = Object.entries(res.masked || {}).filter(([, n]) => !n).map(([s]) => s);
         if (zero.length) console.error(`warning: --mask matched nothing for: ${zero.join(' ; ')} (add --require-mask to refuse the capture instead)`);

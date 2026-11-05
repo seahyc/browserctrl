@@ -590,10 +590,11 @@ A ref into a frame that loaded a new page is stale: read again.
 browserctrl click <tab> --ref ref_3 --browser dia
 browserctrl click <tab> --ref ref_3 --button right           # or --count 2, --mod cmd,shift
 browserctrl hover <tab> --selector ".menu"
-browserctrl fill  <tab> --ref ref_2 --value "Ada Lovelace"   # fires input + change
+browserctrl fill  <tab> --ref ref_2 --value "Ada Lovelace"   # selects what is there and types; React state sees it
+browserctrl fill  <tab> ref_2 = "Ada Lovelace"                # the do spelling works too; fill <tab> ref_2 "" clears
 browserctrl select <tab> --ref ref_7 --label "Exporter"
 browserctrl type  <tab> "literal text"
-browserctrl key   <tab> Enter                                 # cmd+a, shift+Tab, Escape
+browserctrl key   <tab> Enter                                 # Meta+a, shift+Tab, Escape
 browserctrl upload <tab> --ref ref_4 --files /abs/a.pdf,/abs/b.png
 browserctrl scroll <tab> --dy 600
 browserctrl scroll <tab> --in "Policy document" down   # a pane inside the page: down|up|end|top|<px>
@@ -603,6 +604,15 @@ browserctrl act <tab> --steps '[{"action":"scroll","dy":800},{"action":"key","ke
 ```
 
 `browserctrl act` batches actions and stops at the first failure. Add `--json` for machine-readable results.
+
+`key` sends Cmd editing shortcuts as the editor commands macOS would run (Meta+a select all,
+Meta+c/x/v, Meta+z, Meta+Backspace, Meta/Alt+arrows), so they work in a background tab;
+Ctrl+a selects all everywhere. To replace a field's text, prefer `fill` (it selects what is
+there first) over `key Meta+a` and `type`.
+
+A do step takes `fill ref_14 = "x"`, `fill ref_14 "x"` or `fill "Token name" "x"`. When a ref
+goes stale (the page redrew or removed it), the stop names what the ref was and the `resume:`
+line offers the step by that name; every plain `resume:` line ends with `# stopped: <why>`.
 
 ## Wait for conditions, never sleep
 
@@ -710,6 +720,8 @@ browserctrl shot <tab> out.png --viewport 1440x900 --scale 2 \
   error and nothing is written: use it for personal data, so a changed page cannot slip an
   unmasked image through. `--mask-blur` sets the radius (12 px; 4 to 100).
 - `--pad N` adds a margin around a `--ref` or `--selector` crop.
+- A shot has one deadline for all its calls (45 s; `--timeout <ms>`). A tab that gives no
+  picture in time fails with what to try (`wake`, then `focus`) and saves nothing.
 - Masking text by selector cannot reach pixels inside an image or canvas; cover those with
   your own overlay before the capture.
 

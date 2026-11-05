@@ -262,7 +262,7 @@ document.addEventListener('mouseup', () => { if (!down) return; down = false;
       const file = path.join(HERE, 'fixtures', path.basename(new URL(req.url, 'http://x').pathname));
       if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
       // The CSV is a download (cli-panes.html's "Download CSV"); served as HTML, Chrome may save it as downloads.html.
-      res.writeHead(200, { 'Content-Type': file.endsWith('.csv') ? 'text/csv; charset=utf-8' : 'text/html; charset=utf-8' });
+      res.writeHead(200, { 'Content-Type': file.endsWith('.csv') ? 'text/csv; charset=utf-8' : file.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8' });
       res.end(fs.readFileSync(file));
       return;
     }

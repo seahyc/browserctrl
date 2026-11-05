@@ -178,7 +178,10 @@ lease expiry does not log out the website.
 
 When a site shows a new secret once (an API token), don't read or copy it: agent-vault's
 protected capture saves it from the tab into a new vault item and taints the tab
-([protected capture](references/vault-fill.md#protected-capture-v3)).
+([protected capture](references/vault-fill.md#protected-capture-v3)). As a net under that,
+the CLI prints credential-shaped strings (provider token formats, `Bearer …`, free-standing
+high-entropy words) as `[redacted credential]`; a page's "Copy" button may copy a whole
+command with the secret in it, so don't paste the clipboard into a shell either.
 
 ## Safety
 
