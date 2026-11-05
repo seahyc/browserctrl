@@ -95,6 +95,21 @@ t('an open modal: its controls come first, the background is inert and covered, 
   await ops.closeTab(conn, id);
 });
 
+t('a link that wraps onto a second line is not covered by what sits beside its first line', async () => {
+  const id = await open('read-wrapped-link.html');
+  const frags = await ops.evaluate(conn, id, `document.querySelector('a').getClientRects().length`);
+  assert.equal(frags, 2, 'the fixture link must wrap for this test to mean anything');
+  const snap = await ops.readPage(conn, id);
+  const link = rowOf(snap, /^Download CSV$/);
+  assert.ok(link && !link.covered, formatRead(snap));
+  await ops.click(conn, id, { selector: 'a' });
+  assert.equal(await title(id), 'clicked');
+  await ops.evaluate(conn, id, `document.title = 'Wrapped link'`);
+  await ops.click(conn, id, { ref: link.ref, token: snap.token });
+  assert.equal(await title(id), 'clicked');
+  await ops.closeTab(conn, id);
+});
+
 t('ids are stable across reads; elements added since the last read are marked new', async () => {
   const id = await open('read-cards.html');
   const a = await ops.readPage(conn, id);

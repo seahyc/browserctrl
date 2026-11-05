@@ -73,7 +73,8 @@ t('typing, links and a search Submit are not commits; Place order still is', asy
   console.log(formatSteps(r));
   assert.equal(r.done, true, JSON.stringify(r.stopped));
   assert.equal(await text(id, '#searched'), 'Searched: SFMOMA');
-  assert.equal(r.steps[3].how, 'exact, first of 2', 'two links share the name: the first on screen');
+  // A slow runner adds how late the page acknowledged the click; only the pick matters here.
+  assert.match(r.steps[3].how, /^exact, first of 2(,|$)/, 'two links share the name: the first on screen');
   assert.match(await ops.evaluate(conn, id, 'location.hash'), /#order/);
   const r2 = await runSteps(conn, id, ['click "Place order"'], { jev: jev });
   assert.match(r2.stopped.reason, /can commit something/);
