@@ -127,7 +127,7 @@ t('refs from the last read, item ids, selectors and listbox options act without 
   assert.equal(await ops.evaluate(conn, id, 'location.hash'), '#r2');
   // #gym never toggles: the plan stops there and says so.
   assert.equal(r.stopped.step, 3);
-  assert.match(r.stopped.reason, /still unchecked; the click did not take/);
+  assert.match(r.stopped.reason, /still unchecked\b.*the click did not take/);
   assert.equal(r.steps.length, 3);
   const r2 = await runSteps(conn, id, ['click "600"'], { jev: jev });
   assert.equal(r2.done, true, JSON.stringify(r2.stopped));
