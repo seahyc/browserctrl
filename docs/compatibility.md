@@ -2,7 +2,7 @@
 
 Evidence collected on 2026-10-12. These are capability checks, not a comparative performance benchmark.
 
-Node.js 22 or newer is required on every platform; the CLI checks this at start. Where files live differs per OS: `browserctrl where` prints the folders, and [settings.md](../references/settings.md) lists them.
+Node.js 24 or newer is required on every platform; the CLI checks this at start. Where files live differs per OS: `browserctrl where` prints the folders, and [settings.md](../references/settings.md) lists them.
 
 | Browser/platform | Result | Scope |
 | --- | --- | --- |

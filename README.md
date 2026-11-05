@@ -224,7 +224,7 @@ To set it up yourself, the steps are: install it, turn on remote debugging in on
 
 ### 1. Install
 
-browserctrl needs [Node.js 22 or newer](https://nodejs.org/) on macOS, Linux or Windows. It checks this when it starts.
+browserctrl needs [Node.js 24 or newer](https://nodejs.org/) on macOS, Linux or Windows. It checks this when it starts.
 
 ```sh
 npx -y @seahyc/browserctrl browsers     # try it without installing
@@ -264,7 +264,7 @@ ln -s "$(npm root -g)/@seahyc/browserctrl" ~/.claude/skills/browserctrl
 
 From a clone, link the clone's folder instead. [SKILL.md](SKILL.md) is the short guide the agent reads, and it points at [the references](references/) when a task needs more. On Windows, copy the folder or use a junction.
 
-**Python:** `pip install ./python` from a clone gives the `browserctrl` package. It starts a Node sidecar, so Node 22+ and the npm package must be installed. See [the Python README](python/README.md).
+**Python:** `pip install ./python` from a clone gives the `browserctrl` package. It starts a Node sidecar, so Node 24+ and the npm package must be installed. See [the Python README](python/README.md).
 
 ### What leaves your computer, and what it keeps
 

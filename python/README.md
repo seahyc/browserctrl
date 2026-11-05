@@ -1,7 +1,7 @@
 # browserctrl (Python)
 
 A small synchronous client for [browserctrl](https://github.com/seahyc/browserctrl).
-It starts browserctrl's Node sidecar, so Node 22+ and the npm package must be installed:
+It starts browserctrl's Node sidecar, so Node 24+ and the npm package must be installed:
 
     npm install -g @seahyc/browserctrl      # until it is published: npm ci && npm link in a clone
     pip install ./python                    # from a clone of the repository

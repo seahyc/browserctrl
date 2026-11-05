@@ -1,11 +1,19 @@
 name: Test
 
+# A push or PR finishes in about 5 minutes: the full suite split across four Ubuntu machines,
+# and the one-minute core tier (test/tiers.json) on macOS and Windows. The full suite runs on
+# macOS and Windows nightly, or on demand from the Actions tab.
 on:
   push:
+    # dev is only ever fast-forwarded to main: the same commit, tested already.
+    branches-ignore: [dev]
   pull_request:
+  schedule:
+    - cron: '0 18 * * *' # 02:00 in Singapore
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:
@@ -13,27 +21,38 @@ permissions:
 
 jobs:
   test:
+    name: ${{ matrix.os }} ${{ matrix.part }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    env:
+      DEEP: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 120 || 15 }}
     strategy:
       fail-fast: false
       matrix:
-        node-version: [22, 24]
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - { os: ubuntu-latest, part: full 1/4, run: full --shard=1/4, checks: true }
+          - { os: ubuntu-latest, part: full 2/4, run: full --shard=2/4 }
+          - { os: ubuntu-latest, part: full 3/4, run: full --shard=3/4 }
+          - { os: ubuntu-latest, part: full 4/4, run: full --shard=4/4 }
+          # The macOS runner has 3 slow cores: three files at once, each with its own Chrome,
+          # drove the load to 83 and crashed renderers, so it runs two.
+          - { os: macos-latest, part: core, run: core --test-concurrency=2, deep: full --test-concurrency=2 }
+          - { os: windows-latest, part: core, run: core, deep: full }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 24
           cache: npm
       - uses: browser-actions/setup-chrome@v1
         id: chrome
         with:
           chrome-version: stable
       - run: npm ci
-      - run: npm run typecheck
-      - name: Check the npm package and the bundled extension copy
+      - name: Typecheck, and check the npm package and the bundled extension copy
+        if: matrix.checks
         run: |
+          npm run typecheck
           npm pack --dry-run
           node scripts/sync-extension.mjs --check
       - name: Install the Python package
@@ -48,13 +67,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: windows-screenshot-probe-node-${{ matrix.node-version }}
+          name: windows-screenshot-probe
           path: ${{ runner.temp }}/browserctrl-screenshot-probe
           retention-days: 3
       - name: Test Node suite against isolated headless Chrome
         env:
           CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
           CHROME_TEST_NO_SANDBOX: "1"
-        # The macOS runner has 3 slow cores: three files at once, each with its own Chrome,
-        # drove the load to 83 and crashed renderers, so it runs two.
-        run: npm run test:full -- ${{ runner.os == 'macOS' && '--test-concurrency=2' || '' }}
+        run: node test/run.mjs ${{ env.DEEP == 'true' && matrix.deep || matrix.run }}

@@ -32,7 +32,7 @@ Three tiers (`test/run.mjs`), each running up to eight test files at once, longe
 | --- | --- | --- |
 | `npm run test:quick` | the files that need no browser | seconds |
 | `npm test` | the core: the files that cover the most lines per second, 86% of everything the full suite covers | about a minute |
-| `npm run test:full` | every file; run it before a pull request, and CI runs it | about 4-5 minutes |
+| `npm run test:full` | every file; run it before a pull request (CI splits it across four machines) | about 4-5 minutes |
 
 `npm run test:select` re-chooses the core from a coverage run (V8 coverage of every process a file
 starts) and records each file's time in `test/tiers.json`; it lists the files left out, so a new
@@ -50,8 +50,10 @@ and daemon tests shorten its 30 s health and IPC timeouts (`BROWSERCTRL_HEALTH_T
 `extension/annotate.js` is a copy of `lib/overlay/annotate.js`. After changing the overlay run
 `npm run sync-extension`. `npm run check-extension` (also run by CI and before packing) fails when the two differ.
 
-CI runs the Node and Python tests on Linux, Windows and macOS with Node 22 and 24
-([workflow](.github/workflows/test.yml)).
+CI runs on Node 24 ([workflow](.github/workflows/test.yml)) and finishes in about 5 minutes: the
+full suite split across four Linux machines (`node test/run.mjs full --shard=i/4`, balanced by the
+timings in `test/tiers.json`), and the core on Windows and macOS, plus the Python tests on all
+three. The full suite runs on Windows and macOS nightly, or from the Actions tab (Run workflow).
 
 The hosted Linux CI runner sets `CHROME_TEST_NO_SANDBOX=1` for its disposable
 Chrome test profile. This flag belongs only to the test harness. Normal browserctrl
