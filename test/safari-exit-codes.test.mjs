@@ -3,6 +3,7 @@
 import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -63,7 +64,7 @@ function run(args, env) {
 }
 
 nodeTest('the Safari CLI exits 0, 2, 5 and 6 as the Chromium CLI does', { skip: process.platform !== 'darwin' && 'Safari is macOS-only' }, async t => {
-  const home = fs.mkdtempSync('/tmp/bc-sx-');
+  const home = fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-sx-'));
   fs.mkdirSync(path.join(home, 'run'), { recursive: true, mode: 0o700 });
   const socketPath = path.join(home, 'run', 'safari.sock');
   const tools = ['list_tabs', 'create_tab', 'switch_tab', 'close_tab', 'navigate_to_url', 'get_page_content', 'page_info'].map(name => ({ name, inputSchema: { type: 'object' } }));

@@ -5,6 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -145,7 +146,7 @@ test('with several possible predecessors the new page inherits every taint and t
 
 // ------------------------------------------------- a real prerender swap ---
 
-const HOME = fs.mkdtempSync('/tmp/bc-swap-');
+const HOME = fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-swap-'));
 const BASE_ENV = {
   ...process.env, BROWSERCTRL_HOME: HOME, BROWSERCTRL_AGENT_ID: 'agent-swap', BROWSERCTRL_NOTIFY: '0', BROWSERCTRL_NOTES: 'off',
   BROWSERCTRL_JEV_ENV: path.join(HOME, 'no-such-jev.env'),

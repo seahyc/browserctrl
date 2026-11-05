@@ -1,4 +1,4 @@
-"""Synchronous persistent browserctrl client (pip install browserctrl; needs Node 22+ and the npm package).
+"""Synchronous persistent browserctrl client (pip install browserctrl; needs Node 24+ and the npm package).
 
 One Node sidecar per client, one shared daemon per explicitly selected browser.
 A failed request is never retried. Inspect or reconnect explicitly after errors.

@@ -157,7 +157,7 @@ class ClientTests(unittest.TestCase):
         script = (
             "import sys,time\n"
             "for line in sys.stdin:\n"
-            "    time.sleep(0.12)\n"
+            "    time.sleep(0.5)\n"
             "    sys.stdout.write(line)\n"
             "    sys.stdout.flush()\n"
         )
@@ -184,7 +184,8 @@ class ClientTests(unittest.TestCase):
             started = time.monotonic()
             with self.assertRaises(TimeoutError):
                 sdk._read_line(started + 0.02)
-            self.assertLess(time.monotonic() - started, 0.1)
+            # Well before the echo at 0.5 s: a slow CI Mac took 0.15 s to give up on the 20 ms deadline.
+            self.assertLess(time.monotonic() - started, 0.4)
         finally:
             process.stdin.close()
             process.terminate()

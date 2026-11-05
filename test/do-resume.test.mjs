@@ -30,7 +30,10 @@ test('with a trace, the resume line is do --resume with the replacement', () => 
   assert.match(formatSteps(report({ trace: '/traces/tab-1.jsonl', tab_switched: true })), /resume: browserctrl do 'tab-1' 'click "Closest"' 'fill Search = later'/);
 });
 
-test('resume shell quoting preserves apostrophes and shell syntax without execution', () => {
+// The resume line is POSIX shell; these run it through /bin/sh, which Windows has no copy of.
+const NO_SH = process.platform === 'win32' && 'needs /bin/sh';
+
+test('resume shell quoting preserves apostrophes and shell syntax without execution', { skip: NO_SH }, () => {
   const step = `fill Search = "O'Brien $(touch forbidden) \`touch forbidden\`"`;
   const text = formatSteps(report({ plan: ['click First', step], current_tab: 'tab\'1', ...noCandidates }));
   const command = resumeLine(text).replace('resume: browserctrl do ', 'set -- ');
@@ -56,7 +59,7 @@ test('the final stopped step remains resumable', () => {
   assert.match(formatSteps(report({ plan: ['click First', 'click Missing'] })), /resume: browserctrl do 'tab-1' 'click "Closest"' {3}# closest control, p=0\.70\n {4}or as planned: browserctrl do 'tab-1' 'click Missing'$/);
 });
 
-test('resume keeps embedded newlines on one physical command line', () => {
+test('resume keeps embedded newlines on one physical command line', { skip: NO_SH }, () => {
   const step = 'fill Search = "first\nsecond\rthird"';
   const text = formatSteps(report({ plan: ['click First', step], ...noCandidates }));
   const command = resumeLine(text).replace('resume: browserctrl do ', 'set -- ');
@@ -70,7 +73,7 @@ test('resume keeps embedded newlines on one physical command line', () => {
   }
 });
 
-test('the printed replacement runs in a shell as one argument per step', () => {
+test('the printed replacement runs in a shell as one argument per step', { skip: NO_SH }, () => {
   const command = resumeLine(formatSteps(report())).replace('resume: browserctrl do ', 'set -- ');
   const args = execFileSync('/bin/sh', ['-c', command + '\nprintf "%s\\n" "$@"'], { encoding: 'utf8' }).trimEnd().split('\n');
   assert.deepEqual(args, ['tab-1', 'click "Closest"', 'fill Search = later']);

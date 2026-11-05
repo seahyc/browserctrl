@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import https from 'node:https';
 import net from 'node:net';
@@ -16,7 +17,7 @@ const run=(argv,input)=>new Promise((resolve,reject)=>{const child=spawn(argv[0]
 
 test('complete protected workflow: password, authenticated mail, OTP, resend and retained tab', {skip:!available,timeout:120000},async t=>{
   process.env.BROWSERCTRL_AGENT_ID='auth-fixture-'+crypto.randomUUID();process.env.BROWSERCTRL_CAPTURE='0';process.env.BROWSERCTRL_TRACE='0';
-  const temp=fs.mkdtempSync('/tmp/bc-auth-workflow-');
+  const temp=fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-auth-workflow-'));
   execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(temp,'key.pem'),'-out',path.join(temp,'cert.pem'),'-subj','/CN=localhost','-days','1'],{stdio:'ignore'});
   const mail=path.join(temp,'mail.json');let mode='six',passwordCalls=0,codeCalls=0,resendCalls=0,currentTarget;
   const publish=()=>fs.writeFileSync(mail,JSON.stringify({internalDate:String(Math.floor(Date.now()/1000)*1000),payload:{mimeType:'text/plain',headers:[{name:'From',value:'verify@example.net'},{name:'To',value:'alice@example.com'},{name:'Authentication-Results',value:'mx.google.com; dkim=pass header.d=example.net'}],body:{data:Buffer.from('Your verification code is 654321').toString('base64url')}}}),{mode:0o600});

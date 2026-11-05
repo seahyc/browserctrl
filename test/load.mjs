@@ -2,8 +2,6 @@
 // starts (the CLI, daemons) through NODE_OPTIONS, so browserctrl's own waits stretch the same
 // way in all of them. It has no other side effects, so it is safe in any child.
 import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 // Machine load. On a loaded machine every process gets about cpus/load of a core, so the
 // page, Chrome and this process all run that much slower in wall-clock time. loadFactor() is
@@ -89,4 +87,5 @@ if (!Object.getOwnPropertyDescriptor(T.VISION, 'CAPTURE_MS').get) {
 }
 
 // For node processes the tests start.
-export const LOAD_IMPORT = `--import=${path.join(path.dirname(fileURLToPath(import.meta.url)), 'load.mjs')}`;
+// A file:// URL: Node on Windows refuses a bare D:\ path here, which killed every child process.
+export const LOAD_IMPORT = `--import=${new URL('./load.mjs', import.meta.url).href}`;

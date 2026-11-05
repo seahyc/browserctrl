@@ -8,7 +8,7 @@ import os from 'os';
 import path from 'path';
 
 // Keep the preloaded helper's home so the client and its daemon share cached paths.
-process.env.BROWSERCTRL_HOME ??= fs.mkdtempSync(path.join('/tmp', 'bc-handoff-'));
+process.env.BROWSERCTRL_HOME ??= fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-handoff-'));
 
 const { connect } = await import('../lib/daemon.mjs');
 const ops = await import('../lib/ops.mjs');

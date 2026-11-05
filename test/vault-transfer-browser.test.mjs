@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import https from 'node:https';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {execFile,execFileSync} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -14,7 +15,7 @@ import {chromeBinary,startHeadlessBrowser,TEST_PORT} from './helpers.mjs';
 const OWNER='transfer-browser-test', TOKEN='SYNTHETIC_token_a4Yp8', LOGIN={username:'synthetic@example.invalid',password:'SYNTHETIC-password-!9'};
 const sourceSpec=(selector,format='text')=>({selector,format,min_length:1,max_length:128,prefix:''});
 test('generic protected transfer uses exact fields, shared safety gate and real OOPIF input', {skip:!chromeBinary(),timeout:180000},async t=>{
-  const dir=fs.mkdtempSync('/tmp/bc-transfer-tls-');execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(dir,'key'),'-out',path.join(dir,'cert'),'-subj','/CN=localhost','-days','1'],{stdio:'ignore'});
+  const dir=fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-transfer-tls-'));execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(dir,'key'),'-out',path.join(dir,'cert'),'-subj','/CN=localhost','-days','1'],{stdio:'ignore'});
   let origin,destOrigin,submitted=null;
   const server=https.createServer({key:fs.readFileSync(path.join(dir,'key')),cert:fs.readFileSync(path.join(dir,'cert'))},(q,r)=>{
     r.setHeader('content-type','text/html');r.setHeader('cache-control','no-store');const u=new URL(q.url,'https://fixture.invalid'),mode=u.searchParams.get('mode')||'token';

@@ -7,6 +7,7 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {testPort, validateVaultFill, elementSpec, createRedactor, containsSecret, createFillGate, daemonTrusted, trustedRoots, submitVaultFill} from '../lib/vault-fill.mjs';
 import {runtimePath} from '../lib/env.mjs';
+import {fileURLToPath} from 'node:url';
 
 const request=(change=()=>{})=>{const r={version:2,request_id:crypto.randomUUID(),deadline:Date.now()/1000+60,destination:{browser:'dia',origins:['https://accounts.example.com','https://example.com'],tab_id:'ABCDEF1234567890',element:'@e12'},field:'password',value:'private-password-123'};change(r);return r;};
 let port=19900;
@@ -239,7 +240,7 @@ test('prune enforces a TTL so a taint cannot linger across sessions',async()=>{
 });
 
 test('daemon trust check: the OS-reported listener must run this install root',async()=>{
-  const root=path.resolve(new URL('..',import.meta.url).pathname);
+  const root=path.resolve(fileURLToPath(new URL('..',import.meta.url)));
   const script=fs.realpathSync(path.join(root,'lib','daemon-run.mjs'));
   const exec=(listing)=>async(cmd,args)=>{
     if(/lsof$/.test(cmd))return {stdout:'4242\n'};
@@ -275,7 +276,7 @@ test('driver fails closed with daemon_untrusted and sends nothing',async()=>{
 });
 
 test('stdio driver dispatches v2 and never echoes a malformed value',()=>{
-  const bin=new URL('../bin/browserctrl-vault.mjs',import.meta.url).pathname;
+  const bin=fileURLToPath(new URL('../bin/browserctrl-vault.mjs',import.meta.url));
   for(const r of [request(x=>x.extra='private-password-123'),request(x=>x.destination.origins=['http://example.com'])]) {
     const child=spawnSync(process.execPath,[bin],{input:JSON.stringify(r),encoding:'utf8'});
     assert.equal(child.status,0);assert.equal(child.stderr,'');assert.ok(!child.stdout.includes('private-password'));assert.equal(JSON.parse(child.stdout).code,'invalid_request');

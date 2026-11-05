@@ -1,0 +1,2 @@
+# LF everywhere, Windows checkouts included: tests compare and slice source text by line.
+* text=auto eol=lf

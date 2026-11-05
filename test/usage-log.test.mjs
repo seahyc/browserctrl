@@ -7,7 +7,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const LIB = fileURLToPath(new URL('../lib/usage-log.mjs', import.meta.url));
 const REPORT = fileURLToPath(new URL('../lib/usage-report.mjs', import.meta.url));
@@ -100,7 +100,7 @@ test('a realistic do record fits in 200 bytes; the version rides on the first li
 
 test('two processes appending 200 lines each give 400 valid lines', () => {
   const d = fresh();
-  const script = `import(${JSON.stringify(LIB)}).then(m => { for (let i = 0; i < 200; i++) { m.startUsage({ argv: ['read'], now: ${NOW} }); m.finishUsage(0, { now: ${NOW} }); } });`;
+  const script = `import(${JSON.stringify(pathToFileURL(LIB).href)}).then(m => { for (let i = 0; i < 200; i++) { m.startUsage({ argv: ['read'], now: ${NOW} }); m.finishUsage(0, { now: ${NOW} }); } });`;
   const env = { ...process.env, BROWSERCTRL_USAGE_DIR: d };
   const { spawn } = awaitableSpawn();
   return Promise.all([spawn(script, env), spawn(script, env)]).then(() => {
@@ -184,7 +184,7 @@ test('a symlinked usage directory is refused and corrupt lines are skipped', () 
 });
 
 test('stdout and stderr behave as before while being counted', () => {
-  const script = `import(${JSON.stringify(LIB)}).then(m => { m.startUsage({ argv: ['read'] }); process.stdout.write('abc'); process.stderr.write('é\\n'); m.finishUsage(3); });`;
+  const script = `import(${JSON.stringify(pathToFileURL(LIB).href)}).then(m => { m.startUsage({ argv: ['read'] }); process.stdout.write('abc'); process.stderr.write('é\\n'); m.finishUsage(3); });`;
   const d = fresh();
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, BROWSERCTRL_USAGE_DIR: d }, encoding: 'utf8' });
   assert.equal(r.stdout, 'abc'); assert.equal(r.stderr, 'é\n');

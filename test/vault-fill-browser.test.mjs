@@ -30,7 +30,7 @@ ${q.includes('spa=1') ? "document.getElementById('f').addEventListener('submit',
 </script>`;
 
 test('protected field fill v2 in isolated HTTPS Chromium', {skip: !chromeBinary(), timeout: 120000}, async t => {
-  const dir = fs.mkdtempSync('/tmp/bc-fill-tls-');
+  const dir = fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-fill-tls-'));
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem'), '-subj', '/CN=localhost', '-days', '1'], {stdio: 'ignore'});
   const posted = [];
   const server = https.createServer({key: fs.readFileSync(path.join(dir, 'key.pem')), cert: fs.readFileSync(path.join(dir, 'cert.pem'))}, (q, r) => {

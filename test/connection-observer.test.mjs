@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { observeConnections } from '../lib/connection-observer.mjs';
+
+// A cold powershell.exe on a busy CI runner takes longer than the observer's own 5 s bound;
+// this test is about what it sees, so it allows longer.
+const patient = (cmd, args, opts) => promisify(execFile)(cmd, args, { ...opts, timeout: 30000 });
 
 test('real OS observer sees only the outgoing socket and adds no connections', async t => {
   let accepted = 0;
@@ -16,7 +22,7 @@ test('real OS observer sees only the outgoing socket and adds no connections', a
     peers.forEach(socket => socket.destroy());
     await new Promise(resolve => server.close(resolve));
   });
-  const snapshot = await observeConnections(port, { daemonPid: process.pid });
+  const snapshot = await observeConnections(port, { daemonPid: process.pid, run: patient });
   assert.equal(snapshot.available, true, JSON.stringify(snapshot));
   assert.equal(snapshot.connections.length, 1);
   assert.equal(snapshot.connections[0].pid, process.pid);
