@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import https from 'node:https';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {execFile,execFileSync} from 'node:child_process';
@@ -12,7 +13,7 @@ import {submitVaultCard} from '../lib/vault-card.mjs';
 import {chromeBinary,startHeadlessBrowser,TEST_PORT} from './helpers.mjs';
 const OWNER='card-browser-test', F={number:'4242424242424242',expiry:'12/30',cvc:'123'};
 test('private card capture and fill in isolated HTTPS Chromium including OOPIF', {skip:!chromeBinary(),timeout:180000},async t=>{
-  const dir=fs.mkdtempSync('/tmp/bc-card-tls-');
+  const dir=fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-card-tls-'));
   execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(dir,'key'),' -out'.trim(),path.join(dir,'cert'),'-subj','/CN=localhost','-days','1'],{stdio:'ignore'});
   let origin,remote,submitted=null;
   const server=https.createServer({key:fs.readFileSync(path.join(dir,'key')),cert:fs.readFileSync(path.join(dir,'cert'))},(q,r)=>{

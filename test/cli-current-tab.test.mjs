@@ -4,6 +4,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -13,8 +14,8 @@ import { placeTab, looksLikeTab } from '../lib/current-tab.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Its own BROWSERCTRL_HOME: claims, current tabs and the daemon socket stay out of the user's.
-const HOME = fs.mkdtempSync('/tmp/bc-cur-');
-const FILES = fs.mkdtempSync('/tmp/bc-cur-files-');
+const HOME = fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-cur-'));
+const FILES = fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-cur-files-'));
 const BASE_ENV = {
   ...process.env, BROWSERCTRL_HOME: HOME, BROWSERCTRL_AGENT_ID: 'agent-a', BROWSERCTRL_NOTIFY: '0', BROWSERCTRL_NOTES: 'off',
   BROWSERCTRL_JEV_ENV: path.join(HOME, 'no-such-jev.env'),

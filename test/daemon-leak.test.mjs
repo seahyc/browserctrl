@@ -5,6 +5,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -88,7 +89,7 @@ test('SIGTERM exits a daemon whose home was deleted, and does not recreate it', 
   const port = await freePort();
   const browser = await startHeadlessBrowser(port);
   t.after(async () => { stopLoggedDaemons({ port }); await browser.close(); });
-  const home = fs.mkdtempSync('/tmp/bc-gone-');
+  const home = fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-gone-'));
   const child = await exec(process.execPath, ['--input-type=module', '-e',
     `import {connect} from ${JSON.stringify(new URL('../lib/daemon.mjs', import.meta.url).href)}; const c=await connect(${port}); console.log((await c.status()).pid); c.close();`],
     { env: { ...process.env, BROWSERCTRL_HOME: home, BROWSERCTRL_CAPTURE: '1', BROWSERCTRL_EXEMPLARS: path.join(home, 'exemplars') } });
@@ -124,7 +125,7 @@ test('the harness stops a frozen daemon it started, by PID', options, async t =>
 test('a run of daemon-using test files leaves no daemon behind', options, async () => {
   const port = await freePort();
   const files = ['thaw', 'plan-use3-extract'].map(name => `test/${name}.test.mjs`);
-  const audit = path.join(fs.mkdtempSync('/tmp/bc-audit-'), 'spawned.jsonl');
+  const audit = path.join(fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-audit-')), 'spawned.jsonl');
   const env = { ...process.env, BROWSERCTRL_TEST_PORT: String(port), BROWSERCTRL_TEST_DAEMON_AUDIT: audit };
   // NODE_TEST_CONTEXT would make the inner run report to this runner instead of printing.
   for (const key of ['NODE_TEST_CONTEXT', 'BROWSERCTRL_HOME', 'BROWSERCTRL_TEST_DAEMON_LOG', 'BROWSERCTRL_AGENT_ID', 'BROWSERCTRL_BROWSER']) delete env[key];

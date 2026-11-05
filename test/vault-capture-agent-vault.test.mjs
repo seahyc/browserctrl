@@ -50,7 +50,7 @@ print(json.dumps(out))
 `;
 
 test('agent-vault writer captures through browserctrl-vault into a new item', {skip: missing ? `skipped: ${missing}` : false, timeout: 180000}, async t => {
-  const dir = fs.mkdtempSync('/tmp/bc-avc-tls-');
+  const dir = fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-avc-tls-'));
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem'), '-subj', '/CN=localhost', '-days', '1'], {stdio: 'ignore'});
   const server = https.createServer({key: fs.readFileSync(path.join(dir, 'key.pem')), cert: fs.readFileSync(path.join(dir, 'cert.pem'))}, (q, r) => {
     r.setHeader('content-type', 'text/html'); r.setHeader('cache-control', 'no-store');

@@ -37,7 +37,7 @@ print(json.dumps(out))
 `;
 
 test('agent-vault ProtectedExecutor drives browserctrl-vault through a multi-step login', {skip: missing ? `skipped: ${missing}` : false, timeout: 180000}, async t => {
-  const dir = fs.mkdtempSync('/tmp/bc-av-tls-');
+  const dir = fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-av-tls-'));
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem'), '-subj', '/CN=localhost', '-days', '1'], {stdio: 'ignore'});
   const posted = [];
   const server = https.createServer({key: fs.readFileSync(path.join(dir, 'key.pem')), cert: fs.readFileSync(path.join(dir, 'cert.pem'))}, (q, r) => {

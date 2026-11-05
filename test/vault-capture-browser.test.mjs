@@ -27,7 +27,7 @@ ${q.get('two') ? `<input class="tok" readonly value="${TOKEN}"><input class="tok
 ${q.get('hidden') ? '<input id="secret" style="display:none" value="SYNTHETIC_hidden0123456789abcdefghijklmnop">' : ''}`;
 
 test('protected capture v3 in isolated HTTPS Chromium', {skip: !chromeBinary(), timeout: 120000}, async t => {
-  const dir = fs.mkdtempSync('/tmp/bc-capture-tls-');
+  const dir = fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-capture-tls-'));
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem'), '-subj', '/CN=localhost', '-days', '1'], {stdio: 'ignore'});
   const server = https.createServer({key: fs.readFileSync(path.join(dir, 'key.pem')), cert: fs.readFileSync(path.join(dir, 'cert.pem'))}, (q, r) => {
     r.setHeader('content-type', 'text/html'); r.setHeader('cache-control', 'no-store');

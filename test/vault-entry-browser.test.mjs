@@ -4,6 +4,7 @@ import https from 'node:https';
 import http from 'node:http';
 import net from 'node:net';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {connect} from '../lib/daemon.mjs';
@@ -12,7 +13,7 @@ import {chromeBinary,startHeadlessBrowser} from './helpers.mjs';
 
 function raw(port,request,op='vault-entry') {return new Promise((resolve,reject)=>{const s=net.connect(SOCK(port));let b='';s.setTimeout(15000,()=>{s.destroy();reject(Error('timeout'));});s.on('connect',()=>s.write(JSON.stringify({reqId:1,op,owner:agentId(),request})+'\n'));s.on('data',c=>{b+=c;if(b.includes('\n')){s.destroy();resolve(JSON.parse(b.split('\n')[0]));}});s.on('error',reject);});}
 test('isolated HTTPS Chromium: POST navigation, TOTP gate, reflection refusal and recovery', {skip:!chromeBinary(),timeout:90000}, async t=>{
-  const dir=fs.mkdtempSync('/tmp/bc-vault-tls-');
+  const dir=fs.mkdtempSync(path.join((process.platform === 'win32' ? os.tmpdir() : '/tmp'), 'bc-vault-tls-'));
   execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(dir,'key.pem'),'-out',path.join(dir,'cert.pem'),'-subj','/CN=localhost','-days','1'],{stdio:'ignore'});
   const server=https.createServer({key:fs.readFileSync(path.join(dir,'key.pem')),cert:fs.readFileSync(path.join(dir,'cert.pem'))},(q,r)=>{
     r.setHeader('content-type','text/html');r.setHeader('cache-control','no-store');

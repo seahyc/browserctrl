@@ -55,4 +55,6 @@ jobs:
         env:
           CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
           CHROME_TEST_NO_SANDBOX: "1"
-        run: npm run test:full
+        # The macOS runner has 3 slow cores: three files at once, each with its own Chrome,
+        # drove the load to 83 and crashed renderers, so it runs two.
+        run: npm run test:full -- ${{ runner.os == 'macOS' && '--test-concurrency=2' || '' }}
