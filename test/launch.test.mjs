@@ -193,8 +193,16 @@ test('on macOS a handoff goes through agent-notify: one urgent keyed notice that
   assert.equal(focusClick(9999, 'T', { owner: 'a' }).activate, null, 'an unknown browser is selected but not raised');
 });
 
+test('kaypoh is preferred, agent-notify (its old name) still works', () => {
+  const post = has => alertCommands('hi', { platform: 'darwin', env: {}, has, key: 'k' })[0][0];
+  assert.equal(post(n => n === 'kaypoh' || n === 'agent-notify'), 'kaypoh');
+  assert.equal(post(n => n === 'agent-notify'), 'agent-notify');
+  assert.equal(post(() => false), 'osascript');
+});
+
 test('a finished handoff withdraws its notice, only where agent-notify runs', () => {
-  assert.deepEqual(withdrawCommands('handoff-ABC', { platform: 'darwin', env: {}, has: () => true }), [['agent-notify', ['clear', '--source', 'browserctrl', '--key', 'handoff-ABC']]]);
+  assert.deepEqual(withdrawCommands('handoff-ABC', { platform: 'darwin', env: {}, has: () => true }), [['kaypoh', ['clear', '--source', 'browserctrl', '--key', 'handoff-ABC']]]);
+  assert.deepEqual(withdrawCommands('handoff-ABC', { platform: 'darwin', env: {}, has: n => n === 'agent-notify' }), [['agent-notify', ['clear', '--source', 'browserctrl', '--key', 'handoff-ABC']]]);
   assert.deepEqual(withdrawCommands('handoff-ABC', { platform: 'darwin', env: {}, has: () => false }), []);
   assert.deepEqual(withdrawCommands('handoff-ABC', { platform: 'linux', env: {}, has: () => true }), []);
   assert.deepEqual(withdrawCommands(null, { platform: 'darwin', env: {}, has: () => true }), []);

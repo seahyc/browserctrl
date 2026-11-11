@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { noticeWhileWaiting, debugPromptNotice, notifier, postNotice } from '../lib/notify.mjs';
 
 const later = (ms, value, fail = false) => new Promise((resolve, reject) => setTimeout(() => (fail ? reject(new Error(value)) : resolve(value)), ms));
@@ -47,4 +50,16 @@ test('no notices off macOS, when turned off, or without agent-notify', () => {
   assert.equal(notifier({ platform: 'darwin', env: { PATH: '/usr/bin', BROWSERCTRL_NOTIFY: '0' } }), null);
   assert.equal(notifier({ platform: 'darwin', env: { PATH: '/nonexistent' }, home: '/nonexistent' }), null);
   assert.equal(postNotice(['--title', 'x'], { program: null, runner: () => assert.fail('must not run') }), false);
+});
+
+test('notifier prefers kaypoh, falls back to agent-notify, and looks in ~/.local/bin', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-notifier-'));
+  const bin = path.join(dir, '.local/bin');
+  fs.mkdirSync(bin, { recursive: true });
+  try {
+    fs.writeFileSync(path.join(bin, 'agent-notify'), '');
+    assert.equal(notifier({ platform: 'darwin', env: { PATH: '/nonexistent' }, home: dir }), path.join(bin, 'agent-notify'));
+    fs.writeFileSync(path.join(bin, 'kaypoh'), '');
+    assert.equal(notifier({ platform: 'darwin', env: { PATH: '/nonexistent' }, home: dir }), path.join(bin, 'kaypoh'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
